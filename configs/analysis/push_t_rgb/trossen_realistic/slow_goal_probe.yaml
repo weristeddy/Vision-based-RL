@@ -1,0 +1,52 @@
+# What the trained SlowGoal policy's readout uses, and what its features encode.
+#
+# `attribution` recovers the adapter's own spatial map -- exact, not an occlusion
+# estimate. The two probes answer a different question: whether the information
+# is present at all. Fitting yaw as (sin, cos) avoids scoring a ridge regression
+# against a quantity that wraps at +/-pi.
+version: 1
+task_id: Mjlab-PushT-SlowGoal-NatureCnn-Flatten-TrossenRealistic
+agent: trained
+wandb_run_path: eduard-nicolae-robot-learning/mjlab/d5oj40ua
+wandb_checkpoint_name: model_5999.pt
+output: artifacts/analysis/push_t_rgb/trossen_realistic/slow_goal
+steps:
+  # `random` on purpose. Under the trained policy the object yaw collapses onto
+  # the goal within a few steps, so a probe fitted on that rollout is scored on a
+  # narrow band and reads far better than the representation deserves. A random
+  # agent leaves yaw spread over the circle it was reset from.
+  - script: capture
+    args:
+      output: rollout.npz
+      num_frames: 256
+      num_envs: 32
+      seed: 0
+      image_path: [camera]
+      targets: [object_yaw, relative_yaw, object_position, overlap]
+  - script: attribution
+    args:
+      capture: rollout.npz
+      output: attribution.npz
+      figure: attribution.png
+      frames: 6
+  - script: features
+    args:
+      capture: rollout.npz
+      output: features.npz
+  - script: probe
+    args:
+      capture: rollout.npz
+      features: features.npz
+      output: "probe_{stage}_{target}.npz"
+      plot: "probe_{stage}_{target}.png"
+      stages: [backbone, adapter]
+      targets: [object_yaw, relative_yaw, object_position]
+  - script: report
+    args:
+      output: probe_report.png
+      table: probe_report.txt
+      probes:
+        "backbone · object yaw": probe_backbone_object_yaw.npz
+        "adapter · object yaw": probe_adapter_object_yaw.npz
+        "adapter · relative yaw": probe_adapter_relative_yaw.npz
+        "adapter · object position": probe_adapter_object_position.npz

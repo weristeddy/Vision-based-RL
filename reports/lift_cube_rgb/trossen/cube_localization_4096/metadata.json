@@ -1,0 +1,23 @@
+{
+  "feature": "frozen actor camera encoder output after the trained adapter",
+  "target": "segmentation-derived cube centroid in the 224x224 RGB image",
+  "target_rationale": "The wrist camera and robot pose are randomized. Image-plane cube position is identifiable from RGB alone; absolute world XY is not without proprioception.",
+  "visibility": "Ground-truth MuJoCo segmentation defines visibility. Fully occluded samples are excluded from fitting and scoring, and visibility rates are reported.",
+  "scenes": [
+    "wood",
+    "plaster"
+  ],
+  "seeds": [
+    20000,
+    21000,
+    22000,
+    23000,
+    24000
+  ],
+  "samples_per_seed_scene": 128,
+  "cross_validation": "five-fold leave-one-seed-out; next seed validates ridge alpha; remaining three seeds fit; final fold refits on all four non-test seeds",
+  "shared_dataset": true,
+  "uncertainty": "95% bootstrap over five held-out seed means, with wood and plaster paired within each seed",
+  "baseline": "fold-specific mean image centroid from the four non-test seeds",
+  "superseded_analysis": "The legacy world-XY probe was intentionally not retained; this report uses the identifiable image-plane centroid target."
+}

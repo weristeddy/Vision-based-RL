@@ -1,0 +1,24 @@
+project: mjlab
+program: vbrl.scripts.train
+name: push_t_rgb_trossen_realistic_d435_dinov2_local_grid_success98
+method: grid
+run_cap: 3
+metric: {name: Metrics/push_t_goal/episode_success, goal: maximize}
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic
+  - --env.scene.num-envs
+  - "1024"
+  - --gpu-ids
+  - all
+  - --video
+  - "True"
+  - --video-interval
+  - "3000"
+  - ${args_no_boolean_flags}
+
+parameters:
+  agent.seed: {values: [0, 1, 2]}

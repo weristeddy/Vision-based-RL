@@ -1,0 +1,12 @@
+version: 1
+task_id: Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic
+agent: zero
+output: artifacts/analysis/push_t_rgb/trossen_realistic/camera_check
+steps:
+  - script: capture
+    args:
+      output: external_visual_seed0.npz
+      num_frames: 1
+      num_envs: 1
+      seed: 0
+      image_path: [camera]

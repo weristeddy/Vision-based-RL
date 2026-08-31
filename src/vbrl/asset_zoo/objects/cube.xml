@@ -1,0 +1,44 @@
+<mujoco model="cube">
+  <default>
+    <default class="collision">
+      <geom contype="1" conaffinity="1" />
+    </default>
+    <default class="visual">
+      <geom contype="0" conaffinity="0" mass="0" />
+    </default>
+  </default>
+
+  <custom>
+    <text name="appearances" data="plain procedural red_plastic" />
+  </custom>
+
+  <asset>
+    <mesh
+      name="cube_visual_mesh"
+      file="../textures/unit_box_uv.obj"
+      scale="0.02 0.02 0.02"
+    />
+  </asset>
+
+  <worldbody>
+    <body name="cube">
+      <freejoint name="cube_joint" />
+      <geom
+        name="cube_geom"
+        class="collision"
+        type="box"
+        size="0.02 0.02 0.02"
+        mass="0.05"
+        rgba="0.8 0.2 0.2 1"
+      />
+      <geom
+        name="cube_geom_visual"
+        class="visual"
+        type="mesh"
+        mesh="cube_visual_mesh"
+        group="5"
+        rgba="0.8 0.2 0.2 1"
+      />
+    </body>
+  </worldbody>
+</mujoco>

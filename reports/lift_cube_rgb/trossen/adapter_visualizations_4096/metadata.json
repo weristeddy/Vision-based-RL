@@ -1,0 +1,71 @@
+{
+  "description": "Adapter-intrinsic diagnostics on encoder+adapter embeddings only; no policy logits/actions, critic values, or gradients are used.",
+  "plot_scaling": {
+    "individual_overlays": "one fixed normalization per model and visualization type across all frames",
+    "summary_grids": "one fixed normalization per model across all frames; models use independent scales",
+    "afa_summary": "one fixed normalization per model across all frames; R3M and DINOv2 use separate scales because they have different spatial token counts"
+  },
+  "frames": {
+    "count": 8,
+    "shape": [
+      8,
+      224,
+      224,
+      3
+    ],
+    "format": "NHWC uint8 RGB",
+    "source_frames": "Promoted figures derived from legacy wood/plaster seed-20000 capture caches; the generated caches were intentionally not retained.",
+    "seed": 0,
+    "camera_extrinsics": "loaded from obs-cache"
+  },
+  "afa": {
+    "map": "learned query-to-spatial-token softmax attention",
+    "head_aggregation": "arithmetic mean",
+    "saved_arrays": "raw per-head, raw mean, and bilinearly upsampled mean"
+  },
+  "occlusion": {
+    "patch": 48,
+    "stride": 12,
+    "batch_size": 64,
+    "fill": "per-image channel mean",
+    "score": "1 - cosine_similarity(adapter_embedding_original, adapter_embedding_occluded)"
+  },
+  "models": [
+    {
+      "name": "r3m_local_grid",
+      "label": "R3M ResNet-50 + LocalGrid",
+      "adapter": "local_grid",
+      "checkpoint": "checkpoints/lift_cube_rgb/trossen/trossen_4096_real_texture_r3m_resnet50_local_grid_relu.pt"
+    },
+    {
+      "name": "r3m_spatial_softmax",
+      "label": "R3M ResNet-50 + SpatialSoftmax",
+      "adapter": "spatial_softmax",
+      "checkpoint": "checkpoints/lift_cube_rgb/trossen/trossen_4096_real_texture_r3m_resnet50_spatial_softmax.pt"
+    },
+    {
+      "name": "r3m_afa256",
+      "label": "R3M ResNet-50 + AFA",
+      "adapter": "afa",
+      "checkpoint": "checkpoints/lift_cube_rgb/trossen/trossen_4096_real_texture_r3m_resnet50_afa256.pt"
+    },
+    {
+      "name": "dinov2_local_grid",
+      "label": "DINOv2 ViT-S/14 + LocalGrid",
+      "adapter": "local_grid",
+      "checkpoint": "checkpoints/lift_cube_rgb/trossen/trossen_4096_real_texture_dinov2_vits14_local_grid_relu.pt"
+    },
+    {
+      "name": "dinov2_spatial_softmax",
+      "label": "DINOv2 ViT-S/14 + SpatialSoftmax",
+      "adapter": "spatial_softmax",
+      "checkpoint": "checkpoints/lift_cube_rgb/trossen/trossen_4096_real_texture_dinov2_vits14_spatial_softmax.pt"
+    },
+    {
+      "name": "dinov2_afa256",
+      "label": "DINOv2 ViT-S/14 + AFA",
+      "adapter": "afa",
+      "checkpoint": "checkpoints/lift_cube_rgb/trossen/trossen_4096_real_texture_dinov2_vits14_afa256.pt"
+    }
+  ]
+}

@@ -1,0 +1,378 @@
+<mujoco model="wxai_follower_realistic">
+  <!--
+    Realistic-material sibling of wxai_follower.xml.
+
+    Physics, collision geometry, sites, cameras, joints, actuators, and names
+    intentionally match the standard asset.  The trossen_realistic selector
+    loads this file independently for training, evaluation, and visualization.
+  -->
+  <compiler angle="radian" meshdir="assets" texturedir="assets/realistic"
+            autolimits="true"/>
+
+  <option integrator="implicitfast"/>
+
+  <default>
+    <default class="visual">
+      <geom type="mesh" group="2" contype="0" conaffinity="0"
+            material="structural_black"/>
+    </default>
+    <default class="collision">
+      <geom type="cylinder" group="3" mass="0" density="0"/>
+    </default>
+  </default>
+
+  <asset>
+    <!--
+      Palette matched to official WidowX AI product/assembly photographs.
+      Classic specular/shininess values are authoritative for MJLab's
+      MuJoCo-Warp camera; metallic/roughness keep native MuJoCo previews
+      consistent with the same finish intent.
+    -->
+    <material name="structural_black" rgba="0.095 0.105 0.115 1"
+              specular="0.48" shininess="0.30"
+              metallic="0.72" roughness="0.44"/>
+    <material name="servo_black" rgba="0.052 0.058 0.066 1"
+              specular="0.70" shininess="0.52"
+              metallic="0.82" roughness="0.29"/>
+    <material name="printed_black" rgba="0.082 0.088 0.094 1"
+              specular="0.16" shininess="0.10"
+              metallic="0.0" roughness="0.68"/>
+    <material name="silicone_black" rgba="0.042 0.047 0.052 1"
+              specular="0.04" shininess="0.03"
+              metallic="0.0" roughness="0.88"/>
+    <material name="satin_aluminum" rgba="0.52 0.55 0.58 1"
+              specular="0.82" shininess="0.58"
+              metallic="0.96" roughness="0.25"/>
+    <material name="camera_aluminum" rgba="0.42 0.45 0.48 1"
+              specular="0.70" shininess="0.44"
+              metallic="0.90" roughness="0.34"/>
+    <material name="camera_glass" rgba="0.006 0.010 0.014 1"
+              specular="0.96" shininess="0.92" reflectance="0.12"
+              metallic="0.0" roughness="0.06"/>
+    <material name="lens_glass" rgba="0.012 0.030 0.038 1"
+              specular="0.98" shininess="0.96" reflectance="0.18"
+              metallic="0.0" roughness="0.04"/>
+
+    <texture name="trossen_logo_texture" type="2d" file="trossen_logo.png"/>
+    <material name="trossen_logo" texture="trossen_logo_texture"
+              texuniform="false" rgba="1 1 1 1"
+              specular="0.10" shininess="0.06"
+              metallic="0.0" roughness="0.72"/>
+
+    <mesh name="base_link" file="base_link.stl"/>
+    <mesh name="link_1" file="link_1.stl"/>
+    <mesh name="link_2" file="link_2.stl"/>
+    <mesh name="link_3" file="link_3.stl"/>
+    <mesh name="link_4" file="link_4.stl"/>
+    <mesh name="link_5" file="link_5.stl"/>
+    <mesh name="link_6_body" file="realistic/link_6_body.stl"/>
+    <mesh name="link_6_rail" file="realistic/link_6_rail.stl"/>
+    <mesh name="carriage_right_black"
+          file="realistic/carriage_right_black.stl"/>
+    <mesh name="carriage_right_slider"
+          file="realistic/carriage_right_slider.stl"/>
+    <mesh name="carriage_left_black"
+          file="realistic/carriage_left_black.stl"/>
+    <mesh name="carriage_left_slider"
+          file="realistic/carriage_left_slider.stl"/>
+    <mesh name="camera_mount_d405" file="camera_mount_d405.stl"/>
+    <mesh name="d405" file="d405.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="gripper_left_shell"
+          file="realistic/gripper_left_shell.stl"/>
+    <mesh name="gripper_left_pad"
+          file="realistic/gripper_left_pad.stl"/>
+    <mesh name="gripper_right_shell"
+          file="realistic/gripper_right_shell.stl"/>
+    <mesh name="gripper_right_pad"
+          file="realistic/gripper_right_pad.stl"/>
+    <mesh name="trossen_logo_plate"
+          file="realistic/trossen_logo_plate.obj"/>
+  </asset>
+
+  <worldbody>
+    <body name="base_link" pos="0 0 0" gravcomp="1">
+      <!-- Fixed RealSense D435 RGB approximation. MuJoCo uses an ideal
+           pinhole model, so fovy matches the nominal 42.5-degree vertical
+           field of view. The farther pose preserves the Push-T workspace
+           coverage for the centered square 224x224 crop. -->
+      <camera name="external_cam" pos="0.739228 -0.536438 0.682704"
+              xyaxes="0.808736 0.588172 0 -0.420543 0.578247 0.698445"
+              mode="fixed" fovy="42.5"/>
+      <!-- Candidate replacement under evaluation: same D435 optics, moved to
+           the far edge of the table and tilted 75 degrees down at the Push-T
+           workspace centre (0.35, 0, 0.013) from 0.79 m. The near-overhead
+           front view roughly doubles the projected area of the T (874 -> 1833
+           square pixels at 224x224) and, unlike the corner pose, keeps the
+           workspace inside the 42.5-degree vertical field. Selected over the
+           side view because a gripper pressed down beside the T foreshortens
+           away from this camera instead of across it. -->
+      <camera name="external_front_cam" pos="0.554 0 0.777"
+              xyaxes="0 1 0 -0.966153 0 0.257976"
+              mode="fixed" fovy="42.5"/>
+      <!-- The front pose tilted back to 45 degrees and brought in to 0.70 m,
+           looking at the Push-T workspace centre (0.35, 0, 0.013). Sweeping
+           elevation showed the near-overhead front pose loses 63% of the
+           object's silhouette while the gripper is on it; this loses 21%, and
+           projects a larger object than either shipped camera. -->
+      <camera name="external_tilted_cam" pos="0.845 0 0.508"
+              xyaxes="0 1 0 -0.707107 0 0.707107"
+              mode="fixed" fovy="42.5"/>
+      <inertial pos="-0.00014175 -5.228e-05 0.03175177"
+                quat="0.503748 -0.507380 -0.494230 -0.494510"
+                mass="0.45969858"
+                diaginertia="0.000213926 0.000416701 0.000448963"/>
+      <geom name="base_visual" class="visual" mesh="base_link"
+            material="servo_black"/>
+      <geom name="base_collision" class="collision" type="cylinder"
+            size="0.031 0.0325" pos="0 0 0.0325" quat="1 0 0 0"/>
+      <body name="link_1" pos="0 0 0.05725" gravcomp="1">
+        <inertial pos="-0.00011075 0.00171176 0.0204459"
+                  quat="0.313955 0.305238 -0.643575 0.627752"
+                  mass="0.152704"
+                  diaginertia="0.000203432 0.000173907 8.3521e-05"/>
+        <joint name="joint_0" pos="0 0 0" axis="0 0 1"
+               range="-3.05433 3.05433" armature="0.032" frictionloss="0.1"
+               actuatorgravcomp="true"/>
+        <geom name="link_1_visual" class="visual" mesh="link_1"
+              material="structural_black"/>
+        <body name="link_2" pos="0.02 0 0.04625" gravcomp="1">
+          <inertial pos="-0.131215 -0.00292583 0.00021345"
+                    quat="-0.00123582 0.706546 -0.00109575 0.707665"
+                    mass="1.15316"
+                    diaginertia="0.0179449 0.0173612 0.00102628"/>
+          <joint name="joint_1" pos="0 0 0" axis="0 1 0"
+                 range="0 3.14159" armature="0.032" frictionloss="0.1"
+                 actuatorgravcomp="true"/>
+          <geom name="link_2_visual" class="visual" mesh="link_2"
+                material="structural_black"/>
+          <geom name="link_2_joint_collision" class="collision" type="capsule"
+                size="0.031 0.015" pos="0 0 0" quat="1 1 0 0"/>
+          <geom name="link_2_collision" class="collision" type="box"
+                size="0.0975 0.02 0.02" pos="-0.131 0 0" quat="1 0 0 0"/>
+          <body name="link_3" pos="-0.264 0 0" gravcomp="1">
+            <inertial pos="0.180836 -0.0009409 0.0555494"
+                      quat="0.0103901 0.669684 -0.0033175 0.742566"
+                      mass="0.686666"
+                      diaginertia="0.00566898 0.00547578 0.00059316"/>
+            <joint name="joint_2" pos="0 0 0" axis="0 -1 0"
+                   range="0 2.35619" armature="0.032" frictionloss="0.1"
+                   actuatorgravcomp="true"/>
+            <geom name="link_3_visual" class="visual" mesh="link_3"
+                  material="structural_black"/>
+            <!--
+              Official-size, 0.10 mm visual-only decals sit 0.02 mm above the
+              two link-3 inset planes. Face-specific UVs keep both marks
+              outside-readable without reflecting the official artwork.
+            -->
+            <geom name="appearance_logo_positive" class="visual"
+                  mesh="trossen_logo_plate"
+                  pos="0.134559214 0.019394999 0.059999999"
+                  material="trossen_logo"/>
+            <geom name="appearance_logo_negative" class="visual"
+                  mesh="trossen_logo_plate"
+                  pos="0.134559214 -0.019394999 0.059999999"
+                  material="trossen_logo"/>
+            <geom name="link_3_joint_collision" class="collision"
+                  type="capsule" size="0.031 0.015" pos="0 0 0"
+                  quat="1 1 0 0"/>
+            <geom name="link_3_collision" class="collision" type="box"
+                  size="0.08 0.02 0.02" pos="0.13 0 0.06"
+                  quat="1 0 0 0"/>
+            <body name="link_4" pos="0.245 0 0.06" gravcomp="1">
+              <inertial pos="0.0579784 0.00027145 0.0588445"
+                        quat="0.948688 0.0346237 0.307828 0.0635164"
+                        mass="0.457899"
+                        diaginertia="0.000670827 0.000661455 0.000288648"/>
+              <joint name="joint_3" pos="0 0 0" axis="0 -1 0"
+                     range="-1.5708 1.5708" armature="0.0018"
+                     frictionloss="0.1" actuatorgravcomp="true"/>
+              <geom name="link_4_visual" class="visual" mesh="link_4"
+                    material="servo_black"/>
+              <geom name="link_4_joint_collision" class="collision"
+                    type="capsule" size="0.031 0.015" pos="0 0 0"
+                    quat="1 1 0 0"/>
+              <body name="link_5" pos="0.06775 0 0.0455" gravcomp="1">
+                <inertial pos="0.00412447 -1.138e-05 -0.0428318"
+                          quat="0.496144 0.502128 0.503595 0.498098"
+                          mass="0.366939"
+                          diaginertia="0.000320622 0.00026751 0.000189108"/>
+                <joint name="joint_4" pos="0 0 0" axis="0 0 -1"
+                       range="-1.5708 1.5708" armature="0.0018"
+                       frictionloss="0.1" actuatorgravcomp="true"/>
+                <geom name="link_5_visual" class="visual" mesh="link_5"
+                      material="servo_black"/>
+                <geom name="link_5_collision" class="collision"
+                      type="cylinder" size="0.031 0.028" pos="0 0 0.03"
+                      quat="1 0 0 0"/>
+                <body name="link_6" pos="0.02895 0 -0.0455" gravcomp="1">
+                  <inertial pos="0.046841 0.00145133 0.00895674"
+                            quat="0.275854 0.291255 -0.691957 0.600225"
+                            mass="0.671874"
+                            diaginertia="0.00118316 0.00110863 0.00078309"/>
+                  <joint name="joint_5" pos="0 0 0" axis="1 0 0"
+                         range="-3.14159 3.14159" armature="0.0018"
+                         frictionloss="0.1" actuatorgravcomp="true"/>
+                  <geom name="link_6_visual" class="visual" mesh="link_6_body"
+                        material="structural_black"/>
+                  <geom name="appearance_link_6_rail" class="visual"
+                        mesh="link_6_rail" material="satin_aluminum"/>
+                  <geom name="link_6_joint_collision" class="collision"
+                        type="cylinder" size="0.029 0.05" pos="0 0 0"
+                        quat="1 0 1 0"/>
+                  <geom name="link_6_collision" class="collision" type="box"
+                        size="0.0125 0.094 0.031" pos="0.0685 0 0"
+                        quat="1 0 0 0"/>
+                  <site name="ee_site" pos="0.156 0 0" size="0.001"/>
+
+                  <geom name="camera_mount_visual" class="visual"
+                        pos="0.012 0 0" quat="1 0 0 0"
+                        mesh="camera_mount_d405"
+                        material="printed_black"/>
+
+                  <!-- Collision and calibrated camera frames are unchanged. -->
+                  <geom name="camera_collision" class="collision" group="4"
+                        type="box" size="0.0155 0.025 0.025"
+                        pos="0.0513206 0 0.0569399"
+                        quat="0.984808 0 0.173648 0"/>
+
+                  <!--
+                    Official D405 mesh aligned to the existing proxy's center.
+                    Its STL +Z face is the optical front after the URDF rotation.
+                  -->
+                  <geom name="camera_visual" class="visual"
+                        pos="0.0622210 0 0.0529725"
+                        quat="0.405580 0.579228 0.579228 0.405580"
+                        mesh="d405" material="camera_aluminum"/>
+                  <geom name="appearance_camera_face" class="visual" type="box"
+                        size="0.00035 0.0172 0.0172"
+                        pos="0.0625499 0 0.0528528"
+                        quat="0.984808 0 0.173648 0"
+                        material="camera_glass"/>
+                  <geom name="appearance_camera_lens_left" class="visual"
+                        type="cylinder" size="0.00355 0.00030"
+                        pos="0.0629258 0.009 0.0527159"
+                        quat="0.573576 0 0.819152 0"
+                        material="satin_aluminum"/>
+                  <geom name="appearance_camera_lens_right" class="visual"
+                        type="cylinder" size="0.00355 0.00030"
+                        pos="0.0629258 -0.009 0.0527159"
+                        quat="0.573576 0 0.819152 0"
+                        material="satin_aluminum"/>
+                  <geom name="appearance_camera_optic_left" class="visual"
+                        type="cylinder" size="0.00165 0.00016"
+                        pos="0.0632077 0.009 0.0526133"
+                        quat="0.573576 0 0.819152 0"
+                        material="lens_glass"/>
+                  <geom name="appearance_camera_optic_right" class="visual"
+                        type="cylinder" size="0.00165 0.00016"
+                        pos="0.0632077 -0.009 0.0526133"
+                        quat="0.573576 0 0.819152 0"
+                        material="lens_glass"/>
+
+                  <site name="camera_color_frame" pos="0.05864 0.009 0.05427"
+                        quat="0.9848078 0 0.1736482 0" size="0.005"/>
+                  <camera name="cam" pos="0.05864 0.009 0.05427"
+                          quat="0.5793 0.4056 -0.4056 -0.5793"
+                          mode="fixed" fovy="87"/>
+
+                  <body name="carriage_right" pos="0.0865 -0.023 0"
+                        gravcomp="1">
+                    <inertial pos="0.00169015 0.00592793 0.00201817"
+                              quat="-0.370973 0.740886 -0.0847721 0.553427"
+                              mass="0.081271"
+                              diaginertia="4.29565e-05 3.87081e-05 2.21528e-05"/>
+                    <joint name="right_carriage_joint" pos="0 0 0"
+                           axis="0 -1 0" type="slide" range="0 0.044"
+                           armature="0.1" frictionloss="0.1"
+                           actuatorgravcomp="true"/>
+                    <geom name="right_carriage_visual" class="visual"
+                          mesh="carriage_right_black"
+                          material="structural_black"/>
+                    <geom name="appearance_right_carriage_slider" class="visual"
+                          mesh="carriage_right_slider"
+                          material="satin_aluminum"/>
+                    <geom name="right_gripper_visual" class="visual"
+                          mesh="gripper_right_shell"
+                          material="printed_black"/>
+                    <geom name="appearance_right_gripper_pad" class="visual"
+                          mesh="gripper_right_pad"
+                          material="silicone_black"/>
+                    <geom name="right_finger_pad_0_collision" class="collision"
+                          type="box" size="0.0275 0.005 0.01"
+                          pos="0.0286 0.01436 0.0037"
+                          quat="0.99257 -0.00451 0.10246 0.06547"/>
+                    <geom name="right_finger_pad_1_collision" class="collision"
+                          type="box" size="0.0275 0.005 0.01"
+                          pos="0.0285 0.01429 -0.00973"
+                          quat="0.98344 0.0133 -0.16893 0.06427"/>
+                    <geom name="right_finger_pad_2_collision" class="collision"
+                          type="box" size="0.00732 0.00214 0.00767"
+                          pos="0.0622 0.02083 -0.00105"
+                          quat="1 0 0 0"/>
+                  </body>
+                  <body name="carriage_left" pos="0.0865 0.023 0"
+                        gravcomp="1">
+                    <inertial pos="0.00169017 -0.00592796 -0.00365701"
+                              quat="-0.0382691 0.628022 -0.255101 0.734198"
+                              mass="0.081271"
+                              diaginertia="4.21112e-05 3.61943e-05 2.40003e-05"/>
+                    <joint name="left_carriage_joint" pos="0 0 0"
+                           axis="0 1 0" type="slide" range="0 0.044"
+                           armature="0.1" frictionloss="0.1"
+                           actuatorgravcomp="true"/>
+                    <geom name="left_carriage_visual" class="visual"
+                          mesh="carriage_left_black"
+                          material="structural_black"/>
+                    <geom name="appearance_left_carriage_slider" class="visual"
+                          mesh="carriage_left_slider"
+                          material="satin_aluminum"/>
+                    <geom name="left_gripper_visual" class="visual"
+                          mesh="gripper_left_shell"
+                          material="printed_black"/>
+                    <geom name="appearance_left_gripper_pad" class="visual"
+                          mesh="gripper_left_pad"
+                          material="silicone_black"/>
+                    <geom name="left_finger_pad_0_collision" class="collision"
+                          type="box" size="0.0275 0.005 0.01"
+                          pos="0.0286 -0.01436 0.0037"
+                          quat="0.99257 0.00451 0.10246 -0.06547"/>
+                    <geom name="left_finger_pad_1_collision" class="collision"
+                          type="box" size="0.0275 0.005 0.01"
+                          pos="0.0285 -0.01429 -0.00973"
+                          quat="0.98344 -0.0133 -0.16893 -0.06427"/>
+                    <geom name="left_finger_pad_2_collision" class="collision"
+                          type="box" size="0.00732 0.00214 0.00767"
+                          pos="0.0622 -0.02083 -0.00105"
+                          quat="1 0 0 0"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <equality>
+    <joint joint1="right_carriage_joint" joint2="left_carriage_joint"
+           polycoef="0 1 0 0 0"/>
+  </equality>
+
+  <actuator>
+    <position name="joint_0" joint="joint_0" kp="200" kv="10"
+              ctrlrange="-3.05433 3.05433" forcerange="-27 27"/>
+    <position name="joint_1" joint="joint_1" kp="200" kv="10"
+              ctrlrange="0 3.14159" forcerange="-27 27"/>
+    <position name="joint_2" joint="joint_2" kp="200" kv="10"
+              ctrlrange="0 2.35619" forcerange="-27 27"/>
+    <position name="joint_3" joint="joint_3" kp="100" kv="5"
+              ctrlrange="-1.5708 1.5708" forcerange="-7 7"/>
+    <position name="joint_4" joint="joint_4" kp="50" kv="5"
+              ctrlrange="-1.5708 1.5708" forcerange="-7 7"/>
+    <position name="joint_5" joint="joint_5" kp="50" kv="5"
+              ctrlrange="-3.14159 3.14159" forcerange="-7 7"/>
+    <position name="left_gripper" joint="left_carriage_joint" kp="1000" kv="50"
+              ctrlrange="0 0.044" forcerange="-400 400"/>
+  </actuator>
+</mujoco>

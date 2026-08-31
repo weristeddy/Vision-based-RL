@@ -1,0 +1,1 @@
+"""Lift-Cube robot configurations."""

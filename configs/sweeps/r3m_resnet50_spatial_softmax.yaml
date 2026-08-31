@@ -1,0 +1,23 @@
+project: mjlab
+program: vbrl.scripts.train
+name: lift_cube_rgb_real_texture_r3m_resnet50_spatial_softmax
+method: bayes
+run_cap: 6
+metric: {name: Metrics/lift_height/episode_success, goal: maximize}
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - Mjlab-LiftCube-RealTexture-R3MResNet50-SpatialSoftmax-Trossen
+  - --env.scene.num-envs
+  - "1024"
+  - --gpu-ids
+  - all
+  - ${args_no_boolean_flags}
+
+parameters:
+  agent.algorithm.learning-rate: {distribution: log_uniform_values, min: 0.00035, max: 0.00080}
+  agent.algorithm.num-learning-epochs: {values: [3, 5]}
+  agent.algorithm.num-mini-batches: {values: [16, 24, 32]}
+  agent.algorithm.desired-kl: {values: [0.025, 0.035]}

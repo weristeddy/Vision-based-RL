@@ -1,0 +1,87 @@
+{
+  "R3MResNet50-Afa32": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "NatureCnn-Flatten": {
+    "lr": 0.0001,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "CompactVit-Flatten": {
+    "lr": 3e-05,
+    "warmup": 1000,
+    "steps": 30000
+  },
+  "DinoV2ViTS14-LocalGrid16": {
+    "lr": 0.001,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "R3MResNet50-LocalGrid7": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "NatureCnn-SpatialSoftmax": {
+    "lr": 0.0001,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "NatureCnn-Afa1": {
+    "lr": 3e-05,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "CompactVit-SpatialSoftmax": {
+    "lr": 3e-05,
+    "warmup": 1000,
+    "steps": 30000
+  },
+  "CompactVit-Afa2": {
+    "lr": 3e-05,
+    "warmup": 1000,
+    "steps": 30000
+  },
+  "DinoV2ViTS14-Linear": {
+    "lr": 0.001,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "DinoV2ViTS14-SpatialSoftmax": {
+    "lr": 0.001,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "DinoV2ViTS14-Afa6": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "R3MResNet50-Linear": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "R3MResNet50-SpatialSoftmax": {
+    "lr": 0.001,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "R3MResNet50L3-LocalGrid14": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "R3MResNet50L3-SpatialSoftmax": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  },
+  "R3MResNet50L3-Afa16": {
+    "lr": 0.0003,
+    "warmup": 0,
+    "steps": 12000
+  }
+}

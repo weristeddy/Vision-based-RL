@@ -1,0 +1,22 @@
+project: mjlab
+program: vbrl.scripts.train
+name: push_cube_state_default_best_3seed_video
+method: grid
+run_cap: 3
+metric: {name: Metrics/push_goal/at_goal, goal: maximize}
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - Mjlab-PushCube-State-Trossen
+  - --env.scene.num-envs
+  - "1024"
+  - --gpu-ids
+  - all
+  - --video
+  - "True"
+  - ${args_no_boolean_flags}
+
+parameters:
+  agent.seed: {values: [0, 1000, 2000]}

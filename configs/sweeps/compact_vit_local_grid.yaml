@@ -1,0 +1,25 @@
+project: mjlab
+program: vbrl.scripts.train
+name: lift_cube_rgb_real_texture_compact_vit_local_grid
+method: bayes
+run_cap: 10
+metric: {name: Metrics/lift_height/episode_success, goal: maximize}
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - Mjlab-LiftCube-RealTexture-CompactVit-LocalGrid8-Trossen
+  - --env.scene.num-envs
+  - "1024"
+  - --gpu-ids
+  - all
+  - ${args_no_boolean_flags}
+
+parameters:
+  agent.algorithm.learning-rate: {distribution: log_uniform_values, min: 0.00016, max: 0.00032}
+  agent.algorithm.schedule: {values: [adaptive, fixed]}
+  agent.algorithm.num-learning-epochs: {values: [3, 4]}
+  agent.algorithm.num-mini-batches: {values: [8, 16]}
+  agent.algorithm.desired-kl: {values: [0.015, 0.020]}
+  agent.algorithm.max-grad-norm: {values: [0.5, 1.0]}

@@ -1,0 +1,5 @@
+probe                                  mean   median      p95      R2      n
+backbone · object yaw                 0.72deg     0.31     2.53   0.993     77
+adapter · object yaw                  0.67deg     0.39     2.14   0.994     77
+adapter · relative yaw                0.50deg     0.24     1.44   0.997     77
+adapter · object position             2.15mm     1.60     5.64   0.999     77

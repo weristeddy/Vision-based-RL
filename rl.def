@@ -1,0 +1,103 @@
+Bootstrap: docker
+# Ubuntu 24.04 provides glibc 2.39. This is new enough for the driver-side
+# EGL/GL libraries injected by the B200 cluster (which require GLIBC_2.38) and
+# remains backward-compatible with driver libraries from the V100/A100 hosts.
+From: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+
+%files
+    pyproject.toml /opt/vbrl-src/pyproject.toml
+    uv.lock /opt/vbrl-src/uv.lock
+    .python-version /opt/vbrl-src/.python-version
+    README.md /opt/vbrl-src/README.md
+    src/vbrl /opt/vbrl-src/src/vbrl
+
+%environment
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONUNBUFFERED=1
+    export PYTHONNOUSERSITE=1
+    export PATH=/opt/venv/bin:$PATH
+    export MUJOCO_GL=egl
+    export MPLBACKEND=Agg
+    # $HOME is read-only during the build and shared or quota-limited on compute
+    # nodes; without this matplotlib warns and re-scans its font cache per job.
+    export MPLCONFIGDIR=/tmp/matplotlib
+    export PYOPENGL_PLATFORM=egl
+    export HF_HUB_OFFLINE=1
+    export TRANSFORMERS_OFFLINE=1
+
+%post
+    # uv creates and populates /opt/venv, so pip and venv are not needed; git is,
+    # for the pinned R3M source dependency.
+    apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-dev \
+        git curl ca-certificates ffmpeg \
+        libegl1 libgl1 libgles2 libglvnd0 libglx0 libopengl0 \
+        libosmesa6 libglfw3 \
+        && rm -rf /var/lib/apt/lists/*
+
+    # pyproject.toml plus uv.lock is the single environment specification. uv
+    # installs the exact transitive closure the lockfile pins, with hashes, and a
+    # development host runs `uv sync` against the same file -- so the image and
+    # the workstation cannot drift. Bump a version by editing pyproject.toml,
+    # running `uv lock`, and rebuilding this image.
+    curl -LsSf https://astral.sh/uv/0.12.5/install.sh \
+        | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
+
+    # --frozen refuses to re-resolve, so the build fails loudly if uv.lock is
+    # stale rather than quietly installing something else. --no-dev keeps ruff,
+    # mypy, and build out of the image. --no-editable installs vbrl as a regular
+    # wheel, which is what supplies the mjlab.tasks entry point that fresh
+    # TorchrunX workers discover; a bound checkout still wins via PYTHONPATH.
+    cd /opt/vbrl-src
+    UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-editable
+    export PATH="/opt/venv/bin:${PATH}"
+
+    # Bake the pinned backbones into the image so a cluster job never touches
+    # the network or a user's home cache. The URLs and SHA-256 digests live in
+    # vbrl.asset_zoo.backbones, which a development host fetches from too, so
+    # there is no second copy of the manifest to keep in step.
+    vbrl-fetch-backbones /opt/vbrl-models
+    chmod -R a+rX /opt/vbrl-models
+
+%test
+    # Validate the vendor-neutral graphics ABI without requiring a GPU during
+    # the build. Apptainer --nv supplies only the host-specific NVIDIA side.
+    python - <<'PY'
+import ctypes
+
+for library in ("libEGL.so.1", "libOpenGL.so.0", "libGL.so.1"):
+    ctypes.CDLL(library)
+
+from OpenGL import EGL
+import mjlab
+import mujoco
+
+assert EGL.eglQueryString is not None
+# MJLab registers its own Mjlab-* tasks, so ownership comes from the
+# registration delta vbrl.tasks records, never from a name prefix.
+from vbrl.tasks import vbrl_task_ids
+
+# One known ID per task family rather than a count, so registering a new
+# architecture does not require editing this file. tests/test_task_registration
+# pins the exact set.
+task_ids = set(vbrl_task_ids())
+expected = {
+    "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
+    "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
+    "Mjlab-PushCube-State-Trossen",
+    "Mjlab-PushT-State-TrossenRealistic",
+    "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
+    "Mjlab-PushT-SlowGoal-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
+    "Mjlab-PushT-Balanced-NatureCnn-FlattenRelu-TrossenRealistic",
+    "Mjlab-PushT-VisualGoal-NatureCnn-Flatten-TrossenRealistic",
+}
+missing = expected - task_ids
+assert not missing, (
+    "Installed VBRL task entry point did not populate the task-local "
+    f"registrations; missing: {sorted(missing)}"
+)
+print(f"MuJoCo {mujoco.__version__}: EGL/OpenGL available, {len(task_ids)} tasks")
+PY
+
+%runscript
+    exec "$@"

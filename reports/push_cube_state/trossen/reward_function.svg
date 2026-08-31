@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1500"
+     height="330"
+     viewBox="0 0 1500 330"
+     role="img"
+     aria-label="Push point and core reward equations">
+  <rect width="1500" height="330" fill="#ffffff"/>
+
+  <g fill="#111111"
+     font-family="STIX Two Text, STIXGeneral, DejaVu Serif, Times New Roman, serif"
+     font-style="italic">
+    <text x="55" y="115" font-size="62">
+      p<tspan baseline-shift="sub" font-size="38">push</tspan>
+    </text>
+    <text x="225" y="115" font-size="62" font-style="normal">=</text>
+    <text x="285" y="115" font-size="62">
+      p<tspan baseline-shift="sub" font-size="38">cube</tspan>
+    </text>
+    <text x="455" y="115" font-size="62" font-style="normal">−</text>
+
+    <text x="610" y="60" font-size="52">
+      p<tspan baseline-shift="sub" font-size="32">goal</tspan>
+      <tspan font-style="normal"> − </tspan>
+      p<tspan baseline-shift="sub" font-size="32">cube</tspan>
+    </text>
+    <line x1="520" y1="82" x2="970" y2="82"
+          stroke="#111111" stroke-width="3"/>
+    <text x="530" y="145" font-size="52" font-style="normal">‖</text>
+    <text x="555" y="145" font-size="52">
+      p<tspan baseline-shift="sub" font-size="32">goal</tspan>
+      <tspan font-style="normal"> − </tspan>
+      p<tspan baseline-shift="sub" font-size="32">cube</tspan>
+    </text>
+    <text x="930" y="145" font-size="52" font-style="normal">‖</text>
+
+    <text x="990" y="115" font-size="62" font-style="normal">
+      (0.02 + 0.005)
+    </text>
+
+    <text x="55" y="275" font-size="62">
+      r
+      <tspan font-style="normal"> = −‖</tspan>
+      p<tspan baseline-shift="sub" font-size="38">cube</tspan>
+      <tspan font-style="normal"> − </tspan>
+      p<tspan baseline-shift="sub" font-size="38">goal</tspan>
+      <tspan font-style="normal">‖</tspan><tspan baseline-shift="sub" font-size="38">2</tspan>
+      <tspan font-style="normal"> − 0.5‖</tspan>
+      p<tspan baseline-shift="sub" font-size="38">EE</tspan>
+      <tspan font-style="normal"> − </tspan>
+      p<tspan baseline-shift="sub" font-size="38">push</tspan>
+      <tspan font-style="normal">‖</tspan><tspan baseline-shift="sub" font-size="38">2</tspan>
+    </text>
+  </g>
+</svg>

@@ -1,0 +1,86 @@
+version: 1
+name: trossen_texture_training_peacock_24
+
+models:
+  - name: nature_cnn_local_grid16_real
+    task_id: Mjlab-LiftCube-CollisionCam-NatureCnn-LocalGrid16-Trossen
+    checkpoint_file: ckpts/lift_cube/nature_cnn_local_grid16_real.pt
+  - name: nature_cnn_local_grid16_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-NatureCnn-LocalGrid16-Trossen
+    checkpoint_file: ckpts/lift_cube/nature_cnn_local_grid16_procedural.pt
+  - name: nature_cnn_spatial_softmax_real
+    task_id: Mjlab-LiftCube-CollisionCam-NatureCnn-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/nature_cnn_spatial_softmax_real.pt
+  - name: nature_cnn_spatial_softmax_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-NatureCnn-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/nature_cnn_spatial_softmax_procedural.pt
+
+  - name: compact_vit_local_grid8_real
+    task_id: Mjlab-LiftCube-CollisionCam-CompactVit-LocalGrid8-Trossen
+    checkpoint_file: ckpts/lift_cube/compact_vit_local_grid8_real.pt
+  - name: compact_vit_local_grid8_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-CompactVit-LocalGrid8-Trossen
+    checkpoint_file: ckpts/lift_cube/compact_vit_local_grid8_procedural.pt
+  - name: compact_vit_spatial_softmax_real
+    task_id: Mjlab-LiftCube-CollisionCam-CompactVit-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/compact_vit_spatial_softmax_real.pt
+  - name: compact_vit_spatial_softmax_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-CompactVit-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/compact_vit_spatial_softmax_procedural.pt
+
+  - name: dinov2_vits14_linear_real
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-Linear-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_linear_real.pt
+  - name: dinov2_vits14_linear_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-Linear-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_linear_procedural.pt
+  - name: dinov2_vits14_local_grid7_real
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_local_grid7_real.pt
+  - name: dinov2_vits14_local_grid7_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_local_grid7_procedural.pt
+  - name: dinov2_vits14_spatial_softmax_real
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_real.pt
+  - name: dinov2_vits14_spatial_softmax_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_procedural.pt
+  - name: dinov2_vits14_afa6_real
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-Afa6-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_afa6_real.pt
+  - name: dinov2_vits14_afa6_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-Afa6-Trossen
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_afa6_procedural.pt
+
+  - name: r3m_resnet50_linear_real
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-Linear-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_linear_real.pt
+  - name: r3m_resnet50_linear_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-Linear-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_linear_procedural.pt
+  - name: r3m_resnet50_local_grid7_real
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-LocalGrid7-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_local_grid7_real.pt
+  - name: r3m_resnet50_local_grid7_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-LocalGrid7-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_local_grid7_procedural.pt
+  - name: r3m_resnet50_spatial_softmax_real
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_spatial_softmax_real.pt
+  - name: r3m_resnet50_spatial_softmax_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-SpatialSoftmax-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_spatial_softmax_procedural.pt
+  - name: r3m_resnet50_afa32_real
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-Afa32-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_afa32_real.pt
+  - name: r3m_resnet50_afa32_procedural
+    task_id: Mjlab-LiftCube-CollisionCam-R3MResNet50-Afa32-Trossen
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_afa32_procedural.pt
+
+scenes:
+  - peacock
+
+episodes: 128
+seeds: [20000, 21000, 22000, 23000, 24000]
+output: artifacts/evaluation/peacock_24

@@ -1,0 +1,37 @@
+version: 1
+task_id: Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen
+checkpoint_file: ckpts/lift_cube/dinov2_vits14_local_grid7_real.pt
+output: artifacts/analysis/lift_cube_rgb/trossen
+steps:
+  - script: capture
+    args:
+      output: capture.npz
+      num_frames: 4096
+      seed: 20000
+      targets: [cube_position, goal_position]
+  - script: features
+    args:
+      capture: capture.npz
+      output: features.npz
+      stages: [backbone, adapter]
+  - script: probe
+    args:
+      capture: capture.npz
+      features: features.npz
+      output: probes/{stage}__{target}.npz
+      plot: plots/probe__{stage}__{target}.png
+      stages: [adapter]
+      targets: [cube_position]
+  - script: pca
+    args:
+      features: features.npz
+      output: plots/pca__{stage}.png
+      stages: [adapter]
+  - script: occlusion
+    args:
+      capture: capture.npz
+      output: occlusion/{stage}.npz
+      plot: plots/occlusion__{stage}.png
+      stages: [adapter]
+      patch_size: 32
+      num_images: 64
