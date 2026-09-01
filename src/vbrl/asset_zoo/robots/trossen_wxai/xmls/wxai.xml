@@ -92,7 +92,14 @@
                   <geom name="camera_mount_visual" class="visual" pos="0.012 0 0" quat="1 0 0 0" mesh="camera_mount_d405"/>
                   <!-- Hide the housing collision from a camera mounted inside it. -->
                   <geom name="camera_collision" class="collision" group="4" type="box" size="0.0155 0.025 0.025" pos="0.0513206 0 0.0569399" quat="0.984808 0 0.173648 0"/>
-                  <geom name="camera_visual" class="visual" type="box" size="0.0115 0.021 0.021" pos="0.0513206 0 0.0569399" quat="0.984808 0 0.173648 0"/>
+                  <!-- Group 1, the camera body: rendered by every camera except the
+                       one mounted inside it. In the visual group 2 it blacked out the
+                       wrist view, which renders the inside of this box; hidden
+                       outright it would vanish from the external views, where the
+                       D405 on the wrist is part of what the robot looks like. A real
+                       imager looks out through a window this box does not model. The
+                       collision twin below was already hidden for the same reason. -->
+                  <geom name="camera_visual" class="visual" group="1" type="box" size="0.0115 0.021 0.021" pos="0.0513206 0 0.0569399" quat="0.984808 0 0.173648 0"/>
                   <site name="camera_color_frame" pos="0.05864 0.009 0.05427" quat="0.9848078 0 0.1736482 0" size="0.005"/>
                   <camera name="cam" pos="0.05864 0.009 0.05427" quat="0.5793 0.4056 -0.4056 -0.5793" mode="fixed" fovy="87"/>
                   <body name="carriage_right" pos="0.0865 -0.023 0" gravcomp="1">

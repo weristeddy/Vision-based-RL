@@ -143,15 +143,17 @@ EXPECTED_TASK_IDS = frozenset(
     ),
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
+    # The first sim2real contract: D405 optics, realistic robot materials.
+    "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_231_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_232_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 231
+  assert len(EXPECTED_TASK_IDS) == 232
 
 
 def test_no_id_names_the_default_camera() -> None:

@@ -18,9 +18,30 @@ dependencies = [
   # Torch comes from PyTorch's cu128 index (see [tool.uv.sources] below). That
   # wheel carries sm_70/75/80/86/90/100/120, covering the V100, A100, and B200
   # clusters as well as a development workstation. Drivers stay host-provided.
-  "torch==2.9.0",
-  "torchvision==0.24.0",
-  "torchaudio==2.9.0",
+  #
+  # aarch64 is the Jetson AGX Thor deployment host, and it needs a different
+  # build entirely: Thor's GPU is sm_110, which the cu128 wheels do not carry
+  # (they stop at sm_100/sm_120), so every kernel launch there fails with
+  # "no kernel image is available for execution on the device". The CUDA 13
+  # wheels on the jetson-ai-lab index carry sm_110 and link JetPack's system
+  # CUDA. Only the patch version differs, so the module APIs and checkpoint
+  # state_dicts stay identical to what the cluster trains -- and torchvision
+  # 0.24.1 is the release that pairs with torch 2.9.1.
+  "torch==2.9.0; platform_machine != 'aarch64'",
+  "torch==2.9.1; platform_machine == 'aarch64'",
+  "torchvision==0.24.0; platform_machine != 'aarch64'",
+  "torchvision==0.24.1; platform_machine == 'aarch64'",
+  "torchaudio==2.9.0; platform_machine != 'aarch64'",
+  "torchaudio==2.9.1; platform_machine == 'aarch64'",
+  # The Jetson wheels bundle neither the ARM math libraries (NVPL supplies the
+  # BLAS/LAPACK that libtorch_cpu.so links) nor cuDSS, and their metadata omits
+  # both, so libtorch fails to load without them. cuDNN is pinned to the exact
+  # version torch 2.9.1 was compiled against: JetPack ships 9.12, torch
+  # demands 9.13, and it refuses to initialise on a minor mismatch.
+  "nvpl-blas==0.6.0; platform_machine == 'aarch64'",
+  "nvpl-lapack==0.4.0.1; platform_machine == 'aarch64'",
+  "nvidia-cudss-cu13==0.8.0.10; platform_machine == 'aarch64'",
+  "nvidia-cudnn-cu13==9.13.0.50; platform_machine == 'aarch64'",
   # Simulator, RL, and distributed launch.
   "mjlab==1.6.0",
   "mujoco==3.11.0",
@@ -59,6 +80,18 @@ dependencies = [
   "pytest==8.4.1",
 ]
 
+[project.optional-dependencies]
+# Real-robot deployment: the Trossen arm SDK and the RealSense bindings. An
+# extra rather than a dependency, because only the robot host has the hardware
+# and neither the cluster image (`uv sync --frozen --no-dev`) nor a plain
+# development sync should pull driver libraries it can never use. Install with
+# `uv sync --extra deploy`; both ship cp312 aarch64 wheels, so the Jetson needs
+# no source build.
+deploy = [
+  "trossen-arm==1.9.3",
+  "pyrealsense2==2.58.4.10922",
+]
+
 [dependency-groups]
 # Installed by `uv sync`; the image builds with `uv sync --no-dev`, so these
 # stay out of rl.sif exactly as before.
@@ -75,10 +108,27 @@ url = "https://download.pytorch.org/whl/cu128"
 # silently served from PyTorch's index.
 explicit = true
 
+[[tool.uv.index]]
+name = "jetson-sbsa-cu130"
+url = "https://pypi.jetson-ai-lab.io/sbsa/cu130/+simple"
+# Likewise explicit. This index publishes CUDA 13 aarch64 builds for Thor and
+# GB200; PyPI's own aarch64 torch wheel is CPU-only, so the marker below must
+# route aarch64 here rather than letting the default index answer.
+explicit = true
+
 [tool.uv.sources]
-torch = { index = "pytorch-cu128" }
-torchvision = { index = "pytorch-cu128" }
-torchaudio = { index = "pytorch-cu128" }
+torch = [
+  { index = "pytorch-cu128", marker = "platform_machine != 'aarch64'" },
+  { index = "jetson-sbsa-cu130", marker = "platform_machine == 'aarch64'" },
+]
+torchvision = [
+  { index = "pytorch-cu128", marker = "platform_machine != 'aarch64'" },
+  { index = "jetson-sbsa-cu130", marker = "platform_machine == 'aarch64'" },
+]
+torchaudio = [
+  { index = "pytorch-cu128", marker = "platform_machine != 'aarch64'" },
+  { index = "jetson-sbsa-cu130", marker = "platform_machine == 'aarch64'" },
+]
 r3m = { git = "https://github.com/facebookresearch/r3m.git", rev = "b2334e726887fa0206962d7984c69c5fb09cceab" }
 
 [tool.uv]
@@ -93,6 +143,7 @@ vbrl-evaluate = "vbrl.scripts.evaluate:main"
 vbrl-analyze = "vbrl.scripts.analyze:main"
 vbrl-visualize = "vbrl.scripts.play:main"
 vbrl-fetch-backbones = "vbrl.scripts.fetch_backbones:main"
+vbrl-deploy = "vbrl.scripts.deploy:main"
 
 [project.entry-points."mjlab.tasks"]
 vbrl = "vbrl.tasks"

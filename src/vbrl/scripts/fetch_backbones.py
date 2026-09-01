@@ -48,10 +48,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     fetch_backbones,
     verify_backbones,
   )
-  from vbrl.paths import model_root
+  from vbrl.paths import DEFAULT_MODEL_ROOT, model_root
+
+  from vbrl.paths import CHECKOUT_MODEL_DIRECTORY, checkout_root
 
   arguments = _parser().parse_args(argv)
-  root = Path(arguments.model_root).expanduser() if arguments.model_root else model_root()
+  if arguments.model_root:
+    root = Path(arguments.model_root).expanduser()
+  else:
+    root = model_root()
+    # ``model_root`` only returns the checkout's ``.models`` once it exists, so on
+    # a fresh checkout it resolves to the image path -- which no development host
+    # can write to. Fetching is the one command that legitimately creates that
+    # directory, so it resolves the checkout itself rather than sending a first
+    # run at /opt/vbrl-models. The image is unaffected: rl.def passes its
+    # destination explicitly, taking the branch above.
+    if root == DEFAULT_MODEL_ROOT and not root.is_dir():
+      checkout = checkout_root(required=False)
+      if checkout is not None:
+        root = checkout / CHECKOUT_MODEL_DIRECTORY
+        root.mkdir(parents=True, exist_ok=True)
   if not root.is_absolute():
     raise ValueError(f"model_root must be an absolute path; got {root}.")
 

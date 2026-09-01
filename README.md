@@ -47,6 +47,43 @@ measure there. `uv run pytest -m "not sim"` is the fast contract pass;
 `uv run pytest` adds [the tests that build and step a
 simulator](tests/test_zero_shot_transfer.py) and is what to run before pushing.
 
+### Jetson AGX Thor (robot deployment)
+
+A Thor is the third target, for running trained policies on real hardware, and
+it is the one host where `uv sync` alone is not enough:
+
+```bash
+bash jetson/setup.sh       # uv sync, install the loader preload, verify the GPU
+```
+
+Thor's GPU is **sm_110**, which the cu128 wheels the clusters use do not carry.
+Installing them there succeeds and `torch.cuda.is_available()` returns `True`,
+but every kernel launch fails with *no kernel image is available for execution
+on the device* — so `pyproject.toml` routes `platform_machine == 'aarch64'` to
+the CUDA 13 wheels on the [jetson-ai-lab index](https://pypi.jetson-ai-lab.io),
+which do. Only the patch version differs (2.9.1 against the cluster's 2.9.0), so
+checkpoints and module APIs are unchanged.
+
+Those wheels link JetPack's system CUDA rather than bundling it, and expect NVPL
+(ARM BLAS/LAPACK), cuDSS, and cuDNN from elsewhere. `uv sync` installs all
+three from the lockfile, but into directories the dynamic loader does not
+search, so [`jetson/_vbrl_jetson_preload.py`](jetson/_vbrl_jetson_preload.py)
+loads them at interpreter startup. Installing that file is what `jetson/setup.sh`
+adds over a plain sync; re-run it if you ever recreate `.venv`.
+[`jetson/verify.py`](jetson/verify.py) is the gate — it launches real kernels
+rather than trusting `is_available()`, and `bash jetson/setup.sh --no-sync`
+re-runs it alone.
+
+Two things the setup deliberately does not do. It does not touch the power mode,
+which ships at 120 W of a possible MAXN (`sudo nvpmodel -m 0 && sudo
+jetson_clocks`). And it installs no inference accelerator: TensorRT is present
+system-wide and importable from the venv with
+`PYTHONPATH=/usr/lib/python3.12/dist-packages`, and `triton` and
+`torch-tensorrt` have aarch64 builds on the same index — but measure an eager
+rollout against the control-rate budget before reaching for any of them, because
+TensorRT's fp16 kernels change numerics and a policy driving real hardware is a
+bad place to debug two things at once.
+
 Then see what exists:
 
 ```bash
@@ -54,7 +91,7 @@ vbrl-list                  # every registry, and where to extend it
 vbrl-list tasks            # just the task IDs
 ```
 
-## The five commands
+## The six commands
 
 ### `vbrl-list` — see every registry
 
@@ -148,6 +185,36 @@ vbrl-visualize Mjlab-PushCube-State-Trossen --agent random
 ```
 
 Add `--scene wood|plaster|peacock` to swap in an out-of-distribution tabletop.
+
+### `vbrl-deploy` — run a policy on the real robot
+
+VBRL-only, and only on the Jetson (`uv sync --extra deploy`). Reads a manifest
+and drives a Trossen arm at the task's own control rate.
+
+```bash
+uv run vbrl-deploy configs/deployment/lift_cube.yaml --dry-run   # no arm commands
+uv run vbrl-deploy configs/deployment/lift_cube.yaml
+```
+
+The task ID fixes the architecture, observations, camera, and action scaling, so
+the manifest adds only what a real robot needs: the arm's address, the camera
+serial, the lift target, and the per-step safety clamps the simulator never
+needed (the action term declares `clip: None`, which is safe only in sim).
+
+**The lift target is a parameter, and the cube's position is not.** The training
+command sampled the target independently of the cube, uniformly over
+`x(0.3, 0.5), y(-0.2, 0.2), z(0.2, 0.4)` in the base frame; a target outside
+that box is refused as out of distribution. The cube is never configured at all
+— the policy locates it through the camera alone, which is the whole point of a
+visual task.
+
+Deployment builds one simulated environment and never steps it, because the
+constants hardware must reproduce — joint order, the default pose observations
+are relative to, the action offset and scale, and the kinematics behind
+`goal_position` — are derived in the sim from the same MJCF the policy trained
+against. `tests/test_deployment_parity.py` feeds the simulator's own state
+through the deployment assembler and demands the identical observation back;
+that test is the reason to trust the loop before an arm moves.
 
 ### `vbrl-evaluate` — success rates over a model × scene × seed grid
 

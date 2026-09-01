@@ -43,7 +43,10 @@
     <material name="satin_aluminum" rgba="0.52 0.55 0.58 1"
               specular="0.82" shininess="0.58"
               metallic="0.96" roughness="0.25"/>
-    <material name="camera_aluminum" rgba="0.42 0.45 0.48 1"
+    <!-- The Trossen's D405 housing is black, not bare aluminium. Keeps the
+         camera's specular response -- an anodised body is glossier than the
+         printed mount -- with the mount's colour. -->
+    <material name="camera_black" rgba="0.082 0.088 0.094 1"
               specular="0.70" shininess="0.44"
               metallic="0.90" roughness="0.34"/>
     <material name="camera_glass" rgba="0.006 0.010 0.014 1"
@@ -239,31 +242,38 @@
                     Official D405 mesh aligned to the existing proxy's center.
                     Its STL +Z face is the optical front after the URDF rotation.
                   -->
-                  <geom name="camera_visual" class="visual"
+                  <!-- Group 1, the camera body: rendered by every camera except the
+                       one mounted inside it. See CAMERA_HOUSING_GROUP. -->
+                  <geom name="camera_visual" class="visual" group="1"
                         pos="0.0622210 0 0.0529725"
                         quat="0.405580 0.579228 0.579228 0.405580"
-                        mesh="d405" material="camera_aluminum"/>
-                  <geom name="appearance_camera_face" class="visual" type="box"
+                        mesh="d405" material="camera_black"/>
+                  <!-- The window, lenses and optics sit in front of the imager, so they
+                       join the housing in group 1: an external camera sees them, the
+                       imager behind them does not. MuJoCo draws camera_glass as an
+                       opaque surface 4 mm from the camera, which blacked out the wrist
+                       view entirely. -->
+                  <geom name="appearance_camera_face" class="visual" group="1" type="box"
                         size="0.00035 0.0172 0.0172"
                         pos="0.0625499 0 0.0528528"
                         quat="0.984808 0 0.173648 0"
                         material="camera_glass"/>
-                  <geom name="appearance_camera_lens_left" class="visual"
+                  <geom name="appearance_camera_lens_left" class="visual" group="1"
                         type="cylinder" size="0.00355 0.00030"
                         pos="0.0629258 0.009 0.0527159"
                         quat="0.573576 0 0.819152 0"
                         material="satin_aluminum"/>
-                  <geom name="appearance_camera_lens_right" class="visual"
+                  <geom name="appearance_camera_lens_right" class="visual" group="1"
                         type="cylinder" size="0.00355 0.00030"
                         pos="0.0629258 -0.009 0.0527159"
                         quat="0.573576 0 0.819152 0"
                         material="satin_aluminum"/>
-                  <geom name="appearance_camera_optic_left" class="visual"
+                  <geom name="appearance_camera_optic_left" class="visual" group="1"
                         type="cylinder" size="0.00165 0.00016"
                         pos="0.0632077 0.009 0.0526133"
                         quat="0.573576 0 0.819152 0"
                         material="lens_glass"/>
-                  <geom name="appearance_camera_optic_right" class="visual"
+                  <geom name="appearance_camera_optic_right" class="visual" group="1"
                         type="cylinder" size="0.00165 0.00016"
                         pos="0.0632077 -0.009 0.0526133"
                         quat="0.573576 0 0.819152 0"

@@ -59,7 +59,9 @@ def add_rgb_camera(
   # this the offscreen renderer keeps MuJoCo's default groups 0-2, so a
   # collision-geometry task records footage of the visual meshes instead.
   # The floor is the one addition: it is scenery for whoever is watching, which
-  # is why it sits in a group of its own and never in the camera's.
+  # is why it sits in a group of its own and never in the camera's. The D405 body
+  # is in that group too, for the same reason and because the wrist camera is
+  # mounted inside it.
   drawn = set(geom_groups) | {ORIGIN_PLANE_GROUP}
   cfg.viewer.geom_group = tuple(
     int(group in drawn) for group in range(mujoco.mjNGROUP)

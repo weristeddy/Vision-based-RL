@@ -64,7 +64,9 @@ def test_lift_collision_and_visual_versions_preserve_distinct_cameras() -> None:
   assert _camera(collision, "cam").enabled_geom_groups == (0, 3)
   assert _camera(visual, "cam").enabled_geom_groups == (0, 2)
   # Recorded video must draw the same geometry generation the policy is fed,
-  # plus the floor in group 1, which is scenery for whoever is watching.
+  # plus the floor in group 1, which is scenery for whoever is watching -- and
+  # now the D405 body, which shares that group because the wrist camera sits
+  # inside it and must not render it.
   assert collision.viewer.geom_group == (1, 1, 0, 1, 0, 0)
   assert visual.viewer.geom_group == (1, 1, 1, 0, 0, 0)
 
@@ -179,7 +181,10 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   camera = _camera(rgb, "external_cam")
   assert camera.camera_name == "robot/external_cam"
   assert camera.enabled_geom_groups == (0, 2)
-  assert camera.fovy == 42.5
+  # Every view now renders the D405's measured optics: a 224x224 centre crop of
+  # its 424x240 colour stream spans 54.49 degrees (fy = 217.5 px). Was 42.5, a
+  # D435's vertical FOV, while the hardware is a D405.
+  assert camera.fovy == 54.49
   assert (camera.width, camera.height) == (224, 224)
   assert rgb.viewer.geom_group == (1, 1, 1, 0, 0, 0)
 

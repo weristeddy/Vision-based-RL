@@ -640,6 +640,14 @@
       "resnet.layer4.bias:(2048,)",
       "resnet.layer4.weight:(2048, 1024, 1, 1)"
     ],
+    "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic": [
+      "adapter.output_norm.bias:(256,)",
+      "adapter.output_norm.weight:(256,)",
+      "adapter.proj.bias:(128,)",
+      "adapter.proj.weight:(128, 384, 1, 1)",
+      "backbone.embeddings.bias:(384,)",
+      "backbone.embeddings.weight:(384, 3, 14, 14)"
+    ],
     "Mjlab-PushT-Balanced-CompactVit-FlattenRelu-TrossenRealistic": [
       "adapter.proj.bias:(256,)",
       "adapter.proj.weight:(256, 25088)",
