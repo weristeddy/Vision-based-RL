@@ -126,6 +126,22 @@ class ObservationAssembler:
 
     self._last_action = np.asarray(action, dtype=np.float64).reshape(-1)
 
+  def effective_action(self, sent_targets: Any) -> Any:
+    """Invert ``joint_targets``: the action the commanded pose corresponds to.
+
+    The clamps in ``TrossenArm.command`` mean the pose actually commanded is not
+    always the one the policy asked for. In simulation the two never diverge --
+    the target is applied in full -- so ``last_action`` there is always the
+    action that produced the current target. Reporting the raw action on
+    hardware breaks that invariant: the policy reads back a move that never
+    happened, sees no response, and pushes harder every step. Feeding back the
+    commanded pose keeps the observation honest about what the arm did.
+    """
+    import numpy as np
+
+    sent = np.asarray(sent_targets, dtype=np.float64).reshape(-1)
+    return (sent - self._spec.action_offset) / self._spec.action_scale
+
   def joint_targets(self, action: Any) -> Any:
     """``offset + scale * action``, the mapping the action term applies in sim."""
     import numpy as np

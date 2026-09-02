@@ -11,6 +11,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+# Joints settle to a few mrad of a position target, so this allows for servo
+# error and sensor noise while still catching a wrong starting pose.
+HOME_TOLERANCE_RAD = 0.10
+
 
 @dataclass
 class StepTiming:
@@ -19,15 +23,24 @@ class StepTiming:
   inference_ms: list[float] = field(default_factory=list)
   command_ms: list[float] = field(default_factory=list)
   period_ms: list[float] = field(default_factory=list)
+  clamp_residual: list[float] = field(default_factory=list)
+  """Per step, how far the clamps held the command back from what the policy
+  asked for. Persistently large means the arm never catches its target, so the
+  policy is closing its loop on dynamics it never trained against -- a slower
+  arm is safer but is not the same task."""
 
   def summary(self) -> str:
-    def stats(name: str, samples: list[float]) -> str:
+    def stats(name: str, samples: list[float], unit: str = "ms") -> str:
       if not samples:
         return f"{name}: no samples"
       ordered = sorted(samples)
       mean = sum(ordered) / len(ordered)
       p95 = ordered[min(len(ordered) - 1, int(0.95 * len(ordered)))]
-      return f"{name}: mean {mean:.2f} ms, p95 {p95:.2f} ms, max {ordered[-1]:.2f} ms"
+      precision = 2 if unit == "ms" else 4
+      return (
+        f"{name}: mean {mean:.{precision}f} {unit}, "
+        f"p95 {p95:.{precision}f} {unit}, max {ordered[-1]:.{precision}f} {unit}"
+      )
 
     return "\n".join(
       (
@@ -36,7 +49,19 @@ class StepTiming:
         stats("  inference", self.inference_ms),
         stats("  command  ", self.command_ms),
         stats("  period   ", self.period_ms),
+        stats("  clamp gap", self.clamp_residual, unit="rad"),
       )
+    )
+
+  def clamp_summary(self) -> str:
+    if not self.clamp_residual:
+      return "  clamp: no commands sent"
+    held = sum(1 for value in self.clamp_residual if value > 1e-6)
+    share = 100.0 * held / len(self.clamp_residual)
+    worst = max(self.clamp_residual)
+    return (
+      f"  clamp: held back {held}/{len(self.clamp_residual)} steps ({share:.0f}%), "
+      f"worst {worst:.3f} rad short of the requested target"
     )
 
 
@@ -99,14 +124,62 @@ def run(config: Any) -> int:
     arm = TrossenArm(
       ip=config.arm_ip,
       model=config.arm_model,
+      motor_parameters=config.motor_parameters,
       max_joint_step=config.safety.max_joint_step,
       max_gripper_step=config.safety.max_gripper_step,
+      command_goal_time=config.safety.command_goal_time,
     )
     print(f"Arm       {config.arm_model} at {config.arm_ip}, {arm.num_joints} joints")
+    print(f"Motors    {arm.motor_parameters}")
+
+    from vbrl.deployment.homing import home_pose
+
+    home = home_pose()
+    if config.home_first:
+      measured, _ = arm.read()
+      travel = float(np.abs(home - measured).max())
+      print(f"Homing    {config.safety.startup_seconds:.1f} s, max travel {travel:.3f} rad")
+      arm.move_to(home, duration=config.safety.startup_seconds, blocking=True)
+
+    # The policy's proprioception is relative to the home pose, so starting away
+    # from it is not a small error -- it is an observation the network never saw.
+    # Refuse rather than produce plausible-looking nonsense.
+    measured, _ = arm.read()
+    offset = float(np.abs(home - measured).max())
+    if offset > HOME_TOLERANCE_RAD:
+      raise RuntimeError(
+        f"The arm is {offset:.3f} rad from the simulator's home pose, above the "
+        f"{HOME_TOLERANCE_RAD} rad tolerance. Every observation is measured "
+        "relative to that pose, so the policy would see proprioception outside "
+        "its training distribution. Pass --home-first to move there, or run "
+        "vbrl-deploy --home separately."
+      )
+    print(f"At home   within {offset:.4f} rad")
+
     if config.dry_run:
-      print("Dry run   sensors and policy only; no command will be sent")
+      print("Dry run   sensors and policy only; no action will be sent")
     else:
       arm.hold()
+
+    # The first forward pays kernel autotune and lazy initialisation -- measured
+    # at 192 ms against a 20 ms period, so the policy's very first action would
+    # arrive ten periods late. Spend that cost here instead, on a real
+    # observation so the shapes and dtypes match the loop exactly.
+    torch.backends.cudnn.benchmark = True  # the input shape never changes
+    warm_pos, warm_vel = arm.read()
+    warm_frame = camera.frame()[0] if camera is not None else None
+    warm_obs = assembler.build(joint_pos=warm_pos, joint_vel=warm_vel, rgb=warm_frame)
+    started = time.perf_counter()
+    with torch.no_grad():
+      for _ in range(10):
+        policy(warm_obs)
+    if torch.cuda.is_available():
+      torch.cuda.synchronize()
+    print(f"Warmup    10 forwards in {(time.perf_counter() - started) * 1e3:.0f} ms")
+
+    previous_action = np.zeros(len(spec.action_scale))
+    rate_holds = np.zeros(len(spec.action_scale), dtype=int)
+    limit_holds = np.zeros(len(spec.action_scale), dtype=int)
 
     step = 0
     next_deadline = time.perf_counter()
@@ -132,11 +205,38 @@ def run(config: Any) -> int:
         torch.cuda.synchronize()
       timing.inference_ms.append((time.perf_counter() - started) * 1e3)
 
+      # Smooth the intent, not the motion: a rate clamp on the arm leaves the
+      # policy asking for a pose it never reaches, which is what drove |a| from
+      # 3.5 to 19. Filtering here keeps request and response consistent.
+      smoothing = config.safety.action_smoothing
+      if smoothing < 1.0:
+        action = smoothing * action + (1.0 - smoothing) * previous_action
+      previous_action = action
+
+      magnitude = float(np.abs(action).max())
+      if magnitude > config.safety.max_action_magnitude:
+        raise RuntimeError(
+          f"Step {step}: the policy emitted |a| = {magnitude:.2f}, above the "
+          f"{config.safety.max_action_magnitude} limit. In simulation this "
+          "policy peaked near 3.5, so an action this large means the "
+          "observation is outside its training distribution -- almost always "
+          "the camera, since proprioception is checked by "
+          "tests/test_deployment_parity.py. Stopping before the arm is driven "
+          "into its limits."
+        )
+
       started = time.perf_counter()
       targets = assembler.joint_targets(action)
-      if not config.dry_run:
-        arm.command(targets)
-      assembler.record_action(action)
+      if config.dry_run:
+        # Nothing is commanded, so nothing was applied; the raw action is the
+        # only honest thing to report, and it is why |a| drifts upward here.
+        assembler.record_action(action)
+      else:
+        sent = arm.command(targets)
+        timing.clamp_residual.append(float(np.abs(targets - sent).max()))
+        rate_holds += (arm.last_rate_held > 1e-6).astype(int)
+        limit_holds += (arm.last_limit_held > 1e-6).astype(int)
+        assembler.record_action(assembler.effective_action(sent))
       timing.command_ms.append((time.perf_counter() - started) * 1e3)
 
       step += 1
@@ -159,11 +259,32 @@ def run(config: Any) -> int:
     print("\nInterrupted.")
   finally:
     if arm is not None:
-      arm.close()
+      # Park whenever anything moved the arm. --dry-run alone commands nothing,
+      # but --home-first raises it regardless, and leaving it held at the home
+      # pose is not a resting state.
+      moved = config.home_first or not config.dry_run
+      arm.close(park=moved, park_duration=config.safety.startup_seconds)
     if camera is not None:
       camera.close()
     print(f"\n{len(timing.period_ms)} steps at a {period * 1e3:.1f} ms period")
     print(timing.summary())
+    print(timing.clamp_summary())
+    if timing.clamp_residual:
+      total = len(timing.clamp_residual)
+      print("  per joint, share of steps held by each clamp:")
+      for index in range(len(rate_holds)):
+        label = "gripper" if index == len(rate_holds) - 1 else f"joint_{index}"
+        print(
+          f"    {label:9} rate {100 * rate_holds[index] / total:5.1f}%"
+          f"   at-limit {100 * limit_holds[index] / total:5.1f}%"
+        )
+      if limit_holds.max() > 0.5 * total:
+        # Rate holds are transient; a joint sitting at its limit means the
+        # policy wants a pose the arm does not have, and no rate will fix it.
+        print(
+          "  a joint spent most of the run pinned at its limit: the policy is "
+          "asking for poses outside the mechanism, not merely moving too slowly."
+        )
     if camera is not None and timing.period_ms:
       print(f"  frames captured: {camera.frames_captured} for {len(timing.period_ms)} steps")
     overruns = sum(1 for p in timing.period_ms if p > period * 1e3 * 1.1)

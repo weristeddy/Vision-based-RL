@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
+# Commanding a joint to its exact reported limit leaves no room for tracking
+# error, which the controller reports as a limit violation.
+LIMIT_MARGIN_RAD = 0.02
+LIMIT_MARGIN_M = 0.002
+
 
 class TrossenArm:
   """Joint-position control over Ethernet, with the clamps the sim did not need."""
@@ -18,8 +23,11 @@ class TrossenArm:
     *,
     ip: str,
     model: str = "wxai_v0",
+    motor_parameters: str | None = "wxai_v0_20260317",
     max_joint_step: float = 0.05,
     max_gripper_step: float = 0.005,
+    command_goal_time: float = 0.02,
+    clear_error: bool = True,
   ) -> None:
     import trossen_arm
 
@@ -33,11 +41,30 @@ class TrossenArm:
       getattr(trossen_arm.Model, model),
       trossen_arm.StandardEndEffector.wxai_v0_base,
       ip,
-      False,
+      clear_error,
     )
+    if motor_parameters is not None:
+      # Explicit rather than inherited from the driver's shifting default.
+      standard = getattr(trossen_arm.StandardMotorParameters, motor_parameters)
+      self._driver.set_motor_parameters(standard)
+      self._motor_parameters = motor_parameters
+    else:
+      self._motor_parameters = "(driver default)"
     self._max_joint_step = max_joint_step
     self._max_gripper_step = max_gripper_step
+    self._command_goal_time = command_goal_time
     self._last_target: Any = None
+    # Cached at connect: a faulted controller refuses reads, and the recovery
+    # path must still know where the limits are in order to park.
+    self._limits = self._read_joint_limits()
+    import numpy as np
+
+    self.last_rate_held = np.zeros(len(self._limits))
+    self.last_limit_held = np.zeros(len(self._limits))
+
+  @property
+  def motor_parameters(self) -> str:
+    return self._motor_parameters
 
   @property
   def num_joints(self) -> int:
@@ -58,6 +85,53 @@ class TrossenArm:
     self._driver.set_all_positions(positions.tolist(), 2.0, True)
     self._last_target = positions
 
+  def _read_joint_limits(self) -> list[tuple[float, float]]:
+    return [
+      (float(limit.position_min), float(limit.position_max))
+      for limit in self._driver.get_joint_limits()
+    ]
+
+  def joint_limits(self) -> list[tuple[float, float]]:
+    """Per-joint ``(position_min, position_max)``, as read once at connect."""
+    return list(self._limits)
+
+  def move_to(self, targets: Any, *, duration: float, blocking: bool = True) -> Any:
+    """Move to an absolute pose over ``duration`` seconds, then hold it.
+
+    Separate from :meth:`command` on purpose. ``command`` is the control-loop
+    path: small per-step deltas, clamped against the previous target. This is
+    the setup path, where the arm may have to travel a long way -- the sim's
+    home pose puts joint 2 at 1.42 rad -- and the per-step clamp would either
+    forbid it or take hundreds of steps to creep there. The controller's own
+    trajectory generator does the interpolation, so ``duration`` is what makes
+    the move slow rather than a sequence of small commands.
+
+    Refuses a target outside the controller's reported joint limits: sending one
+    is how an arm ends up against a hard stop.
+    """
+    import numpy as np
+
+    targets = np.asarray(targets, dtype=np.float64).reshape(-1)
+    limits = self._limits
+    if len(targets) != len(limits):
+      raise ValueError(
+        f"Got {len(targets)} targets for {len(limits)} joints."
+      )
+    violations = [
+      f"joint {index}: {value:.4f} outside [{low:.4f}, {high:.4f}]"
+      for index, (value, (low, high)) in enumerate(zip(targets, limits, strict=True))
+      if not low <= value <= high
+    ]
+    if violations:
+      raise ValueError("Target outside the controller's joint limits: " + "; ".join(violations))
+    if duration <= 0.0:
+      raise ValueError(f"duration must be positive; got {duration}.")
+
+    self._driver.set_all_modes(self._trossen_arm.Mode.position)
+    self._driver.set_all_positions(targets.tolist(), float(duration), blocking)
+    self._last_target = targets
+    return targets
+
   def command(self, targets: Any) -> Any:
     """Clamp a target against the previous one and send it. Returns what was sent."""
     import numpy as np
@@ -66,25 +140,131 @@ class TrossenArm:
     if self._last_target is None:
       self._last_target = self.read()[0]
 
-    # Per-step clamps, not absolute ones: the policy was trained without action
-    # clipping, so the failure mode to guard is a large jump between steps.
-    limits = np.full_like(targets, self._max_joint_step)
-    limits[-1] = self._max_gripper_step
-    delta = np.clip(targets - self._last_target, -limits, limits)
+    # Two clamps, and both are load-bearing.
+    #
+    # The rate clamp bounds how far a single step may move. The *absolute* clamp
+    # bounds where it may end up, and skipping it is how an out-of-distribution
+    # action destroys hardware: a policy emitting |a| = 19 asks for
+    # 0.022 + 0.01*19 = 0.21 m of gripper travel against a 0.04 m mechanism, and
+    # a rate limit alone just walks the target past the stop a step at a time
+    # until the motor cannot execute the command and the CAN send fails.
+    steps = np.full_like(targets, self._max_joint_step)
+    steps[-1] = self._max_gripper_step
+    delta = np.clip(targets - self._last_target, -steps, steps)
     clamped = self._last_target + delta
 
-    self._driver.set_all_positions(clamped.tolist(), 0.0, False)
-    self._last_target = clamped
-    return clamped
+    low = np.array([limit[0] for limit in self._limits])
+    high = np.array([limit[1] for limit in self._limits])
+    # A margin inside the reported limit: the joint tracks with some error, and
+    # commanding the exact limit leaves nothing for it.
+    margin = LIMIT_MARGIN_RAD * np.ones_like(clamped)
+    margin[-1] = LIMIT_MARGIN_M
+    rate_held = np.abs(clamped - targets)
+    bounded = np.clip(clamped, low + margin, high - margin)
+    limit_held = np.abs(bounded - clamped)
+    # Kept apart because they mean opposite things: a rate hold says the arm is
+    # still travelling toward a reachable target, a limit hold says the policy
+    # is asking for a pose the mechanism does not have.
+    self.last_rate_held = rate_held
+    self.last_limit_held = limit_held
 
-  def relax(self) -> None:
-    self._driver.set_all_modes(self._trossen_arm.Mode.idle)
+    # Hand the controller a goal time rather than a step: its trajectory
+    # generator interpolates over the interval, so consecutive decisions blend
+    # instead of each one arriving as a discontinuity.
+    self._driver.set_all_positions(
+      bounded.tolist(), self._command_goal_time, False
+    )
+    self._last_target = bounded
+    return bounded
 
-  def close(self) -> None:
+  # The pose the arm powers on in and rests at unpowered: measured at all joints
+  # within 0.02 rad of zero, holding still in idle, so it carries its own weight
+  # there. That makes it the only pose from which releasing torque is safe.
+  REST_POSE = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+  def park(self, *, duration: float = 8.0) -> bool:
+    """Retrace to the resting pose, then release torque.
+
+    Trossen documents ``idle`` only as the state the controller enters on a
+    runtime error, and offers gravity compensation as a *separate* mode -- so
+    idle is not gravity-compensated and an arm released while raised drops under
+    its own weight. Going through the rest pose first is what makes releasing
+    safe; from the sim's home pose, joint 1 is 1.33 rad up.
+    """
+    self.move_to(self.REST_POSE, duration=duration, blocking=True)
+    # Settle before releasing: the trajectory reports done at the setpoint, and
+    # torque removed while the joints are still converging is a small drop.
+    import time
+
+    time.sleep(0.3)
+    return self.relax()
+
+  def modes(self) -> list[str]:
+    """The controller's per-joint mode, for confirming a release took effect."""
     try:
-      self.relax()
+      return [str(mode) for mode in self._driver.get_modes()]
+    except Exception as error:  # noqa: BLE001
+      return [f"unreadable: {type(error).__name__}"]
+
+  def is_faulted(self) -> bool:
+    """Whether the controller reports an error. Faulted controllers refuse reads."""
+    try:
+      return "no error" not in str(self._driver.get_error_information()).lower()
+    except Exception:  # noqa: BLE001 - a controller too broken to answer is faulted
+      return True
+
+  def relax(self, *, timeout: float = 2.0) -> bool:
+    """Release torque and confirm the controller did it.
+
+    Setting the mode is fire-and-forget, so closing the connection straight
+    afterwards can race the command and leave every joint still powered. Read
+    the modes back until they agree, and say so if they never do -- an arm you
+    believe is limp but is not is worse than either state on its own.
+
+    Only safe at :attr:`REST_POSE` -- see :meth:`park`.
+    """
+    import time
+
+    idle = self._trossen_arm.Mode.idle
+    self._driver.set_all_modes(idle)
+    deadline = time.perf_counter() + timeout
+    while time.perf_counter() < deadline:
+      try:
+        modes = list(self._driver.get_modes())
+      except Exception:  # noqa: BLE001 - a faulted controller idles on its own
+        return True
+      if all(mode == idle for mode in modes):
+        return True
+      # Re-issue: a dropped UDP datagram is the likely reason it did not take.
+      self._driver.set_all_modes(idle)
+      time.sleep(0.05)
+
+    print(
+      f"  WARNING the controller still reports {list(self._driver.get_modes())} "
+      f"after {timeout:.0f}s of asking for idle; the joints are still powered."
+    )
+    return False
+
+  def close(self, *, park: bool = False, park_duration: float = 8.0) -> None:
+    """Disconnect. Holds position unless ``park`` retraces to rest first.
+
+    Deliberately does *not* release torque by default: the controller keeps
+    executing its last position command, so the arm stays where it is instead of
+    falling. Pass ``park=True`` to bring it down and go idle.
+    """
+    try:
+      if park:
+        self.park(duration=park_duration)
+    except Exception as error:  # noqa: BLE001 - never mask the original failure
+      # A faulted controller has already dropped to idle on its own, so there is
+      # nothing to bring down; say so rather than raising over the real cause.
+      print(f"  could not park: {type(error).__name__}: {str(error)[:160]}")
+      print("  the controller drops to idle on a fault, so the arm is not held.")
     finally:
-      self._driver.cleanup()
+      try:
+        self._driver.cleanup()
+      except Exception as error:  # noqa: BLE001
+        print(f"  cleanup failed: {type(error).__name__}: {str(error)[:120]}")
 
 
 class RealSenseCamera:

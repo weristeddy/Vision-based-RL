@@ -2891,21 +2891,21 @@ wheels = [
 
 [[package]]
 name = "trossen-arm"
-version = "1.9.3"
+version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/c6/c63e4101f9e94397b3da0e6d302f4330a4013739a6316fefc7237ea3cee7/trossen_arm-1.9.3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:33b5465bbf0004d7517285e5b0d848fc119428fd16f51302f8bb25d1a0d842ba", size = 1166563, upload-time = "2026-04-28T21:01:53.959Z" },
-    { url = "https://files.pythonhosted.org/packages/48/ff/18c970616fafd2cdba57ecc68af40646ca9e774bc1f661c34bc4a480f2d5/trossen_arm-1.9.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8a8accf97a462a600ab192ec77ad507d4d69d26cfee6124ea45fb032d5a5d38d", size = 1277167, upload-time = "2026-04-28T21:01:55.439Z" },
-    { url = "https://files.pythonhosted.org/packages/96/6d/217e7e533ce734050e31c4438d52b7185efce486a6790bc62210e9c64afa/trossen_arm-1.9.3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:209db118637120f64bbad71c53050e7578adb734360f5fa9e55474ddfb07cd39", size = 1166696, upload-time = "2026-04-28T21:01:59.011Z" },
-    { url = "https://files.pythonhosted.org/packages/35/32/1b7b5cd518db33ea3af090e16ae0a9e072656d8a43f1491a2f8fd9609d7f/trossen_arm-1.9.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b73290b894c56e66fb03a37d7cc3c39855935816813b5c9693eebbbab1011860", size = 1277925, upload-time = "2026-04-28T21:02:01.007Z" },
-    { url = "https://files.pythonhosted.org/packages/e7/9c/9459b6945f6520dd0deae9d038a99be1ac94b60d550b5761ef5315a30caa/trossen_arm-1.9.3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5fe5621388548d056069acdd2066ecc6140e8ac21f82f23f7587d13ae160e2dc", size = 1171313, upload-time = "2026-04-28T21:02:04.001Z" },
-    { url = "https://files.pythonhosted.org/packages/48/5e/6b4bf67106da6dcabb7217f437ba82971640f04ca930c93973ebe339e000/trossen_arm-1.9.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:95864016894c33c9a2db541b3d384cb183722ae6ee0ae735804bfc4b57590538", size = 1282691, upload-time = "2026-04-28T21:02:05.465Z" },
-    { url = "https://files.pythonhosted.org/packages/e6/62/86e38fbb2adda6f8cf92a51ac971c94155e43be10cafaebb0c87a386ff82/trossen_arm-1.9.3-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:82be76718a5b830e1ba15703f1cc446b177d8d8d821f2612f7132dd0671c8bf0", size = 1171605, upload-time = "2026-04-28T21:02:08.421Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/70/773773242e158e356c034cf56c9c81c7f3d76eb8867306a910defcf0fca7/trossen_arm-1.9.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4a73c33097741fe06b19efbd37492870ea2c7c455443790ab6f824b564b8609a", size = 1283399, upload-time = "2026-04-28T21:02:10.091Z" },
+    { url = "https://files.pythonhosted.org/packages/96/92/9fb626bb5938f78c804e25126b046b412dc38a78c9ca2e9b84151d72f5ee/trossen_arm-1.10.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:78d514197a56c76fa4b75ea10d56c8b24d9534d498ddb479c63e747649cbbfd7", size = 1025095, upload-time = "2026-05-05T21:13:24.006Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/0e/7cf5fcf85ba61b15db5dbd41227b24601eccdf3661b8060607ee283ed545/trossen_arm-1.10.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:55d61861361343b683055fb683c5036a0636b5d8b84abb46ee15b805aa3c50d8", size = 1131952, upload-time = "2026-05-05T21:13:25.387Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/a4/5e0f49b18d2533aee4536666d4b0117c9aeb5d3230f35b233e3c106a2b8a/trossen_arm-1.10.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e145bd36ffb53cdf1c6e6de4d4d2e8e5302ea599db0d716e75f97f61925631b7", size = 1026542, upload-time = "2026-05-05T21:13:28.287Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/bb/e0f2c80a1018f507b4dd252603d62196acdc558104cb3a7349c0cb35e72c/trossen_arm-1.10.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2ebd6775ca42dc75ebd718ea080450b335daedc2eedbd6223cbdfe47dbe35cb1", size = 1134241, upload-time = "2026-05-05T21:13:29.604Z" },
+    { url = "https://files.pythonhosted.org/packages/55/78/54758216c0b3fea040edabc452facf7e8363752e113e97e58bbc817b76f0/trossen_arm-1.10.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1ecf68daf9c56829c6b8b0b8ea08b5d9ef8364424e847b32c321b31395d9fbb3", size = 1027422, upload-time = "2026-05-05T21:13:32.72Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/e7/d6b208b9f48d4549ca39f992a6ef8ea9175fa675ed1ba9a61dcfc3cb6782/trossen_arm-1.10.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:40c595fd535012f50e1e802cd23cde3daa4ad2c65a15907868cbe5b6969a3e51", size = 1137443, upload-time = "2026-05-05T21:13:34.122Z" },
+    { url = "https://files.pythonhosted.org/packages/68/39/ee18ee48aa32878da42244365dbdb91904dc082422a947686ee8d0953e40/trossen_arm-1.10.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:396a01a85313b49c4456a7425528d46a4cc58520709c18312228a7c3f051cf19", size = 1027412, upload-time = "2026-05-05T21:13:36.261Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/fe/1f45d3f05b88b394df6974e660ae9479956d99e41f10d9859a1f675f66eb/trossen_arm-1.10.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8b4218b51eece5bfadaa54885bf182dc94325f7a1f8071f225a8e80fe2bbd31f", size = 1137637, upload-time = "2026-05-05T21:13:37.492Z" },
 ]
 
 [[package]]
@@ -3070,7 +3070,7 @@ requires-dist = [
     { name = "torchvision", marker = "platform_machine != 'aarch64'", specifier = "==0.24.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", marker = "platform_machine == 'aarch64'", specifier = "==0.24.1", index = "https://pypi.jetson-ai-lab.io/sbsa/cu130/+simple" },
     { name = "transformers", specifier = "==4.55.2" },
-    { name = "trossen-arm", marker = "extra == 'deploy'", specifier = "==1.9.3" },
+    { name = "trossen-arm", marker = "extra == 'deploy'", specifier = "==1.10.0" },
     { name = "tyro", specifier = "==1.0.15" },
     { name = "viser", specifier = "==1.0.30" },
     { name = "wandb", specifier = "==0.22.3" },

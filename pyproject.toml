@@ -88,7 +88,10 @@ dependencies = [
 # `uv sync --extra deploy`; both ship cp312 aarch64 wheels, so the Jetson needs
 # no source build.
 deploy = [
-  "trossen-arm==1.9.3",
+  # Pinned to the controller firmware: the driver refuses to connect unless its
+  # major.minor matches, and the arm here reports 1.10.0. Upgrading the firmware
+  # therefore means bumping this in lockstep.
+  "trossen-arm==1.10.0",
   "pyrealsense2==2.58.4.10922",
 ]
 
