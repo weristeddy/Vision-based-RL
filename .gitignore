@@ -54,7 +54,11 @@ MUJOCO_LOG.TXT
 # !artifacts/.gitkeep
 
 # Trained policies may be copied here locally or fetched from W&B on demand.
+# Exported ONNX graphs are the same weights in the deployable format, so they
+# live beside their .pt and are ignored on the same grounds -- 90 MB each, and
+# reproducible from the checkpoint with vbrl-export-onnx.
 ckpts/**/*.pt
+ckpts/**/*.onnx
 
 # Container images are build products; recipes remain tracked.
 *.sif

@@ -106,17 +106,31 @@ def analysis_manifest_path(path: str | Path) -> Path:
   return (root / "configs" / "analysis" / candidate).resolve()
 
 
-def artifact_path(path: str | Path) -> Path:
-  """Resolve generated output without making installed mode need a checkout."""
+def _confined_output(path: str | Path, directory: str, description: str) -> Path:
+  """Resolve an output and refuse anything that escapes ``directory``."""
   resolved, root = _under_checkout(path, required=False)
   if root is None:
     return resolved
 
-  artifacts = (root / "artifacts").resolve()
+  confine = (root / directory).resolve()
   try:
-    resolved.relative_to(artifacts)
+    resolved.relative_to(confine)
   except ValueError as exc:
-    raise ValueError(
-      f"Generated output must be below {artifacts}; got {resolved}."
-    ) from exc
+    raise ValueError(f"{description} must be below {confine}; got {resolved}.") from exc
   return resolved
+
+
+def artifact_path(path: str | Path) -> Path:
+  """Resolve generated output without making installed mode need a checkout."""
+  return _confined_output(path, "artifacts", "Generated output")
+
+
+def checkpoint_path(path: str | Path) -> Path:
+  """Resolve a trained-weights destination, confined to ``ckpts/``.
+
+  An exported ONNX graph is the deployable form of a checkpoint, not an
+  analysis output, so it belongs beside the ``.pt`` it came from and under the
+  same ``ckpts/lift_cube/provenance.json``. That is the whole difference from
+  :func:`artifact_path`, which would refuse ``ckpts/`` outright.
+  """
+  return _confined_output(path, "ckpts", "Trained weights")

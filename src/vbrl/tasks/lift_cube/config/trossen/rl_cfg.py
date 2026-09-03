@@ -59,7 +59,19 @@ def trossen_lift_cube_ppo_runner_cfg(
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=24,
-    max_iterations=3000,
+    # 6000, not 3000. Measured on the Sim2Real contract, whose corrected D405
+    # optics project the cube 1.72x larger and therefore make the task a
+    # different one: 3000 iterations reached 0.361 at_goal with 29% of episodes
+    # ending in a ground collision, and 6000 reached 0.800 with none. It is a
+    # run-specific flag the task ID deliberately does not encode, so this moves
+    # the default without changing any contract -- all twelve retained
+    # real-texture Lift-Cube runs were trained at 3000 and stay loadable.
+    #
+    # RSL-RL counts this from wherever it starts (`total_it = start_it +
+    # num_learning_iterations`), so it is iterations *this job* runs, not a
+    # total: the 6000 measured above was two 3000-iteration jobs, the second
+    # resuming the first, and a resume under this default adds another 6000.
+    max_iterations=6000,
     obs_groups={
       "actor": ("actor", "camera"),
       "critic": ("critic",),

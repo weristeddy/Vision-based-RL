@@ -11,11 +11,8 @@ import torch.nn.functional as F
 
 from vbrl.paths import model_root
 
-from .weights import DINOV2_DIRECTORY
-
 from ..config import FeatureRequest
-
-
+from .weights import DINOV2_DIRECTORY
 
 
 def load() -> nn.Module:
@@ -63,15 +60,20 @@ def spatial_features(backbone: nn.Module, images: torch.Tensor) -> torch.Tensor:
     register_tokens = int(
       getattr(getattr(backbone, "config", None), "num_register_tokens", 0) or 0
     )
-    start = tokens.shape[1] - expected
+    # int() rather than raw shape arithmetic: under ONNX tracing the shapes are
+    # symbolic, so ``start`` becomes a SymInt whose ``in {...}`` test is not a
+    # Python bool and this check raised on a token count it should have
+    # accepted. mjlab's ManipulationOnPolicyRunner.save swallows that, so the
+    # only symptom was a training run that quietly produced no .onnx.
+    start = int(tokens.shape[1]) - int(expected)
     if start not in {0, 1, 1 + register_tokens}:
       raise ValueError(
-        f"DINOv2 returned {tokens.shape[1]} tokens for {expected} image patches."
+        f"DINOv2 returned {int(tokens.shape[1])} tokens for {expected} image patches."
       )
     patches = tokens[:, start:]
   patch_size = int(getattr(getattr(backbone, "config", None), "patch_size", 14))
   height, width = images.shape[-2] // patch_size, images.shape[-1] // patch_size
-  if patches.shape[1] != height * width:
+  if int(patches.shape[1]) != height * width:
     raise ValueError("DINOv2 patch-token count does not match the input image grid.")
   return patches.transpose(1, 2).reshape(patches.shape[0], patches.shape[-1], height, width)
 

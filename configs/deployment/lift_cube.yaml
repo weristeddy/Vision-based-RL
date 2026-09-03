@@ -1,35 +1,27 @@
 version: 1
 
-# The task ID fixes the architecture, observations, camera, and action scaling,
-# exactly as it does for training and evaluation.
-task_id: Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic
-checkpoint_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_sim2real.pt
+# The exported policy. Its metadata carries the joint order, the default pose,
+# the observation term order and the action scale, so no task ID is needed here.
+#
+# Under ckpts/ beside the .pt it came from, not artifacts/: it is the deployable
+# form of a checkpoint rather than an analysis output. Re-export any iteration
+# with vbrl-export-onnx; this one is the last of W&B run ntl27zt9.
+onnx_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_sim2real_5998.onnx
 
 arm_ip: 192.168.1.2
-arm_model: wxai_v0
-motor_parameters: wxai_v0_20260317   # pin it: the driver default moved in 1.10.0
 
-# Where to lift the cube to, in the robot's base frame (metres). The training
-# command sampled this uniformly from x(0.3, 0.5), y(-0.2, 0.2), z(0.2, 0.4);
-# a target outside that box is refused as out of distribution. This default is
-# the centre of it. The cube's own position is never configured -- the policy
-# sees it only through the camera.
-# Put x, y directly above where the cube actually sits, and keep z well above
-# the gripper's height at the home pose. Forward kinematics puts the end
-# effector at z = 0.205 there, so a goal at z = 0.2 reads as "already at
-# target" and the policy has no reason to lift at all; 0.35 asks for a clear
-# 15 cm rise. Valid: x (0.3, 0.5), y (-0.2, 0.2), z (0.2, 0.4).
+# Where to lift the cube to, in the robot's base frame. Put x, y above where the
+# cube sits and keep z clear of the gripper's height at home (z = 0.205), or the
+# policy reads "already there" and never lifts. Valid: x (0.3, 0.5),
+# y (-0.2, 0.2), z (0.2, 0.4). The cube's own position is never configured --
+# the policy sees it only through the camera.
 goal: [0.35, 0.0, 0.35]
 
-control_hz: 50.0
-device: cuda:0
-camera_serial: null
-camera_fps: 60   # one fresh frame per 50 Hz control cycle
+control_hz: 50.0        # the training decimation: 0.005 s x 4
 
-safety:
-  max_joint_step: 0.035          # 1.75 rad/s backstop; training requested ~3.5 rad/s
+motion:
+  action_smoothing: 0.25   # lower = smoother and slower; 1.0 = raw policy output
+  max_joint_step: 0.035    # x control_hz = 1.75 rad/s speed limit
   max_gripper_step: 0.005
-  startup_seconds: 3.0
-  command_goal_time: 0.0         # setpoint streaming; 0.02 was measured to jitter
-  action_smoothing: 0.25         # EMA on the policy output; lower = smoother and slower
-  max_action_magnitude: 8.0      # sim peaked at 3.5; hardware hit 18.95
+  max_arm_action: 6.0            # the 6 arm channels; the gripper legitimately saturates
+  home_seconds: 3.0

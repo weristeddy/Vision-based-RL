@@ -16,8 +16,16 @@
 # jetson/sitecustomize.py does that by preloading them at interpreter startup,
 # and installing it is the one step uv cannot express, so it lives here.
 #
-#   bash jetson/setup.sh              # sync, install the preload, verify
-#   bash jetson/setup.sh --no-sync    # install the preload and verify only
+# ONNX Runtime is installed here for a related reason. The only build that runs
+# on Thor is the CUDA 13 one from the jetson-ai-lab index, and that index stalls
+# partway through a resolve, so naming it in pyproject.toml makes every
+# `uv lock` hang. PyPI's onnxruntime-gpu is not a substitute: it advertises
+# CUDAExecutionProvider and then fails every kernel with
+# cudaErrorNoKernelImageForDevice, carrying no sm_110 image. So `uv sync`
+# removes it every time, and this puts it back.
+#
+#   bash jetson/setup.sh              # sync, install the preload and ORT, verify
+#   bash jetson/setup.sh --no-sync    # install the preload and ORT, verify only
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -67,6 +75,22 @@ cp "$REPO_ROOT/jetson/_vbrl_jetson_preload.py" "$SITE_PACKAGES/_vbrl_jetson_prel
 echo "import _vbrl_jetson_preload" > "$SITE_PACKAGES/zzz_vbrl_jetson_preload.pth"
 rm -f "$SITE_PACKAGES/sitecustomize.py"  # from an earlier, shadowed approach
 echo "    $SITE_PACKAGES/_vbrl_jetson_preload.py + zzz_vbrl_jetson_preload.pth"
+
+echo "==> installing ONNX Runtime (deployment; uv sync removes it)"
+if uv run --no-sync python -c "import onnxruntime" 2>/dev/null; then
+  echo "    already present"
+else
+  uv pip install --no-deps \
+    --index-url https://pypi.jetson-ai-lab.io/sbsa/cu130/+simple \
+    "onnxruntime-gpu==${ONNXRUNTIME_VERSION:-1.24.0}"
+fi
+uv run --no-sync python -c "
+import onnxruntime as ort
+providers = ort.get_available_providers()
+print(f'    onnxruntime {ort.__version__}: {providers}')
+if 'CUDAExecutionProvider' not in providers:
+  raise SystemExit('    CUDAExecutionProvider missing; deployment would run on CPU')
+"
 
 echo "==> verifying the GPU stack"
 uv run --no-sync python "$REPO_ROOT/jetson/verify.py"

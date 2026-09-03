@@ -80,6 +80,11 @@ BALANCED_ARCHITECTURES = tuple(
   a.replace("-Flatten", "-FlattenRelu")
   for a in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
 )
+# The sim2real grid is the retained Lift-Cube one, unchanged -- the same tuple
+# the CollisionCam IDs cross, superseded rows and all. This generation moves the
+# camera and nothing else, so substituting the native-resolution rows would
+# change the adapter at the same time and leave neither effect attributable.
+SIM2REAL_ARCHITECTURES = COLLISION_CAM_ARCHITECTURES
 EXPECTED_TASK_IDS = frozenset(
   (
     *(
@@ -143,17 +148,21 @@ EXPECTED_TASK_IDS = frozenset(
     ),
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
-    # The first sim2real contract: D405 optics, realistic robot materials.
-    "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
+    # The sim2real contract: D405 optics, realistic robot materials, and the
+    # camera housing out of the wrist view.
+    *(
+      f"Mjlab-LiftCube-Sim2Real-{arch}-TrossenRealistic"
+      for arch in SIM2REAL_ARCHITECTURES
+    ),
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_232_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_243_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 232
+  assert len(EXPECTED_TASK_IDS) == 243
 
 
 def test_no_id_names_the_default_camera() -> None:

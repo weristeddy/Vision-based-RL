@@ -1,0 +1,226 @@
+Sim2Real Lift-Cube retrain -- one submit command per architecture
+=================================================================
+
+Twelve blocks, one per registered architecture. Eleven are still to run; the
+twelfth (DinoV2ViTS14-SpatialSoftmax) is ALREADY SUBMITTED and its command is
+commented out so pasting the whole file cannot start it a second time.
+
+Each job is the retained real-texture run of the same architecture, retrained
+under the corrected wrist camera and nothing else:
+
+  wrist camera robot/cam, fovy 54.49 (the D405's measured 224-crop vertical
+  FOV, replacing the 87 that was its *horizontal* FOV), geom groups (0, 2) --
+  the visual meshes, not the collision proxies the retained runs rendered --
+  at 224x224, with the D405 housing, window, lenses and optics moved to group
+  1 so the imager no longer looks at the inside of its own body.
+
+The hyperparameters below are NOT the rl_cfg defaults. Each of the twelve
+retained runs came out of its own Bayesian sweep (configs/sweeps/), so every
+architecture has different values -- the learning rate alone spans 6.5x across
+the set. Each block's numbers are reproduced verbatim from the W&B config of
+the retained run named in its comment, which is what leaves the camera as the
+only difference. Passing one architecture's numbers to another would confound
+the comparison.
+
+--profile b200 supplies four GPUs and pins --env.scene.num-envs 1024 per rank,
+which matches all twelve retained runs and the first sim2real run, so the
+topology needs no flag here.
+
+max_iterations comes from rl_cfg and is 6000. RSL-RL counts it from wherever it
+starts, so it is iterations *this job* runs, not a total -- a resume would add
+another 6000. Append --agent.max-iterations N to override.
+
+Run these from the repo root on the cluster login node. They are independent;
+submit them in any order, or only the ones you want.
+
+------------------------------------------------------------------------------
+# NatureCnn-LocalGrid16
+# hyperparameters from retained run b57mpbee
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-NatureCnn-LocalGrid16-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.0003273867414867961 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.01 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 4 \
+  --agent.algorithm.num-mini-batches 8 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# NatureCnn-SpatialSoftmax
+# hyperparameters from retained run cz8klrb3
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-NatureCnn-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00012462739074900532 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 3 \
+  --agent.algorithm.num-mini-batches 8 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# CompactVit-LocalGrid8
+# hyperparameters from retained run l341d4p6
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-CompactVit-LocalGrid8-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.0002647876759888279 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 4 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.max-grad-norm 0.5 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# CompactVit-SpatialSoftmax
+# hyperparameters from retained run w0eoj70v
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-CompactVit-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.0001877537584921223 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.015 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 4 \
+  --agent.algorithm.num-mini-batches 8 \
+  --agent.algorithm.max-grad-norm 0.5 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# DinoV2ViTS14-Linear
+# hyperparameters from retained run d8s3z42w
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Linear-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00017012848780299745 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 1
+
+------------------------------------------------------------------------------
+# DinoV2ViTS14-LocalGrid7
+# hyperparameters from retained run t9m12tqk
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-LocalGrid7-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00015996191991749328 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.025 \
+  --agent.algorithm.entropy-coef 0.003 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# DinoV2ViTS14-SpatialSoftmax
+# hyperparameters from retained run col7a9is
+#
+# ALREADY SUBMITTED -- do not run again.
+#
+# This is the first sim2real run, and the only one of the twelve that exists.
+# It went as two jobs: W&B iww3e9sg reached 3000 iterations (at_goal 0.361,
+# 29% of episodes ending in a ground collision), then ntl27zt9 resumed it for
+# another 3000 (at_goal 0.800, none). Its iteration-4350 checkpoint is what
+# artifacts/deployment/lift_cube_sim2real_4350.onnx was exported from.
+#
+# The command below is what would reproduce it from scratch in one job, since
+# rl_cfg now defaults to 6000 iterations rather than 3000. Uncomment only if
+# you actually want a fresh run of this architecture.
+
+# bash cluster/submit.sh --profile b200 -- \
+#   Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic \
+#   --agent.algorithm.learning-rate 0.00012960187768659858 \
+#   --agent.algorithm.schedule adaptive \
+#   --agent.algorithm.desired-kl 0.025 \
+#   --agent.algorithm.entropy-coef 0.002 \
+#   --agent.algorithm.num-learning-epochs 3 \
+#   --agent.algorithm.num-mini-batches 16 \
+#   --agent.algorithm.max-grad-norm 1 \
+#   --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# DinoV2ViTS14-Afa6
+# hyperparameters from retained run hmace229
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Afa6-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00013404158284644908 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.03 \
+  --agent.algorithm.entropy-coef 0.002 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# R3MResNet50-Linear
+# hyperparameters from retained run m5dnsjcc
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-Linear-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.0004426275246659378 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 1
+
+------------------------------------------------------------------------------
+# R3MResNet50-LocalGrid7
+# hyperparameters from retained run mbsk74zp
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-LocalGrid7-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.0005559205560915182 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.025 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 32 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# R3MResNet50-SpatialSoftmax
+# hyperparameters from retained run j2eio3bw
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.0005008165730647225 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.035 \
+  --agent.algorithm.entropy-coef 0.005 \
+  --agent.algorithm.num-learning-epochs 3 \
+  --agent.algorithm.num-mini-batches 24 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8
+
+------------------------------------------------------------------------------
+# R3MResNet50-Afa32
+# hyperparameters from retained run njz9q97r
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-Afa32-TrossenRealistic \
+  --agent.algorithm.learning-rate 8.531747914128781e-05 \
+  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.entropy-coef 0.003 \
+  --agent.algorithm.num-learning-epochs 3 \
+  --agent.algorithm.num-mini-batches 32 \
+  --agent.algorithm.max-grad-norm 1 \
+  --agent.algorithm.gradient-accumulation-steps 8

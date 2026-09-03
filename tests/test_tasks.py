@@ -68,7 +68,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 232
+  assert len(task_ids) == 243
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     visual = agent.actor.cnn_cfg is not None

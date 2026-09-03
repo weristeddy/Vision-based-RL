@@ -87,6 +87,13 @@ dependencies = [
 # development sync should pull driver libraries it can never use. Install with
 # `uv sync --extra deploy`; both ship cp312 aarch64 wheels, so the Jetson needs
 # no source build.
+# ONNX Runtime is deliberately absent: `bash jetson/setup.sh` installs it. The
+# only build that runs on Thor is the CUDA 13 one from the jetson-ai-lab index,
+# and that index stalls partway through a resolve (measured twice: 33 MB, then
+# no bytes for minutes), so naming it here makes every `uv lock` hang. PyPI's
+# onnxruntime-gpu is not a substitute -- it advertises CUDAExecutionProvider
+# and then fails every kernel with cudaErrorNoKernelImageForDevice, because it
+# carries no sm_110 image.
 deploy = [
   # Pinned to the controller firmware: the driver refuses to connect unless its
   # major.minor matches, and the arm here reports 1.10.0. Upgrading the firmware
@@ -147,6 +154,7 @@ vbrl-analyze = "vbrl.scripts.analyze:main"
 vbrl-visualize = "vbrl.scripts.play:main"
 vbrl-fetch-backbones = "vbrl.scripts.fetch_backbones:main"
 vbrl-deploy = "vbrl.scripts.deploy:main"
+vbrl-export-onnx = "vbrl.scripts.export_onnx:main"
 
 [project.entry-points."mjlab.tasks"]
 vbrl = "vbrl.tasks"
