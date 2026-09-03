@@ -1,0 +1,210 @@
+<mujoco model="kidney_dish">
+  <!--
+    A 7-inch stainless kidney dish (emesis basin), standing on a table.
+    Dimensions in millimetres:
+
+      overall        177.8 long, 108.0 wide, 33.6 to the rim
+      basin floor    163.4 x 93.8, 33.0 deep
+      lobe radius    38.0, concave notch 15.0
+      wall flare     12 degrees from vertical, sheet gauge 0.6
+      mass           125 g of 304 stainless
+
+    CONFIRM WITH CALIPERS: scaled against a reference photograph using the
+    122 mm syringe beside it, which landed on a catalogue size. The notch
+    depth is from the photograph alone.
+
+    TWO GEOMETRY GENERATIONS, and they must stay in step. `dish_visual` is the
+    mesh and is never collided; the wall and floor boxes are collided and never
+    rendered. The split is not optional: MuJoCo collides a mesh as its convex
+    hull, and this shell encloses 3.4% of its own hull, so a mesh-collided dish
+    is a solid bean with the basin filled in.
+
+    The collision wall is 4.0 mm rather than the 0.6 mm gauge and grows outward
+    from the visible inner face -- boxes at the true gauge tunnel. The floor
+    strips overshoot the basin outline, which is safe only because they stay
+    under the wall and are coplanar with the table. The floor plate reaches
+    8 mm below the basin so a thin sheet cannot pass through; it sinks into the
+    table harmlessly, MuJoCo filtering contacts between two static bodies.
+
+    The body is mocap: immovable like the table, and re-posable per reset.
+
+    Adding this dish raises the contact budget -- mjlab's lift-cube default of
+    nconmax=55 overflows at >= 90 with an object resting in the basin.
+  -->
+
+  <default>
+    <default class="collision">
+      <geom contype="1" conaffinity="1" group="5" mass="0" rgba="0 0 0 0" />
+    </default>
+  </default>
+
+  <asset>
+    <texture
+      name="kidney_dish_steel_texture"
+      type="2d"
+      file="../textures/ambientcg/basecolor_256/Metal009_Color.png"
+    />
+    <material
+      name="kidney_dish_steel"
+      texture="kidney_dish_steel_texture"
+      rgba="1 1 1 1"
+      specular="0.3"
+      shininess="0.25"
+      reflectance="0.0"
+      texrepeat="1 1"
+      texuniform="false"
+    />
+    <mesh name="kidney_dish_mesh" file="meshes/kidney_dish.obj" />
+  </asset>
+
+  <worldbody>
+    <body name="dish" mocap="true">
+      <geom
+        name="dish_visual"
+        type="mesh"
+        mesh="kidney_dish_mesh"
+        material="kidney_dish_steel"
+        group="0"
+        contype="0"
+        conaffinity="0"
+        mass="0"
+      />
+
+      <!-- Wall: a closed ring leaning out at the flare angle. -->
+      <geom name="dish_wall_00" class="collision" type="box"
+            pos="-0.07609 -0.013335 0.0171" quat="0.876989 0.092175 -0.049294 -0.469003"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_01" class="collision" type="box"
+            pos="-0.059046 -0.032421 0.0171" quat="0.933961 0.098163 -0.035919 -0.341746"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_02" class="collision" type="box"
+            pos="-0.037382 -0.04604 0.0171" quat="0.972576 0.102222 -0.021838 -0.207772"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_03" class="collision" type="box"
+            pos="-0.012794 -0.053127 0.0171" quat="0.992075 0.104271 -0.007327 -0.069714"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_04" class="collision" type="box"
+            pos="0.012794 -0.053127 0.0171" quat="0.992075 0.104271 0.007327 0.069714"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_05" class="collision" type="box"
+            pos="0.037382 -0.04604 0.0171" quat="0.972576 0.102222 0.021838 0.207772"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_06" class="collision" type="box"
+            pos="0.059046 -0.032421 0.0171" quat="0.933961 0.098163 0.035919 0.341746"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_07" class="collision" type="box"
+            pos="0.07609 -0.013335 0.0171" quat="0.876989 0.092175 0.049294 0.469003"
+            size="0.014535 0.002 0.016869" />
+      <geom name="dish_wall_08" class="collision" type="box"
+            pos="0.084766 0.008748 0.0171" quat="0.745545 0.07836 0.06918 0.658207"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_09" class="collision" type="box"
+            pos="0.080453 0.030048 0.0171" quat="0.497177 0.052255 0.090529 0.86133"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_10" class="collision" type="box"
+            pos="0.064157 0.044427 0.0171" quat="0.197062 0.020712 0.102456 0.974803"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_11" class="collision" type="box"
+            pos="0.042485 0.046054 0.0171" quat="-0.123564 -0.012987 0.103719 0.986816"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_12" class="collision" type="box"
+            pos="0.027794 0.041144 0.0171" quat="-0.246781 -0.025938 0.101259 0.963417"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_13" class="collision" type="box"
+            pos="0.02027 0.037695 0.0171" quat="-0.177182 -0.018623 0.102856 0.978611"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_14" class="collision" type="box"
+            pos="0.012331 0.035355 0.0171" quat="-0.106674 -0.011212 0.103925 0.988784"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_15" class="collision" type="box"
+            pos="0.004139 0.034173 0.0171" quat="-0.035619 -0.003744 0.104461 0.993884"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_16" class="collision" type="box"
+            pos="-0.004139 0.034173 0.0171" quat="0.035619 0.003744 0.104461 0.993884"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_17" class="collision" type="box"
+            pos="-0.012331 0.035355 0.0171" quat="0.106674 0.011212 0.103925 0.988784"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_18" class="collision" type="box"
+            pos="-0.02027 0.037695 0.0171" quat="0.177182 0.018623 0.102856 0.978611"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_19" class="collision" type="box"
+            pos="-0.027794 0.041144 0.0171" quat="0.246781 0.025938 0.101259 0.963417"
+            size="0.004937 0.002 0.016869" />
+      <geom name="dish_wall_20" class="collision" type="box"
+            pos="-0.042485 0.046054 0.0171" quat="0.123564 0.012987 0.103719 0.986816"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_21" class="collision" type="box"
+            pos="-0.064157 0.044427 0.0171" quat="-0.197062 -0.020712 0.102456 0.974803"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_22" class="collision" type="box"
+            pos="-0.080453 0.030048 0.0171" quat="-0.497177 -0.052255 0.090529 0.86133"
+            size="0.01241 0.002 0.016869" />
+      <geom name="dish_wall_23" class="collision" type="box"
+            pos="-0.084766 0.008748 0.0171" quat="0.745545 0.07836 -0.06918 -0.658207"
+            size="0.01241 0.002 0.016869" />
+
+      <!-- Basin floor. -->
+      <geom name="dish_floor_00" class="collision" type="box"
+            pos="-0.080764 0.012983 -0.0034"
+            size="0.0005 0.00773 0.004" />
+      <geom name="dish_floor_01" class="collision" type="box"
+            pos="-0.078775 0.01293 -0.0034"
+            size="0.001488 0.015104 0.004" />
+      <geom name="dish_floor_02" class="collision" type="box"
+            pos="-0.074847 0.011948 -0.0034"
+            size="0.00244 0.022471 0.004" />
+      <geom name="dish_floor_03" class="collision" type="box"
+            pos="-0.069075 0.010084 -0.0034"
+            size="0.003331 0.029381 0.004" />
+      <geom name="dish_floor_04" class="collision" type="box"
+            pos="-0.061603 0.00748 -0.0034"
+            size="0.004141 0.035149 0.004" />
+      <geom name="dish_floor_05" class="collision" type="box"
+            pos="-0.052614 0.004129 -0.0034"
+            size="0.004848 0.03921 0.004" />
+      <geom name="dish_floor_06" class="collision" type="box"
+            pos="-0.042329 0.001008 -0.0034"
+            size="0.005436 0.042177 0.004" />
+      <geom name="dish_floor_07" class="collision" type="box"
+            pos="-0.031003 -0.002879 -0.0034"
+            size="0.005891 0.042807 0.004" />
+      <geom name="dish_floor_08" class="collision" type="box"
+            pos="-0.018912 -0.00746 -0.0034"
+            size="0.0062 0.041004 0.004" />
+      <geom name="dish_floor_09" class="collision" type="box"
+            pos="-0.006356 -0.009878 -0.0034"
+            size="0.006356 0.03953 0.004" />
+      <geom name="dish_floor_10" class="collision" type="box"
+            pos="0.006356 -0.009878 -0.0034"
+            size="0.006356 0.03953 0.004" />
+      <geom name="dish_floor_11" class="collision" type="box"
+            pos="0.018912 -0.00746 -0.0034"
+            size="0.0062 0.041004 0.004" />
+      <geom name="dish_floor_12" class="collision" type="box"
+            pos="0.031003 -0.002879 -0.0034"
+            size="0.005891 0.042807 0.004" />
+      <geom name="dish_floor_13" class="collision" type="box"
+            pos="0.042329 0.001008 -0.0034"
+            size="0.005436 0.042177 0.004" />
+      <geom name="dish_floor_14" class="collision" type="box"
+            pos="0.052614 0.004129 -0.0034"
+            size="0.004848 0.03921 0.004" />
+      <geom name="dish_floor_15" class="collision" type="box"
+            pos="0.061603 0.00748 -0.0034"
+            size="0.004141 0.035149 0.004" />
+      <geom name="dish_floor_16" class="collision" type="box"
+            pos="0.069075 0.010084 -0.0034"
+            size="0.003331 0.029381 0.004" />
+      <geom name="dish_floor_17" class="collision" type="box"
+            pos="0.074847 0.011948 -0.0034"
+            size="0.00244 0.022471 0.004" />
+      <geom name="dish_floor_18" class="collision" type="box"
+            pos="0.078775 0.01293 -0.0034"
+            size="0.001488 0.015104 0.004" />
+      <geom name="dish_floor_19" class="collision" type="box"
+            pos="0.080764 0.012983 -0.0034"
+            size="0.0005 0.00773 0.004" />
+    </body>
+  </worldbody>
+</mujoco>

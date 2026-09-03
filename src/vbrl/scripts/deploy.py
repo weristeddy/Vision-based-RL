@@ -4,6 +4,7 @@
 vbrl-deploy configs/deployment/lift_cube.yaml
 vbrl-deploy configs/deployment/lift_cube.yaml --dry-run --max-steps 250
 vbrl-deploy configs/deployment/lift_cube.yaml --no-keyboard-goal
+vbrl-deploy configs/deployment/lift_cube.yaml --home
 vbrl-deploy configs/deployment/lift_cube.yaml --park
 ```
 
@@ -24,7 +25,7 @@ from collections.abc import Sequence
 
 def main(argv: Sequence[str] | None = None) -> int:
   from vbrl.deployment.config import load_config
-  from vbrl.deployment.loop import park, run
+  from vbrl.deployment.loop import home, park, run
 
   parser = argparse.ArgumentParser(
     prog="vbrl-deploy",
@@ -49,6 +50,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     "range. With no terminal on stdin this turns itself off anyway.",
   )
   parser.add_argument(
+    "--home",
+    action="store_true",
+    help="move to the home pose and hold it, needing no camera; Ctrl-C parks",
+  )
+  parser.add_argument(
     "--park",
     action="store_true",
     help="bring the arm down to rest and release torque, then exit",
@@ -56,6 +62,8 @@ def main(argv: Sequence[str] | None = None) -> int:
   arguments = parser.parse_args(argv)
 
   config = load_config(arguments.manifest)
+  if arguments.home:
+    return home(config)
   if arguments.park:
     return park(config)
   return run(

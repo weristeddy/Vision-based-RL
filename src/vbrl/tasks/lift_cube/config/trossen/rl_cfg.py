@@ -76,7 +76,12 @@ def trossen_lift_cube_ppo_runner_cfg(
       "actor": ("actor", "camera"),
       "critic": ("critic",),
     },
-    save_interval=50,
+    # Effectively final-only, as the retained generation was: RSL-RL saves
+    # unconditionally after the loop, so this yields exactly one checkpoint.
+    # At 50 a 6000-iteration run uploaded 120 of them, which is 11 GB for a
+    # DINOv2 policy and 31 GB for R3M-Afa32. The cost is crash resilience --
+    # a run that dies at iteration 5900 now leaves nothing behind.
+    save_interval=1_000_000,
     experiment_name="trossen_lift_cube_rgb",
     run_name=wandb_task_tag(task_id),
     logger="wandb",

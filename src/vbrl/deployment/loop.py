@@ -20,6 +20,29 @@ SUCCESS_THRESHOLD = 0.05
 GRIPPER_WHEN_EMPTY = 0.004
 
 
+def home(config: Any) -> int:
+  """Move to the policy's home pose and hold it, then park on Ctrl-C.
+
+  Needs no camera, so it works with the RealSense unplugged. It holds rather
+  than returning because the driver's cleanup may idle the joints, and home is
+  a raised pose to fall from.
+  """
+  policy = load_policy(config)
+  arm = TrossenArm(config)
+  print(f"Homing    {config.motion.home_seconds:.1f} s")
+  arm.move_to(policy.metadata.home_pose, seconds=config.motion.home_seconds)
+  print("At home, holding. Ctrl-C to park and release torque.")
+  try:
+    while True:
+      time.sleep(0.1)
+  except KeyboardInterrupt:
+    print()
+  finally:
+    arm.park(seconds=config.motion.home_seconds)
+    arm.close()
+  return 0
+
+
 def park(config: Any) -> int:
   """Bring the arm down to rest and release torque."""
   arm = TrossenArm(config)
@@ -152,4 +175,4 @@ def _image(camera: Any) -> Any:
   return camera.frame() if camera is not None else None
 
 
-__all__ = ["park", "run"]
+__all__ = ["home", "park", "run"]

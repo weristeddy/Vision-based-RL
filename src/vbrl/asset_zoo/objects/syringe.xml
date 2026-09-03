@@ -1,0 +1,144 @@
+<mujoco model="syringe">
+  <!--
+    A 20 ml Luer-slip disposable syringe, plunger inserted, lying on its side.
+    Axis is +x, Luer tip at the far end. Dimensions in millimetres:
+
+      barrel        96.0 long, 20.1 outside diameter
+      Luer tip      11.0 long, 4.5 diameter, on a 12.0 shoulder
+      flange        32.0 across, 12.0 deep, 2.0 thick
+      plunger rod   12.0 exposed behind the flange, 7.0 across
+      thumb rest    19.0 diameter, 3.0 thick
+      overall       122.0, mass 12 g empty
+
+    CONFIRM WITH CALIPERS: catalogue figures scaled against a reference
+    photograph. The 122 mm overall is also the ruler kidney_dish.xml was scaled
+    with, so correcting it means rescaling the dish too.
+
+    The flange and thumb rest are physics, not decoration: a bare 20 mm
+    cylinder rolls indefinitely under the smallest nudge.
+  -->
+
+  <default>
+    <default class="collision">
+      <geom contype="1" conaffinity="1" />
+    </default>
+    <default class="visual">
+      <geom contype="0" conaffinity="0" mass="0" />
+    </default>
+  </default>
+
+  <asset>
+    <!-- 1 ml ticks numbered every 5. Note MuJoCo projects a 2D texture
+         along a primitive's local z rather than wrapping it, and that is
+         this cylinder's own axis, so the scale reads as fine axial streaks
+         rather than graduations. A wrapped scale needs a mesh barrel. -->
+    <texture
+      name="syringe_scale"
+      type="2d"
+      file="../textures/syringe/syringe_barrel.png"
+    />
+
+    <!-- Frosted polypropylene. 0.72 rather than clear: measured in the
+         wrist camera, a more transparent barrel disappears against a light
+         tabletop. Opaque RGB texture, since MuJoCo discards a PNG's alpha. -->
+    <material
+      name="syringe_plastic"
+      rgba="0.88 0.91 0.90 0.72"
+      specular="0.6"
+      shininess="0.7"
+    />
+    <!-- The same plastic, carrying the scale. Separate so the scale is not
+         pasted onto the tip and flange too. -->
+    <material
+      name="syringe_barrel"
+      texture="syringe_scale"
+      rgba="1 1 1 0.72"
+      specular="0.6"
+      shininess="0.7"
+      texrepeat="1 1"
+      texuniform="false"
+    />
+    <material
+      name="syringe_plunger"
+      rgba="0.06 0.60 0.51 1"
+      specular="0.35"
+      shininess="0.4"
+    />
+  </asset>
+
+  <worldbody>
+    <body name="syringe">
+      <freejoint name="syringe_joint" />
+
+      <geom
+        name="syringe_barrel"
+        class="collision"
+        type="cylinder"
+        fromto="-0.048 0 0 0.048 0 0"
+        size="0.01005"
+        mass="0.0075"
+        material="syringe_barrel"
+      />
+
+      <!-- Stand-in for the moulded cone MuJoCo has no primitive for. -->
+      <geom
+        name="syringe_shoulder"
+        class="visual"
+        type="cylinder"
+        fromto="0.048 0 0 0.050 0 0"
+        size="0.006"
+        material="syringe_plastic"
+      />
+
+      <geom
+        name="syringe_tip"
+        class="collision"
+        type="cylinder"
+        fromto="0.048 0 0 0.059 0 0"
+        size="0.00225"
+        mass="0.0003"
+        material="syringe_plastic"
+      />
+
+      <geom
+        name="syringe_flange"
+        class="collision"
+        type="box"
+        pos="-0.049 0 0"
+        size="0.001 0.016 0.006"
+        mass="0.0008"
+        material="syringe_plastic"
+      />
+
+      <geom
+        name="syringe_plunger_rod"
+        class="collision"
+        type="cylinder"
+        fromto="-0.048 0 0 -0.060 0 0"
+        size="0.0035"
+        mass="0.0012"
+        material="syringe_plunger"
+      />
+
+      <geom
+        name="syringe_thumb_rest"
+        class="collision"
+        type="cylinder"
+        fromto="-0.060 0 0 -0.063 0 0"
+        size="0.0095"
+        mass="0.0012"
+        material="syringe_plunger"
+      />
+
+      <!-- Seen through the barrel; nothing can touch it. -->
+      <geom
+        name="syringe_stopper"
+        class="visual"
+        type="cylinder"
+        fromto="-0.044 0 0 -0.038 0 0"
+        size="0.0095"
+        material="syringe_plunger"
+      />
+    </body>
+  </worldbody>
+</mujoco>

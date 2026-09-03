@@ -12,10 +12,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-
-TEXTURES_DIR = Path(__file__).resolve().parent.parent / "asset_zoo" / "textures"
-AMBIENTCG_DIR = TEXTURES_DIR / "ambientcg" / "basecolor_256"
-UNIT_BOX_UV_MESH = TEXTURES_DIR / "unit_box_uv.obj"
+# Imported rather than recomputed: `asset_zoo.textures` owns these paths, and it
+# stays pathlib-only so this module keeps its freedom from MuJoCo.
+from vbrl.asset_zoo.textures import (
+  AMBIENTCG_DIR,
+  TEXTURES_DIR,
+  UNIT_BOX_UV_MESH,
+)
 
 # --- Tabletop geometry, shared by every scene -------------------------------
 TABLE_GEOM_NAME = "table_top"

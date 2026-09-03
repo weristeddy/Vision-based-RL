@@ -198,11 +198,22 @@ bash cluster/submit.sh --profile b200 -- \
 ------------------------------------------------------------------------------
 # R3MResNet50-SpatialSoftmax
 # hyperparameters from retained run j2eio3bw
+#
+# schedule FIXED, not the retained `adaptive`. Run lasmxcki used adaptive and
+# never lifted the cube once in 5999 iterations: measured KL sat at 3.2x its
+# 0.035 target, so the controller divided the LR every minibatch, hit the 1e-5
+# floor at iteration 605 and stayed pinned there for 59% of the run. This row
+# has 3 x 24 = 72 LR adjustments per iteration, the most aggressive of the
+# twelve. Fixing the schedule is also what rescued NatureCnn-SpatialSoftmax
+# (rwso6gcw, 0.368 after the same change diverged at 0.000).
+#
+# desired-kl below is inert under a fixed schedule; kept so the row still
+# reads as the retained recipe plus one deliberate change.
 
 bash cluster/submit.sh --profile b200 -- \
   Mjlab-LiftCube-Sim2Real-R3MResNet50-SpatialSoftmax-TrossenRealistic \
   --agent.algorithm.learning-rate 0.0005008165730647225 \
-  --agent.algorithm.schedule adaptive \
+  --agent.algorithm.schedule fixed \
   --agent.algorithm.desired-kl 0.035 \
   --agent.algorithm.entropy-coef 0.005 \
   --agent.algorithm.num-learning-epochs 3 \
