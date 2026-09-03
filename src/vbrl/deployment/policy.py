@@ -113,6 +113,19 @@ class Policy:
     """How far the end effector is from the goal, as of the last observation."""
     return float(np.linalg.norm(self._goal_position))
 
+  @property
+  def goal(self) -> Any:
+    """The target in the base frame. A copy, so mutating it changes nothing."""
+    return self._goal.copy()
+
+  @goal.setter
+  def goal(self, position: Any) -> None:
+    """Move the target. ``observe`` reads it again on the next step."""
+    position = np.asarray(position, dtype=np.float64)
+    if position.shape != (3,):
+      raise ValueError(f"goal must be 3 values; got {position.shape}.")
+    self._goal = position
+
   def observe(self, *, joint_pos: Any, joint_vel: Any, image: Any) -> dict[str, Any]:
     """One step's observation, in the term order the metadata gives."""
     position = self._mirror_gripper(joint_pos)

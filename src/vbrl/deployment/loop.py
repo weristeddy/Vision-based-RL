@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import time
+from contextlib import ExitStack
 from typing import Any
 
 import numpy as np
 
 from vbrl.deployment.arm import TrossenArm
 from vbrl.deployment.camera import RealSenseCamera
+from vbrl.deployment.keyboard import HELP, ArrowKeys, nudge_goal
 from vbrl.deployment.policy import load_policy
 
 # Joints settle within a few mrad, so this catches a wrong starting pose
@@ -27,8 +29,18 @@ def park(config: Any) -> int:
   return 0
 
 
-def run(config: Any, *, dry_run: bool = False, max_steps: int | None = None) -> int:
-  """Home the arm, then drive it with the policy until stopped."""
+def run(
+  config: Any,
+  *,
+  dry_run: bool = False,
+  max_steps: int | None = None,
+  keyboard_goal: bool = True,
+) -> int:
+  """Home the arm, then drive it with the policy until stopped.
+
+  ``keyboard_goal`` lets the arrow keys move the target while the policy runs,
+  which is how to tell tracking from a memorised trajectory.
+  """
   motion = config.motion
   policy = load_policy(config)
   print(f"Policy    {config.onnx_file} on {policy.provider}")
@@ -41,6 +53,8 @@ def run(config: Any, *, dry_run: bool = False, max_steps: int | None = None) -> 
   camera = RealSenseCamera(config) if policy.metadata.needs_camera else None
   home = policy.metadata.home_pose
   print(f"Goal      {tuple(config.goal)} in the base frame")
+  if keyboard_goal:
+    print(f"Keys      the arrow keys move the goal\n{HELP}")
   print(f"Homing    {motion.home_seconds:.1f} s")
   arm.move_to(home, seconds=motion.home_seconds)
 
@@ -56,9 +70,22 @@ def run(config: Any, *, dry_run: bool = False, max_steps: int | None = None) -> 
   period = 1.0 / config.control_hz
   closest_error, at_goal = float("inf"), False
   step = 0
+  # ExitStack so the terminal is handed back on every path out, including the
+  # abort on an out-of-distribution action.
+  stack = ExitStack()
   started_at = deadline = time.perf_counter()
   try:
+    keys = stack.enter_context(ArrowKeys()) if keyboard_goal else None
+    if keys is not None and not keys.enabled:
+      keys = None
+      print("Keys      off: stdin is not a terminal, so no key can be read")
     while max_steps is None or step < max_steps:
+      if keys is not None and (pressed := keys.pressed()):
+        policy.goal, refused = nudge_goal(policy.goal, pressed)
+        for line in refused:
+          print(f"  {line}")
+        print(f"  goal {np.round(policy.goal, 3).tolist()}")
+
       joint_pos, joint_vel = arm.read()
       action = policy.act(
         joint_pos=joint_pos, joint_vel=joint_vel, image=_image(camera)
@@ -99,6 +126,7 @@ def run(config: Any, *, dry_run: bool = False, max_steps: int | None = None) -> 
   except KeyboardInterrupt:
     print("\nInterrupted.")
   finally:
+    stack.close()
     elapsed = time.perf_counter() - started_at
     print(f"\n{step} steps in {elapsed:.1f} s ({step / max(elapsed, 1e-9):.1f} Hz)")
     if closest_error < float("inf"):
@@ -109,6 +137,8 @@ def run(config: Any, *, dry_run: bool = False, max_steps: int | None = None) -> 
       )
     else:
       print("  the cube was never held, so no goal error was measured")
+    if keys is not None and keys.reclaims:
+      print(f"  the terminal was taken back {keys.reclaims} time(s)")
     if camera is not None:
       camera.close()
     # Park rather than release: idle is not gravity-compensated, and the policy
