@@ -138,11 +138,16 @@ _SLOW_GOAL_FREE_ENV = trossen_realistic_push_t_rgb_env_cfg(**_SLOW_GOAL_FREE)
 _SLOW_GOAL_FREE_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
   **_SLOW_GOAL_FREE, play=True
 )
-_VISUAL_GOAL = {**_UNIFORM, "visual_goal": True}
+# `real_texture`, not `real_texture_red`: the object's flat-colour event comes
+# back, so the T is resampled over the whole RGB cube every reset, and
+# `visual_goal` adds the matching event for the marker. Both are independent and
+# unguarded, so on roughly 0.4% of resets they land within an RGB distance of
+# 0.1 of each other and on 22% within a 1.2:1 luminance ratio -- episodes where
+# the two shapes are hard or impossible to tell apart. That is deliberate: the
+# point is a policy that has to find the outline whatever colour it is.
+_VISUAL_GOAL = {**_UNIFORM, "visual_goal": True, "scene": "real_texture"}
 _VISUAL_GOAL_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GOAL)
-_VISUAL_GOAL_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
-  **_VISUAL_GOAL, play=True
-)
+_VISUAL_GOAL_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GOAL, play=True)
 _VISUAL_GOAL_FREE = {**_VISUAL_GOAL, "free_start": True}
 _VISUAL_GOAL_FREE_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GOAL_FREE)
 _VISUAL_GOAL_FREE_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(

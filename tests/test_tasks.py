@@ -529,14 +529,19 @@ def test_push_t_observations_use_mjlab_translation_and_task_yaw_terms() -> None:
 
 
 def test_push_t_invalid_state_terminations_cover_table_and_velocity() -> None:
+  from vbrl.scenes.presets import TABLE_CENTER, TABLE_HALF_EXTENTS
   from vbrl.tasks.push_t.mdp import invalid_object_state, object_off_table
+
+  # Derived, not hardcoded: this probe used to be a literal 0.80, which stopped
+  # being off the table the moment it was widened to 1 x 1 m.
+  beyond_x = TABLE_CENTER[0] + TABLE_HALF_EXTENTS[0] + 0.05
 
   obj = SimpleNamespace(
     data=SimpleNamespace(
       root_link_pos_w=torch.tensor(
         [
           [0.30, 0.00, 0.013],
-          [0.80, 0.00, 0.013],
+          [beyond_x, 0.00, 0.013],
           [0.30, 0.00, -0.06],
           [0.30, 0.00, 0.30],
           [0.30, 0.00, 0.013],

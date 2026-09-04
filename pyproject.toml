@@ -100,6 +100,11 @@ deploy = [
   # therefore means bumping this in lockstep.
   "trossen-arm==1.10.0",
   "pyrealsense2==2.58.4.10922",
+  # Chessboard detection and solvePnP, for vbrl-calibrate-camera. Headless
+  # because the deployment host has no display, and the GUI build pulls in Qt.
+  # JetPack ships a system cv2, but it is built against numpy 1.x and will not
+  # import beside this environment's numpy 2.
+  "opencv-python-headless>=4.10,<6",
 ]
 
 [dependency-groups]

@@ -27,7 +27,14 @@ TABLE_LIGHT_NAME = "sun"
 FILL_LIGHT_NAME = "sim2sim_fill"
 TABLE_VISUAL_MESH_NAME = "table_top_visual_mesh"
 
-TABLE_HALF_EXTENTS = (0.45, 0.35, 0.02)
+# 1.0 x 1.0 m, matching the plywood the real rig is built on. Was
+# (0.45, 0.35): 300 mm narrower in y, which is why the sim table's side edges
+# cut into the tilted camera's view well before the real table's do.
+#
+# push_t's out-of-bounds termination reads these too, so the boundary moves --
+# outwards only. Object and goal sampling stay far inside it, so this can
+# retire a termination that would have fired but cannot introduce one.
+TABLE_HALF_EXTENTS = (0.5, 0.5, 0.02)
 TABLE_CENTER = (0.3, 0.0, -0.02)
 CAMERA_POSITION_DR_RANGE_M = 0.025
 CAMERA_ROTATION_DR_RANGE_RAD = 0.03

@@ -49,9 +49,11 @@
            elevation showed the near-overhead front pose loses 63% of the
            object's silhouette while the gripper is on it; this loses 21%, and
            projects a larger object than either shipped camera. -->
-      <camera name="external_tilted_cam" pos="0.845 0 0.508"
-              xyaxes="0 1 0 -0.707107 0 0.707107"
-              mode="fixed" fovy="42.5"/>
+      <!-- Real-rig extrinsics calibrated from the 9x6 chessboard with
+           24 mm squares, using wrist-camera FK at the deployed home pose. -->
+      <camera name="external_tilted_cam" pos="0.797637 -0.012298 0.491834"
+              quat="0.663905 0.275736 0.247716 0.649489"
+              mode="fixed" fovy="54.49"/>
       <inertial pos="-0.00014175 -5.228e-05 0.03175177" quat="0.503748 -0.507380 -0.494230 -0.494510" mass="0.45969858" diaginertia="0.000213926 0.000416701 0.000448963"/>
       <geom name="base_visual" class="visual" mesh="base_link"/>
       <geom name="base_collision" class="collision" type="cylinder" size="0.031 0.0325" pos="0 0 0.0325" quat="1 0 0 0"/>

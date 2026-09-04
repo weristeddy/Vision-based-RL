@@ -10,7 +10,12 @@ from vbrl.asset_zoo.robots.definition import CameraView
 from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_realistic
 from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.utils import add_rgb_camera
-from vbrl.tasks.push_t.goal_marker import GOAL_ENTITY_NAME, goal_marker_spec
+from vbrl.tasks.push_t.goal_marker import (
+  GOAL_COLOUR_EVENT,
+  GOAL_ENTITY_NAME,
+  goal_colour_event,
+  goal_marker_spec,
+)
 from vbrl.tasks.push_t.push_t_env_cfg import build_env_cfg
 
 
@@ -65,15 +70,18 @@ def _env_cfg(
     object_name=_OBJECT_NAME,
   )
   if visual_goal:
-    # After `apply_scene`, which owns table and object; the marker is neither and
-    # takes no part in appearance randomization.
+    # After `apply_scene`, which owns the table and the object: the marker is
+    # neither, so its own colour event is added here rather than in the preset.
     cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(spec_fn=goal_marker_spec)
+    cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event()
   cfg.scene.num_envs = 1 if play else 1024
   cfg.seed = 0
   return cfg
 
 
-def trossen_realistic_push_t_state_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
+def trossen_realistic_push_t_state_env_cfg(
+  *, play: bool = False
+) -> ManagerBasedRlEnvCfg:
   return _env_cfg(rgb=False, scene="default", play=play)
 
 

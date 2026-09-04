@@ -1,0 +1,85 @@
+Push-T VisualGoal rerun with colour DR -- the five architectures that learned
+=============================================================================
+
+What changed in the task since the runs below were measured:
+
+  - the T object's colour is resampled uniform over the RGB cube every reset
+    (scene real_texture_red -> real_texture, which restores object_color)
+  - the goal marker's colour is resampled the same way, independently
+  - the marker is still the filled T, unchanged
+
+The two colour draws are unguarded, so on ~0.4% of resets they land within an
+RGB distance of 0.1 and on ~22% within a 1.2:1 luminance ratio. Because the
+marker is filled it shares the object's silhouette exactly, so those episodes
+present two near-identical shapes. That is deliberate.
+
+Everything else is untouched: sampling, reward, threshold, camera.
+
+  object_pose_range      x (0.20, 0.40)  y (-0.20, 0.20)  z 0.013  yaw (-pi, pi)
+  target_position_range  x (0.30, 0.50)  y (-0.20, 0.20)  z 0.012
+  target_yaw_range       (-pi, pi)       min_xy_separation 0.15 m
+  success_threshold      0.90            episode 5.0 s
+
+Hyperparameters. All 24 original VisualGoal runs shared one set, and it already
+matches the registered rl_cfg except for two values, which is why they are the
+only flags here:
+
+  gamma           registered 0.99   the runs used 0.996
+  max_iterations  registered 3000   the runs used 6000
+
+Everything else -- lr 2e-4, schedule fixed, desired_kl 0.05, entropy_coef
+0.001, 8 epochs x 16 minibatches, max_grad_norm 0.5, accumulation 8,
+num_steps_per_env 16, 1024 envs per rank -- comes from the registered config
+and needs no flag.
+
+The baseline these five are being compared against:
+
+  DinoV2ViTS14-Afa6             at_goal 0.709   62e4elj6
+  NatureCnn-SpatialSoftmax      at_goal 0.553   00zl7414
+  DinoV2ViTS14-LocalGrid16      at_goal 0.160   thoas0n9
+  DinoV2ViTS14-SpatialSoftmax   at_goal 0.028   1b5jdi3y
+  R3MResNet50-Linear            at_goal 0.013   iq1clp9p
+
+------------------------------------------------------------------------------
+All five in one go. --arch filters submission only; the other ten VisualGoal
+IDs stay registered so their runs remain loadable.
+
+bash cluster/submit_sweep.sh --variant VisualGoal --profile b200 \
+  --arch "DinoV2ViTS14-Afa6,NatureCnn-SpatialSoftmax,DinoV2ViTS14-LocalGrid16,DinoV2ViTS14-SpatialSoftmax,R3MResNet50-Linear" \
+  -- --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+Add --dry-run first to see the five job lines without submitting.
+
+------------------------------------------------------------------------------
+Or one at a time, if you would rather stagger them.
+
+# DinoV2ViTS14-Afa6   (baseline at_goal 0.709)
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-VisualGoal-DinoV2ViTS14-Afa6-TrossenRealistic \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 6000
+
+# NatureCnn-SpatialSoftmax   (baseline at_goal 0.553)
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-VisualGoal-NatureCnn-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 6000
+
+# DinoV2ViTS14-LocalGrid16   (baseline at_goal 0.160)
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-VisualGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 6000
+
+# DinoV2ViTS14-SpatialSoftmax   (baseline at_goal 0.028)
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-VisualGoal-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 6000
+
+# R3MResNet50-Linear   (baseline at_goal 0.013)
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-VisualGoal-R3MResNet50-Linear-TrossenRealistic \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 6000
+
