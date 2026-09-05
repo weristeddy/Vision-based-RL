@@ -91,10 +91,7 @@ EXPECTED_TASK_IDS = frozenset(
       f"Mjlab-LiftCube-CollisionCam-{arch}-Trossen"
       for arch in COLLISION_CAM_ARCHITECTURES
     ),
-    *(
-      f"Mjlab-LiftCube-RealTexture-{arch}-Trossen"
-      for arch in POOLED_ARCHITECTURES
-    ),
+    *(f"Mjlab-LiftCube-RealTexture-{arch}-Trossen" for arch in POOLED_ARCHITECTURES),
     *(
       f"Mjlab-PushT-{variant}-{arch}-TrossenRealistic"
       for variant in ("RealTexture", "Default")
@@ -106,8 +103,7 @@ EXPECTED_TASK_IDS = frozenset(
       for arch in CURRENT_ARCHITECTURES
     ),
     *(
-      f"Mjlab-PushT-Curriculum-{arch}-TrossenRealistic"
-      for arch in LAYER3_ARCHITECTURES
+      f"Mjlab-PushT-Curriculum-{arch}-TrossenRealistic" for arch in LAYER3_ARCHITECTURES
     ),
     *(
       f"Mjlab-PushT-SlowGoal-{arch}-TrossenRealistic"
@@ -122,8 +118,7 @@ EXPECTED_TASK_IDS = frozenset(
       for arch in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
     ),
     *(
-      f"Mjlab-PushT-Balanced-{arch}-TrossenRealistic"
-      for arch in BALANCED_ARCHITECTURES
+      f"Mjlab-PushT-Balanced-{arch}-TrossenRealistic" for arch in BALANCED_ARCHITECTURES
     ),
     # SlowGoal with the target drawn on the table, matched row for row.
     *(
@@ -146,6 +141,11 @@ EXPECTED_TASK_IDS = frozenset(
       for variant in ("SlowFree", "VisualFree")
       for arch in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
     ),
+    # VisualFree plus GrowStart's separation curriculum.
+    *(
+      f"Mjlab-PushT-VisualGrow-{arch}-TrossenRealistic"
+      for arch in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
+    ),
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
     # The sim2real contract: D405 optics, realistic robot materials, and the
@@ -158,11 +158,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_243_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_258_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 243
+  assert len(EXPECTED_TASK_IDS) == 258
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -210,9 +210,17 @@ def test_the_candidate_camera_reaches_only_the_arms_evaluating_it() -> None:
 
   candidate_arms = ("-FrontCam-", "-Curriculum-")
   tilted_arms = (
-    "-SlowGoal-", "-Uniform-", "-UniformQuad-", "-Balanced-", "-VisualGoal-",
-    "-SlowFree-", "-VisualFree-",
-    "-FreeStart-", "-NearGoal-", "-GrowStart-",
+    "-SlowGoal-",
+    "-Uniform-",
+    "-UniformQuad-",
+    "-Balanced-",
+    "-VisualGoal-",
+    "-SlowFree-",
+    "-VisualFree-",
+    "-VisualGrow-",
+    "-FreeStart-",
+    "-NearGoal-",
+    "-GrowStart-",
   )
   for task_id in vbrl_task_ids():
     sensors = {s.name for s in (load_env_cfg(task_id).scene.sensors or ())}
@@ -248,16 +256,20 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
     command = cfg.commands["push_t_goal"]
     scheduled = "goal_yaw_range" in cfg.curriculum
     arm = any(
-      m in task_id
-      for m in ("-Curriculum-", "-SlowGoal-", "-Balanced-", "-SlowFree-")
+      m in task_id for m in ("-Curriculum-", "-SlowGoal-", "-Balanced-", "-SlowFree-")
     )
     assert scheduled is arm, task_id
     lenient = arm or any(
       m in task_id
       for m in (
-        "-Uniform-", "-UniformQuad-", "-VisualGoal-", "-VisualFree-",
+        "-Uniform-",
+        "-UniformQuad-",
+        "-VisualGoal-",
+        "-VisualFree-",
+        "-VisualGrow-",
         "-FreeStart-",
-        "-NearGoal-", "-GrowStart-",
+        "-NearGoal-",
+        "-GrowStart-",
       )
     )
     assert command.success_threshold == (0.90 if lenient else 0.98), task_id

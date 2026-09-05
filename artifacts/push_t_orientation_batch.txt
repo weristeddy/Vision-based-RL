@@ -1,0 +1,118 @@
+Push-T orientation batch -- six jobs
+====================================
+
+The hypothesis. Every one of the 54 GrowStart / NearGoal / FreeStart / SlowFree
+/ VisualFree runs used `maniskill_dense`, whose orientation factor
+((cos e + 1)/2)^2 has ZERO gradient at e = pi. 23% of a uniform goal yaw sits
+where that gradient is under a tenth of its own peak, and failed episodes have a
+mean goal yaw of 135 degrees against 78 for solved ones. So the start-state
+family was judged with the orientation signal switched off exactly where it
+fails. `linear` (1 - |e|/pi) has full gradient everywhere.
+
+All six carry the drawn goal marker and full colour DR on both the T and the
+marker, which is what VisualFree and VisualGrow give.
+
+Chance is pi/2 = 1.571 rad. Every run in this family sits at 1.0-1.8, so
+"did orientation get learned" reads straight off yaw_error without a baseline.
+
+Shared flags: gamma 0.996 and 6000 iterations reproduce the settings the whole
+Push-T generation was trained with; the registered defaults are 0.99 and 3000.
+
+
+------------------------------------------------------------------------------
+PAIR 1 -- NearGoal geometry, linear orientation reward.  2 jobs.
+
+VisualFree is FreeStart geometry plus the marker and colour DR, and NearGoal is
+FreeStart plus near_goal_probability 0.25, so this is a flag away. A quarter of
+episodes start 6-15 mm out with 5-20 degrees of yaw error -- in the endgame,
+which is where maniskill still has gradient and where w=0.5 punishes rotation.
+
+bash cluster/submit_sweep.sh --variant VisualFree --profile b200 \
+  --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+  -- --orientation-reward linear --near-goal-probability 0.25 \
+     --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+
+------------------------------------------------------------------------------
+PAIR 2 -- GrowStart geometry, linear orientation reward.  2 jobs.
+
+VisualGrow is new: VisualFree plus GrowStart's reverse separation curriculum.
+Every episode starts within 5 cm of its goal and the cap grows to the target
+range's diagonal, ending at VisualFree's distribution exactly.
+
+bash cluster/submit_sweep.sh --variant VisualGrow --profile b200 \
+  --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+  -- --orientation-reward linear \
+     --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+
+------------------------------------------------------------------------------
+PAIR 3 -- resume two transport-competent policies under the new reward.  2 jobs.
+
+Both learned position and never learned orientation:
+
+  NearGoal DinoV2-LocalGrid16  00oti141   pos 0.008  yaw 1.797
+  NearGoal CompactVit-Flatten  mzbuly4v   pos 0.015  yaw 1.470
+
+Weakest of the three pairs, and worth knowing why: both policies ended with
+std 0.166 / 0.224 and negative entropy, i.e. nearly deterministic. Changing the
+reward will not by itself make them explore a rotation they spent 6000
+iterations narrowing away from, so entropy_coef is raised from 0.001 to 0.01 and
+the action std floored. Each run holds only its final checkpoint, so there is no
+earlier, still-exploring policy to start from.
+
+These are the plain NearGoal IDs -- no marker, no colour DR -- because that is
+what the checkpoints were trained against and the weights would not otherwise
+load against the same observation contract.
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-NearGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/00oti141 \
+  --wandb-checkpoint-name model_5999.pt \
+  --agent.resume True \
+  --orientation-reward linear \
+  --orientation-weight 0.8 \
+  --agent.algorithm.entropy-coef 0.01 \
+  --min-action-std 0.3 \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 3000
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-PushT-NearGoal-CompactVit-Flatten-TrossenRealistic \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/mzbuly4v \
+  --wandb-checkpoint-name model_5999.pt \
+  --agent.resume True \
+  --orientation-reward linear \
+  --orientation-weight 0.8 \
+  --agent.algorithm.entropy-coef 0.01 \
+  --min-action-std 0.3 \
+  --agent.algorithm.gamma 0.996 \
+  --agent.max-iterations 3000
+
+
+------------------------------------------------------------------------------
+CHEAP ADDITIONS, if you want to fill the queue overnight
+
+Same two architectures unless noted. Each line is one sweep call.
+
+  quadratic instead of linear, on both geometries  (4 jobs)
+    swap --orientation-reward linear for quadratic in pairs 1 and 2.
+    quadratic is flat at 0 only; linear is flat nowhere. If linear overshoots
+    into ignoring position, quadratic is the middle option.
+
+  higher orientation weight on the same geometries  (4 jobs)
+    add --orientation-weight 0.8 to pairs 1 and 2. High w destroyed Uniform
+    (pos 0.190 at w=0.75) but FreeStart DinoV2-LocalGrid16 at w=0.8 gave
+    yaw 0.353 / overlap 0.631 / pos 0.011, its best result. High w looks safe
+    where transport is easy, which is exactly these geometries.
+
+  goal-yaw resolution curriculum  (2-4 jobs)
+    add --goal-yaw-levels 4 to pair 1 or 2. Quantises the goal yaw to 4 angles
+    and doubles each rung, with the full circle present throughout, so unlike
+    every distance curriculum it never starts the object near-optimal.
+    NOT yet verified to work on these variants -- it may need a registered
+    curriculum term the way --goal-yaw-* does. Dry-run one job first.
+
+  widen to more architectures  (any number)
+    drop --arch to run all 15 of a variant, or extend the list. The 15 are the
+    12 current architectures plus the 3 R3MResNet50L3 rows.

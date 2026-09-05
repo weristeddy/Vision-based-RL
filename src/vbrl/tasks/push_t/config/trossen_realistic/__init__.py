@@ -153,6 +153,19 @@ _VISUAL_GOAL_FREE_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GOAL_FREE
 _VISUAL_GOAL_FREE_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
   **_VISUAL_GOAL_FREE, play=True
 )
+# `VisualGrow` is `VisualFree` plus `GrowStart`'s reverse separation curriculum:
+# every episode starts within 5 cm of its goal and the cap grows to the target
+# range's diagonal, ending at `VisualFree`'s distribution exactly.
+#
+# `GrowStart` was measured with yaw error flat at chance throughout, but every
+# one of those 54 start-state runs used `maniskill_dense`, whose orientation
+# factor has no gradient at 180 degrees -- 23% of a uniform goal yaw sits where
+# it is under a tenth of its own peak. The pairing this variant exists to test
+# is that curriculum against `--orientation-reward linear`, which has gradient
+# everywhere, on a geometry where transport is already easy.
+_VISUAL_GROW = {**_VISUAL_GOAL_FREE, "separation_curriculum": True}
+_VISUAL_GROW_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GROW)
+_VISUAL_GROW_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GROW, play=True)
 
 
 def _uniform(task_id: str, architecture: str) -> None:
@@ -346,7 +359,7 @@ def _visual_goal(task_id: str, architecture: str) -> None:
     trossen_realistic_push_t_rgb_ppo_runner_cfg(
       task_id,
       ARCHITECTURES[architecture],
-      scene="real_texture_red",
+      scene="real_texture",
       camera="external_tilted_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "visual_goal"),
@@ -388,10 +401,30 @@ def _visual_goal_free(task_id: str, architecture: str) -> None:
     trossen_realistic_push_t_rgb_ppo_runner_cfg(
       task_id,
       ARCHITECTURES[architecture],
-      scene="real_texture_red",
+      scene="real_texture",
       camera="external_tilted_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "visual_goal", "free_start"),
+    ),
+  )
+
+
+def _visual_grow(task_id: str, architecture: str) -> None:
+  """Register one drawn-goal policy on GrowStart's separation curriculum.
+
+  Differs from :func:`_visual_goal_free` by that curriculum alone.
+  """
+  register_mjlab_task(
+    task_id,
+    _VISUAL_GROW_ENV,
+    _VISUAL_GROW_PLAY_ENV,
+    trossen_realistic_push_t_rgb_ppo_runner_cfg(
+      task_id,
+      ARCHITECTURES[architecture],
+      scene="real_texture",
+      camera="external_tilted_cam",
+      success_tag="success_90",
+      extra_tags=("no_curriculum", "visual_goal", "free_start", "grow_start"),
     ),
   )
 
@@ -1329,5 +1362,68 @@ _visual_goal_free(
 )
 _visual_goal_free(
   "Mjlab-PushT-VisualFree-R3MResNet50L3-Afa16-TrossenRealistic",
+  "R3MResNet50L3-Afa16",
+)
+
+
+# --- VisualGrow: VisualFree plus GrowStart's separation curriculum -----------
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-NatureCnn-Flatten-TrossenRealistic",
+  "NatureCnn-Flatten",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-NatureCnn-SpatialSoftmax-TrossenRealistic",
+  "NatureCnn-SpatialSoftmax",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-CompactVit-Flatten-TrossenRealistic",
+  "CompactVit-Flatten",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-CompactVit-SpatialSoftmax-TrossenRealistic",
+  "CompactVit-SpatialSoftmax",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-DinoV2ViTS14-Linear-TrossenRealistic",
+  "DinoV2ViTS14-Linear",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
+  "DinoV2ViTS14-LocalGrid16",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
+  "DinoV2ViTS14-SpatialSoftmax",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "DinoV2ViTS14-Afa6",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50-Linear-TrossenRealistic",
+  "R3MResNet50-Linear",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50-LocalGrid7-TrossenRealistic",
+  "R3MResNet50-LocalGrid7",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50-SpatialSoftmax-TrossenRealistic",
+  "R3MResNet50-SpatialSoftmax",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50-Afa32-TrossenRealistic",
+  "R3MResNet50-Afa32",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50L3-LocalGrid14-TrossenRealistic",
+  "R3MResNet50L3-LocalGrid14",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50L3-SpatialSoftmax-TrossenRealistic",
+  "R3MResNet50L3-SpatialSoftmax",
+)
+_visual_grow(
+  "Mjlab-PushT-VisualGrow-R3MResNet50L3-Afa16-TrossenRealistic",
   "R3MResNet50L3-Afa16",
 )
