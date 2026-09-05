@@ -99,28 +99,104 @@ bash cluster/submit.sh --profile b200 -- \
   --agent.max-iterations 3000
 
 ------------------------------------------------------------------------------
-CHEAP ADDITIONS, if you want to fill the queue overnight
+MORE VISUALGOAL VARIATIONS -- all keep the marker and both colour randomizations
 
-Same two architectures unless noted. Each line is one sweep call.
+Everything below runs on VisualGoal, VisualFree or VisualGrow, so the drawn
+target and the object/goal colour DR are always present. All flag-only unless
+marked. Add --dry-run to any sweep line to see the jobs first.
 
-  quadratic instead of linear, on both geometries  (4 jobs)
-    swap --orientation-reward linear for quadratic in pairs 1 and 2.
-    quadratic is flat at 0 only; linear is flat nowhere. If linear overshoots
-    into ignoring position, quadratic is the middle option.
+A. Sparse-bonus curriculum -- the one mechanism that sidesteps the dead zone.
+   2 jobs.
 
-  higher orientation weight on the same geometries  (4 jobs)
-    add --orientation-weight 0.8 to pairs 1 and 2. High w destroyed Uniform
-    (pos 0.190 at w=0.75) but FreeStart DinoV2-LocalGrid16 at w=0.8 gave
-    yaw 0.353 / overlap 0.631 / pos 0.011, its best result. High w looks safe
-    where transport is easy, which is exactly these geometries.
+   The at-goal bonus needs 0.90 overlap, which takes roughly 5 mm AND 5 degrees
+   together, so it never fires early and the policy is trained by the dense term
+   alone -- the term with no gradient at 180 degrees. Starting the threshold
+   loose makes the sparse signal reachable while orientation is still bad, and it
+   tightens to 0.90 over 4000 iterations. This is the only idea here that gives
+   orientation a reward channel that is not the dense factor.
 
-  goal-yaw resolution curriculum  (2-4 jobs)
-    add --goal-yaw-levels 4 to pair 1 or 2. Quantises the goal yaw to 4 angles
-    and doubles each rung, with the full circle present throughout, so unlike
-    every distance curriculum it never starts the object near-optimal.
-    NOT yet verified to work on these variants -- it may need a registered
-    curriculum term the way --goal-yaw-* does. Dry-run one job first.
+   bash cluster/submit_sweep.sh --variant VisualGoal --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --success-threshold-start 0.5 \
+        --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
 
-  widen to more architectures  (any number)
-    drop --arch to run all 15 of a variant, or extend the list. The 15 are the
-    12 current architectures plus the 3 R3MResNet50L3 rows.
+B. Goal-yaw resolution curriculum.  2 jobs.
+
+   Quantises the goal yaw to 4 angles and doubles each rung, 1500 iterations
+   apart, with the full circle present throughout -- so unlike every distance
+   curriculum it never starts the object near-optimal. Verified to need no
+   registered curriculum term: the flag builds one.
+
+   bash cluster/submit_sweep.sh --variant VisualGoal --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --goal-yaw-levels 4 \
+        --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+C. Slow the separation curriculum VisualGrow already has.  2 jobs.
+
+   GrowStart was measured at a 9 cm cap by iteration 400 and 13 cm by 800, with
+   yaw flat at chance the whole way -- it left the easy regime before anything
+   could be learned in it. VisualGrow carries that curriculum, so the
+   --separation-* flags apply to it and can hold the cap at its floor first.
+
+   bash cluster/submit_sweep.sh --variant VisualGrow --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --separation-pin-iterations 2000 --separation-ramp-iterations 2000 \
+        --orientation-reward linear \
+        --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+D. Near-goal starts with a wide yaw spread.  2 jobs.
+
+   NearGoal starts a quarter of episodes 6-15 mm out with 5-20 degrees of yaw
+   error. Widening that spread to 90 degrees puts the policy in states where the
+   position term is already satisfied and only rotation is left, which is the
+   state the dense reward handles worst.
+
+   bash cluster/submit_sweep.sh --variant VisualFree --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --near-goal-probability 0.35 --near-goal-yaw-spread-deg 90 \
+        --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+E. Combine the two most promising.  2 jobs.
+
+   Sparse-bonus curriculum plus the linear factor: a reachable sparse signal and
+   a dense one with gradient everywhere. Two changes at once, so run it only
+   after A and pair 1 have reported, or accept that a win is unattributable.
+
+   bash cluster/submit_sweep.sh --variant VisualGoal --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --success-threshold-start 0.5 --orientation-reward linear \
+        --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+F. Goal-yaw range curriculum on a drawn-goal variant -- VisualSlow.  2 jobs.
+
+   Registered now. VisualGoal with SlowGoal's schedule: the goal yaw is pinned
+   for 3,000 iterations, then widens in eight 22.5-degree rungs, reaching the
+   full circle at iteration 4,750 with 1,250 left to consolidate. The object's
+   initial yaw stays uniform throughout, so rotating pays from the first
+   episode -- the property that made this work where the relative-yaw variant,
+   which started the object already at the goal orientation, did not.
+
+   No drawn-goal variant has ever carried it: they all descend from Uniform,
+   which drops the curriculum. It is also the one intervention measured to move
+   yaw early rather than late, 0.892 rad by iteration 400 where GrowStart was
+   still flat at chance. Of everything in this file this is the strongest single
+   lever on orientation.
+
+   Confirmed identical to SlowGoal's schedule, with the marker and both colour
+   randomizations added:
+     curriculum  goal_yaw_range, vertical_contact_force_weight
+     stages      pinned to step 48000 (3000 it), 8 rungs, full circle at 4750 it
+
+   bash cluster/submit_sweep.sh --variant VisualSlow --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+   And the same with the linear factor, if you want both levers on orientation
+   at once -- the curriculum controls which goals appear, the factor controls
+   whether there is a gradient once they do, so they are close to independent:
+
+   bash cluster/submit_sweep.sh --variant VisualSlow --profile b200 \
+     --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+     -- --orientation-reward linear \
+        --agent.algorithm.gamma 0.996 --agent.max-iterations 6000

@@ -163,6 +163,17 @@ _VISUAL_GOAL_FREE_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
 # it is under a tenth of its own peak. The pairing this variant exists to test
 # is that curriculum against `--orientation-reward linear`, which has gradient
 # everywhere, on a geometry where transport is already easy.
+# `VisualSlow` is `VisualGoal` with `SlowGoal`'s goal-yaw schedule: pinned for
+# 3,000 iterations, then eight 22.5-degree rungs, the full circle at 4,750.
+#
+# No visual variant has carried it, because they all descend from `Uniform`,
+# which drops the curriculum. It is the one intervention measured to move yaw
+# early rather than late -- 0.892 rad by iteration 400, where `GrowStart` was
+# still flat at chance -- and it is the piece the drawn-goal generation has
+# never been given.
+_VISUAL_SLOW = {**_VISUAL_GOAL, "goal_yaw_stages": GOAL_YAW_SLOW_STAGES}
+_VISUAL_SLOW_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW)
+_VISUAL_SLOW_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW, play=True)
 _VISUAL_GROW = {**_VISUAL_GOAL_FREE, "separation_curriculum": True}
 _VISUAL_GROW_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GROW)
 _VISUAL_GROW_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GROW, play=True)
@@ -405,6 +416,26 @@ def _visual_goal_free(task_id: str, architecture: str) -> None:
       camera="external_tilted_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "visual_goal", "free_start"),
+    ),
+  )
+
+
+def _visual_slow(task_id: str, architecture: str) -> None:
+  """Register one drawn-goal policy on SlowGoal's goal-yaw schedule.
+
+  Differs from :func:`_visual_goal` by that schedule alone.
+  """
+  register_mjlab_task(
+    task_id,
+    _VISUAL_SLOW_ENV,
+    _VISUAL_SLOW_PLAY_ENV,
+    trossen_realistic_push_t_rgb_ppo_runner_cfg(
+      task_id,
+      ARCHITECTURES[architecture],
+      scene="real_texture",
+      camera="external_tilted_cam",
+      success_tag="success_90",
+      extra_tags=("goal_yaw_curriculum", "visual_goal"),
     ),
   )
 
@@ -1425,5 +1456,68 @@ _visual_grow(
 )
 _visual_grow(
   "Mjlab-PushT-VisualGrow-R3MResNet50L3-Afa16-TrossenRealistic",
+  "R3MResNet50L3-Afa16",
+)
+
+
+# --- VisualSlow: VisualGoal on SlowGoal's goal-yaw schedule ------------------
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-NatureCnn-Flatten-TrossenRealistic",
+  "NatureCnn-Flatten",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-NatureCnn-SpatialSoftmax-TrossenRealistic",
+  "NatureCnn-SpatialSoftmax",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-CompactVit-Flatten-TrossenRealistic",
+  "CompactVit-Flatten",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-CompactVit-SpatialSoftmax-TrossenRealistic",
+  "CompactVit-SpatialSoftmax",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-DinoV2ViTS14-Linear-TrossenRealistic",
+  "DinoV2ViTS14-Linear",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
+  "DinoV2ViTS14-LocalGrid16",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
+  "DinoV2ViTS14-SpatialSoftmax",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "DinoV2ViTS14-Afa6",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50-Linear-TrossenRealistic",
+  "R3MResNet50-Linear",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50-LocalGrid7-TrossenRealistic",
+  "R3MResNet50-LocalGrid7",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50-SpatialSoftmax-TrossenRealistic",
+  "R3MResNet50-SpatialSoftmax",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50-Afa32-TrossenRealistic",
+  "R3MResNet50-Afa32",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50L3-LocalGrid14-TrossenRealistic",
+  "R3MResNet50L3-LocalGrid14",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50L3-SpatialSoftmax-TrossenRealistic",
+  "R3MResNet50L3-SpatialSoftmax",
+)
+_visual_slow(
+  "Mjlab-PushT-VisualSlow-R3MResNet50L3-Afa16-TrossenRealistic",
   "R3MResNet50L3-Afa16",
 )

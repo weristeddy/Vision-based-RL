@@ -141,9 +141,11 @@ EXPECTED_TASK_IDS = frozenset(
       for variant in ("SlowFree", "VisualFree")
       for arch in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
     ),
-    # VisualFree plus GrowStart's separation curriculum.
+    # VisualFree plus GrowStart's separation curriculum, and VisualGoal plus
+    # SlowGoal's goal-yaw schedule.
     *(
-      f"Mjlab-PushT-VisualGrow-{arch}-TrossenRealistic"
+      f"Mjlab-PushT-{variant}-{arch}-TrossenRealistic"
+      for variant in ("VisualGrow", "VisualSlow")
       for arch in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
     ),
     "Mjlab-PushCube-State-Trossen",
@@ -158,11 +160,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_258_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_273_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 258
+  assert len(EXPECTED_TASK_IDS) == 273
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -218,6 +220,7 @@ def test_the_candidate_camera_reaches_only_the_arms_evaluating_it() -> None:
     "-SlowFree-",
     "-VisualFree-",
     "-VisualGrow-",
+    "-VisualSlow-",
     "-FreeStart-",
     "-NearGoal-",
     "-GrowStart-",
@@ -256,7 +259,14 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
     command = cfg.commands["push_t_goal"]
     scheduled = "goal_yaw_range" in cfg.curriculum
     arm = any(
-      m in task_id for m in ("-Curriculum-", "-SlowGoal-", "-Balanced-", "-SlowFree-")
+      m in task_id
+      for m in (
+        "-Curriculum-",
+        "-SlowGoal-",
+        "-Balanced-",
+        "-SlowFree-",
+        "-VisualSlow-",
+      )
     )
     assert scheduled is arm, task_id
     lenient = arm or any(
@@ -278,7 +288,7 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 62
+  assert seen == 77
   # Starts fixed, ends at the full circle -- strictly harder than ManiSkill3,
   # whose goal pose stays fixed for the whole of training.
   for stages in (GOAL_YAW_CURRICULUM_STAGES, GOAL_YAW_SLOW_STAGES):
