@@ -47,48 +47,56 @@ bash cluster/submit_sweep.sh --variant VisualGrow --profile b200 \
 
 
 ------------------------------------------------------------------------------
-PAIR 3 -- resume two transport-competent policies under the new reward.  2 jobs.
+PAIR 3 -- resume two of the colour-DR batch at a higher orientation weight.  2 jobs.
 
-Both learned position and never learned orientation:
+Same variant, same colour DR, same marker: the weight is the only change. These
+policies already transport, and at 2 cm a correct rotation scores -0.00127 per
+step under the 0.5 split against +0.00331 at 0.8, so they are sitting in exactly
+the regime where w=0.5 punishes what they still have to learn. A fresh run pays
+a transport cost for a high weight; these have already paid it.
 
-  NearGoal DinoV2-LocalGrid16  00oti141   pos 0.008  yaw 1.797
-  NearGoal CompactVit-Flatten  mzbuly4v   pos 0.015  yaw 1.470
+  arch                          run        pos     yaw    std
+  DinoV2ViTS14-LocalGrid16      t7exp2zq  0.017  1.516  0.250
+  NatureCnn-SpatialSoftmax      2mt3uvag  0.036  1.587  0.184
 
-Weakest of the three pairs, and worth knowing why: both policies ended with
-std 0.166 / 0.224 and negative entropy, i.e. nearly deterministic. Changing the
-reward will not by itself make them explore a rotation they spent 6000
-iterations narrowing away from, so entropy_coef is raised from 0.001 to 0.01 and
-the action std floored. Each run holds only its final checkpoint, so there is no
-earlier, still-exploring policy to start from.
+Why these two. LocalGrid16 positions best of the five and is stuck dead at
+chance, with the highest final action std of any of them -- the most room to
+move. NatureCnn-SpatialSoftmax is a different encoder family and the one that
+lost most to the colour DR, 0.553 down to 0.013, so it has the most to recover.
 
-These are the plain NearGoal IDs -- no marker, no colour DR -- because that is
-what the checkpoints were trained against and the weights would not otherwise
-load against the same observation contract.
+The other three, if you want them:
+  DinoV2ViTS14-Afa6             ymadd71h  pos 0.021  yaw 0.265  std 0.150
+  DinoV2ViTS14-SpatialSoftmax   a5s9z4dk  pos 0.033  yaw 1.121  std 0.167
+  R3MResNet50-Linear            hms0emg2  pos 0.131  yaw 1.671  std 0.158
+    Afa6 is already the closest to working (at_goal 0.152), so resuming it
+    tests whether the weight finishes a near-solution rather than unsticks a
+    stuck one -- a different and also useful question.
+    R3M-Linear never learned position at all, so it is the least likely to gain.
 
+entropy_coef is raised from 0.001 because both ended near-deterministic. Drop
+that flag for the weight change alone.
+
+# DinoV2ViTS14-LocalGrid16  (pos 0.017, yaw 1.516, std 0.250)
 bash cluster/submit.sh --profile b200 -- \
-  Mjlab-PushT-NearGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/00oti141 \
+  Mjlab-PushT-VisualGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/t7exp2zq \
   --wandb-checkpoint-name model_5999.pt \
   --agent.resume True \
-  --orientation-reward linear \
   --orientation-weight 0.8 \
   --agent.algorithm.entropy-coef 0.01 \
-  --min-action-std 0.3 \
   --agent.algorithm.gamma 0.996 \
   --agent.max-iterations 3000
 
+# NatureCnn-SpatialSoftmax  (pos 0.036, yaw 1.587, std 0.184)
 bash cluster/submit.sh --profile b200 -- \
-  Mjlab-PushT-NearGoal-CompactVit-Flatten-TrossenRealistic \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/mzbuly4v \
+  Mjlab-PushT-VisualGoal-NatureCnn-SpatialSoftmax-TrossenRealistic \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/2mt3uvag \
   --wandb-checkpoint-name model_5999.pt \
   --agent.resume True \
-  --orientation-reward linear \
   --orientation-weight 0.8 \
   --agent.algorithm.entropy-coef 0.01 \
-  --min-action-std 0.3 \
   --agent.algorithm.gamma 0.996 \
   --agent.max-iterations 3000
-
 
 ------------------------------------------------------------------------------
 CHEAP ADDITIONS, if you want to fill the queue overnight
