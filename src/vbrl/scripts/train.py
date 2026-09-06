@@ -115,13 +115,17 @@ class TrainConfig:
   orientation at any cap. The ratio reaches 4.3x at 1.5 cm and 6.4x at 1 cm,
   which is where "only rotation pays" is actually true.
   """
-  orientation_reward: Literal["maniskill", "quadratic", "linear"] | None = None
+  orientation_reward: (
+    Literal["maniskill", "quadratic", "linear", "keypoint"] | None
+  ) = None
   """Swap the dense reward's orientation factor.
 
   ``maniskill`` is ``((cos e + 1) / 2)**2``, flat at 0 and at pi. ``quadratic``
   is ``1 - (|e| / pi)**2``, flat at 0 only. ``linear`` is ``1 - |e| / pi``, flat
-  nowhere. A flag rather than a variant until one earns a task ID; the registered
-  choice stands when this is unset.
+  nowhere. ``keypoint`` is the odd one out: it replaces the weighted
+  position/orientation split entirely with four tracked points on the T, so
+  ``--orientation-weight`` stops having any effect. A flag rather than a variant
+  until one earns a task ID; the registered choice stands when this is unset.
   """
   min_xy_separation_cm: float | None = None
   """Closest the goal may be drawn to the object, in centimetres.
@@ -213,6 +217,7 @@ def _swap_orientation_reward(cfg: TrainConfig) -> None:
     "maniskill": mdp.maniskill_dense_reward,
     "quadratic": mdp.quadratic_orientation_reward,
     "linear": mdp.linear_orientation_reward,
+    "keypoint": mdp.keypoint_reward,
   }[cfg.orientation_reward]
 
 

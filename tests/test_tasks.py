@@ -427,6 +427,118 @@ def test_push_t_reward_exactly_matches_maniskill_normalized_dense_formula() -> N
   )
 
 
+def _push_t_reward_env(target_pos, target_yaw, object_pos, object_yaw, weight=0.5):
+  """A bare env carrying one T pose and one goal pose per row."""
+  from mjlab.managers.scene_entity_config import SceneEntityCfg
+
+  from vbrl.tasks.push_t.mdp.commands import PushTCommand
+
+  command = object.__new__(PushTCommand)
+  command.cfg = SimpleNamespace(orientation_weight=weight)
+  command.target_pos = torch.as_tensor(target_pos, dtype=torch.float32)
+  command.target_yaw = torch.as_tensor(target_yaw, dtype=torch.float32)
+  command.get_at_goal = lambda: torch.zeros(len(command.target_yaw), dtype=torch.bool)
+  yaw = torch.as_tensor(object_yaw, dtype=torch.float32)
+  half = yaw / 2.0
+  pushed = SimpleNamespace(
+    data=SimpleNamespace(
+      root_link_pos_w=torch.as_tensor(object_pos, dtype=torch.float32),
+      root_link_quat_w=torch.stack(
+        (torch.cos(half), torch.zeros_like(half), torch.zeros_like(half),
+         torch.sin(half)),
+        dim=-1,
+      ),
+    ),
+  )
+  # The tcp term is held constant across rows so it cancels out of comparisons.
+  robot = SimpleNamespace(
+    data=SimpleNamespace(
+      site_pos_w=pushed.data.root_link_pos_w[:, None, :].clone(),
+      root_link_quat_w=torch.zeros(len(half), 4).index_fill_(
+        1, torch.tensor([0]), 1.0
+      ),
+    )
+  )
+  env = SimpleNamespace(
+    command_manager=SimpleNamespace(get_term=lambda name: command),
+    scene={"robot": robot, "object": pushed},
+  )
+  asset_cfg = SceneEntityCfg("robot")
+  asset_cfg.site_ids = [0]
+  return env, asset_cfg
+
+
+def test_push_t_keypoints_are_the_far_ends_of_the_footprint_boxes() -> None:
+  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
+  from vbrl.tasks.push_t.mdp import KEYPOINTS_XY
+
+  bar, stem = FOOTPRINT_PARTS
+  assert KEYPOINTS_XY == (
+    (-bar.half_extents_xy[0], bar.center_xy[1]),
+    (+bar.half_extents_xy[0], bar.center_xy[1]),
+    (stem.center_xy[0], stem.center_xy[1] - stem.half_extents_xy[1]),
+    (stem.center_xy[0], stem.center_xy[1] + stem.half_extents_xy[1]),
+  )
+  # Non-collinear, so the four distances pin SE(2) rather than position alone.
+  assert len({point[0] for point in KEYPOINTS_XY}) > 1
+  assert len({point[1] for point in KEYPOINTS_XY}) > 1
+
+
+def test_push_t_keypoint_reward_falls_monotonically_with_a_pure_rotation() -> None:
+  from vbrl.tasks.push_t.mdp import keypoint_reward
+
+  angles = torch.linspace(0.0, math.pi, 19)
+  rows = len(angles)
+  pose = torch.tensor([[0.20, 0.0, 0.02]]).repeat(rows, 1)
+  env, asset_cfg = _push_t_reward_env(pose, torch.zeros(rows), pose, angles)
+  rewards = keypoint_reward(env, "push_t_goal", "object", asset_cfg)
+  assert (rewards[1:] < rewards[:-1]).all()
+
+
+def test_push_t_keypoint_reward_keeps_gradient_at_pi_once_the_t_is_off_position(
+) -> None:
+  """The whole point, and the limit of it. Every keypoint distance under a pure
+  rotation is ``2 r sin(e / 2)``, stationary at pi, so an exactly placed T has
+  the same dead zone ManiSkill's factor has. Off-position across the T's mirror
+  axis the stationarity is gone -- and that is where episodes actually live."""
+  from vbrl.tasks.push_t.mdp import keypoint_reward
+
+  angles = torch.linspace(math.pi - math.radians(1.0), math.pi, 2)
+  goal = torch.tensor([[0.20, 0.0, 0.02], [0.20, 0.0, 0.02]])
+
+  def slope(offset_xy):
+    pose = goal.clone()
+    pose[:, 0] += offset_xy[0]
+    pose[:, 1] += offset_xy[1]
+    env, asset_cfg = _push_t_reward_env(goal, torch.zeros(2), pose, angles)
+    scores = keypoint_reward(env, "push_t_goal", "object", asset_cfg)
+    return (scores[1] - scores[0]).abs().item()
+
+  placed = slope((0.0, 0.0))
+  across = slope((0.10, 0.0))
+  assert across > 100.0 * placed, "off the mirror axis the dead zone must go"
+
+  # Along the mirror axis the two crossbar terms cancel and it stays stationary,
+  # which is why this is a weaker claim than "flat nowhere".
+  assert slope((0.0, 0.10)) < 2.0 * placed
+
+
+def test_push_t_keypoint_reward_ignores_the_orientation_weight() -> None:
+  """There is no position/orientation split left to weigh, so the knob that
+  every other shape shares must be inert here rather than silently half-applied."""
+  from vbrl.tasks.push_t.mdp import keypoint_reward
+
+  pose = torch.tensor([[0.20, 0.0, 0.02]])
+  goal = torch.tensor([[0.26, 0.0, 0.02]])
+  scores = []
+  for weight in (0.0, 0.5, 1.0):
+    env, asset_cfg = _push_t_reward_env(
+      goal, torch.tensor([0.7]), pose, torch.tensor([2.0]), weight=weight
+    )
+    scores.append(keypoint_reward(env, "push_t_goal", "object", asset_cfg))
+  assert torch.allclose(scores[0], scores[1]) and torch.allclose(scores[1], scores[2])
+
+
 def test_push_t_vertical_contact_force_penalizes_forceful_top_contact() -> None:
   from vbrl.tasks.push_t.mdp import vertical_contact_force
 

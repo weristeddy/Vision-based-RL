@@ -12,7 +12,7 @@ from mjlab.sensor import ContactSensor
 from mjlab.tasks.manipulation import mdp as manipulation_mdp
 from mjlab.utils.lab_api.math import wrap_to_pi
 
-from ..geometry import yaw_from_quat
+from ..geometry import FOOTPRINT_PARTS, yaw_from_quat
 from .commands import push_t_command
 
 
@@ -23,6 +23,18 @@ if TYPE_CHECKING:
 _ROBOT = SceneEntityCfg("robot")
 _DISTANCE_SCALE = 5.0
 _MAX_REWARD = 3.0
+# The far end of each box's long axis, in the object's own frame: the two ends of
+# the crossbar and the two of the stem. Derived from the same footprint the
+# overlap rasteriser scores, so the reward cannot drift from the shape.
+KEYPOINTS_XY = tuple(
+  (
+    part.center_xy[0] + sign * part.half_extents_xy[0] * (axis == 0),
+    part.center_xy[1] + sign * part.half_extents_xy[1] * (axis == 1),
+  )
+  for part in FOOTPRINT_PARTS
+  for axis in ((0,) if part.half_extents_xy[0] >= part.half_extents_xy[1] else (1,))
+  for sign in (-1.0, +1.0)
+)
 
 
 def maniskill_dense_reward(
@@ -200,7 +212,115 @@ def linear_orientation_reward(
   return reward / _MAX_REWARD
 
 
+def keypoint_reward(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  object_name: str,
+  asset_cfg: SceneEntityCfg = _ROBOT,
+) -> torch.Tensor:
+  """One SE(2) term over four points on the T, replacing the weighted split.
+
+  The other three shapes score position and orientation separately and trade
+  them off with ``orientation_weight``. That split is the failure every arm in
+  the orientation batch ran into: the two factors have independent gradients, so
+  there is a distance at which a push that correctly reduces yaw error still
+  loses reward -- measured at -0.00101 at 15 cm and 162 degrees under ManiSkill's
+  shape -- and no value of the weight removes the competition, it only moves the
+  crossover.
+
+  Tracking points removes the split rather than retuning it. Each keypoint is
+  carried to where the goal pose would put it and the reward is the mean of
+  ``(1 - tanh(5 d))**2`` over the four distances, the same shape the position
+  factor already uses, applied four times. A translation moves all four points
+  and a rotation moves them in opposing directions, so both are the same
+  currency and there is nothing left to weigh: the relative worth of position
+  and orientation is fixed by the T's own geometry -- 16.5 cm of stem-tip travel
+  for a half turn -- instead of by a hyperparameter. ``orientation_weight`` is
+  therefore unused, and ``--orientation-weight`` has no effect when this shape
+  is selected.
+
+  Provenance, since it matters for how much to trust it: the *quantity* is
+  established and the *shaping* is chosen here. Averaging ||R1 p + t1 - (R2 p +
+  t2)|| over points p of the model is the ADD metric of Hinterstoisser et al.
+  (ACCV 2012), the standard 6-DoF pose error in the LineMOD/BOP line of work,
+  and specifying a manipulation target through keypoints rather than a pose is
+  kPAM (Manuelli et al., ISRR 2019). Using that quantity as a dense RL reward is
+  common in manipulation, but this is not a transcription of any one paper's
+  reward: the four points, the tanh shaping and the scale are picked here to
+  match the position factor this replaces.
+
+  **It is not flat nowhere, and the reason is geometric rather than a choice of
+  shape.** Under a pure rotation about the object's centre every keypoint
+  distance is ``2 r sin(e/2)``, which is stationary at ``e = pi``, and the same
+  holds whenever the position offset lies along the T's mirror axis, where the
+  two crossbar terms cancel. What differs from the decomposed shapes is the
+  order. Measured as a fraction of each shape's own peak gradient, with the T on
+  the goal:
+
+  ==========  ==================  ==================
+  yaw error   keypoint, on goal   maniskill
+  ==========  ==================  ==================
+  170 deg     2.4e-02             2.0e-03
+  175 deg     1.2e-02             2.5e-04
+  179 deg     2.3e-03             1.9e-06
+  ==========  ==================  ==================
+
+  ManiSkill's ``cos(e/2)**4`` vanishes to third order and is three decades
+  flatter by 179 degrees; this vanishes to first order, and only in that one
+  alignment -- 10 cm off across the mirror axis the ratio at 179 degrees is
+  0.64, no dead zone at all. An episode is off-position nearly all of the time,
+  so the flat spot is reached only once the T is already placed.
+
+  The cost of merging the terms, stated plainly: off-position the reward is no
+  longer monotone in yaw alone. At a 10 cm offset it turns at 43 and 133
+  degrees, so there are configurations where rotating *away* from the goal
+  orientation pays. That is the correct behaviour for a joint SE(2) error --
+  the T has to travel as well as turn, and the metric prices both -- but it is
+  a real difference from the decomposed shapes, which are monotone in yaw
+  everywhere by construction.
+
+  The tcp term, the normalisation and the sparse at-goal bonus are untouched.
+  """
+  command = push_t_command(env, command_name)
+  obj: Entity = env.scene[object_name]
+  position = obj.data.root_link_pos_w
+  keypoints = torch.tensor(
+    KEYPOINTS_XY, dtype=position.dtype, device=position.device
+  )  # (K, 2)
+  object_yaw = yaw_from_quat(obj.data.root_link_quat_w)
+  placed = _place(keypoints, object_yaw, position[:, :2])
+  target = _place(keypoints, command.target_yaw, command.target_pos[:, :2])
+  distances = torch.linalg.vector_norm(placed - target, dim=-1)  # (N, K)
+  tcp_distance = torch.linalg.vector_norm(
+    manipulation_mdp.ee_to_object_distance(env, object_name, asset_cfg),
+    dim=-1,
+  )
+  reward = (1.0 - torch.tanh(_DISTANCE_SCALE * distances)).square().mean(
+    dim=-1
+  ) + torch.sqrt(
+    (1.0 - torch.tanh(_DISTANCE_SCALE * tcp_distance)).clamp_min(0.0)
+  ) / 20.0
+  reward = torch.where(
+    command.get_at_goal(), torch.full_like(reward, _MAX_REWARD), reward
+  )
+  return reward / _MAX_REWARD
+
+
+def _place(
+  keypoints: torch.Tensor, yaw: torch.Tensor, position: torch.Tensor
+) -> torch.Tensor:
+  """Carry ``(K, 2)`` body-frame points to world under ``(N,)`` yaw, ``(N, 2)``."""
+  cos, sin = torch.cos(yaw)[:, None], torch.sin(yaw)[:, None]
+  x, y = keypoints[:, 0][None], keypoints[:, 1][None]
+  return torch.stack(
+    (cos * x - sin * y + position[:, :1], sin * x + cos * y + position[:, 1:2]),
+    dim=-1,
+  )
+
+
 __all__ = [
+  "KEYPOINTS_XY",
+  "keypoint_reward",
   "linear_orientation_reward",
   "maniskill_dense_reward",
   "quadratic_orientation_reward",
