@@ -143,6 +143,19 @@ class TrainConfig:
   changed an outcome: shared versus offset x windows moves the mean separation
   by 0.7 cm, this moves it from 22 cm to 11 cm.
   """
+  near_goal_separation_cm: tuple[float, float] | None = None
+  """Separation band for near-goal episodes, in centimetres.
+
+  The registered ``0.6`` to ``1.5`` was sized around the sparse bonus: at 6 mm
+  and perfect alignment overlap is 0.891, one correction short of the 0.90
+  threshold. Widening it trades that for position headroom in the *dense* term,
+  which is what matters when every episode is near-goal -- the position factor
+  sits at 0.941 at 6 mm with only 0.059 left to gain, against 0.903 at 1 cm and
+  0.811 at 2 cm. Note what the wider band costs: overlap at perfect alignment is
+  0.810 at 1 cm and 0.620 at 2 cm, so the bonus needs real transport rather than
+  one nudge, and at 2 cm overlap is flat in yaw below 20 degrees (0.620 at 0
+  degrees, 0.633 at 10) so the bonus carries no orientation signal there.
+  """
   near_goal_probability: float | None = None
   """Fraction of episodes started a few millimetres from the goal."""
   near_goal_yaw_spread_deg: float | None = None
@@ -194,7 +207,21 @@ class TrainConfig:
   and therefore finishes inside it.
   """
   orientation_weight_start: float | None = None
-  """Share of the shaped reward scoring orientation at the start of training."""
+  """Share of the shaped reward scoring orientation at the start of training.
+
+  ``0.0`` is a position-only reward, which with
+  ``--orientation-weight-pin-iterations`` and a raised ``--orientation-weight``
+  gives the two-stage schedule: transport first, rotation added afterwards.
+  Prefer that over resuming a finished run with a changed weight. Measured on
+  the two w=0.8 resumes: the reward changed discontinuously under a critic
+  trained on the old one, and the action std ran from 0.250 to the 1.0 ceiling
+  by iteration 7000 and stayed pinned, entropy saturating at 8.51 -- overlap
+  fell 0.441 to 0.201 while yaw error never moved off chance. The policy was
+  re-randomised rather than finetuned. A ramp inside one run has no such
+  discontinuity for the critic to lag behind.
+  """
+  orientation_weight_pin_iterations: int = 0
+  """Iterations to hold ``--orientation-weight-start`` before the ramp begins."""
   orientation_weight_iterations: int = 4000
   """Iterations over which it returns to the registered 0.5 split."""
   gpu_ids: list[int] | Literal["all"] | None = field(default_factory=lambda: [0])
@@ -275,6 +302,7 @@ def _install_goal_curricula(cfg: TrainConfig) -> None:
         "end": command.orientation_weight,
         "iterations": cfg.orientation_weight_iterations,
         "steps_per_iteration": per_iteration,
+        "pin_iterations": cfg.orientation_weight_pin_iterations,
       },
     )
 
@@ -290,6 +318,7 @@ def _retune_near_goal_mixture(cfg: TrainConfig) -> None:
 
   requested = (
     cfg.near_goal_probability,
+    cfg.near_goal_separation_cm,
     cfg.near_goal_yaw_spread_deg,
     cfg.min_xy_separation_cm,
     cfg.orientation_weight,
@@ -312,6 +341,14 @@ def _retune_near_goal_mixture(cfg: TrainConfig) -> None:
         f"{cfg.min_xy_separation_cm}."
       )
     command.min_xy_separation = cfg.min_xy_separation_cm / 100.0
+  if cfg.near_goal_separation_cm is not None:
+    low, high = cfg.near_goal_separation_cm
+    if not 0.0 < low <= high <= 40.0:
+      raise ValueError(
+        f"--near-goal-separation-cm needs 0 < low <= high <= 40; got "
+        f"{cfg.near_goal_separation_cm}."
+      )
+    command.near_goal_separation_range = (low / 100.0, high / 100.0)
   if cfg.near_goal_probability is not None:
     if not 0.0 <= cfg.near_goal_probability <= 1.0:
       raise ValueError(

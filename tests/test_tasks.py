@@ -365,6 +365,90 @@ def test_separation_curriculum_follows_the_rollout_length_and_honours_a_pin() ->
   )
 
 
+def test_near_goal_separation_band_is_settable_and_validated() -> None:
+  """The band is in centimetres on the flag and metres on the command config, and
+  the low bound must stay above zero -- an episode starting exactly on the goal
+  is the configuration the relative-yaw variant was removed for."""
+  import pytest as _pytest
+
+  from vbrl.scripts.train import TrainConfig, _retune_near_goal_mixture
+
+  def tune(band, probability=1.0):
+    cfg = TrainConfig.from_task(
+      "Mjlab-PushT-VisualFree-CompactVit-Flatten-TrossenRealistic"
+    )
+    object.__setattr__(cfg, "near_goal_separation_cm", band)
+    object.__setattr__(cfg, "near_goal_probability", probability)
+    _retune_near_goal_mixture(cfg)
+    return cfg.env.commands["push_t_goal"]
+
+  command = tune((1.0, 2.0))
+  assert command.near_goal_separation_range == pytest.approx((0.01, 0.02))
+  assert command.near_goal_probability == 1.0
+
+  # A degenerate band is allowed -- a fixed separation is a legitimate ablation.
+  assert tune((1.5, 1.5)).near_goal_separation_range == pytest.approx((0.015, 0.015))
+
+  for bad in ((0.0, 2.0), (-1.0, 2.0), (2.0, 1.0), (1.0, 41.0)):
+    with _pytest.raises(ValueError, match="near-goal-separation-cm"):
+      tune(bad)
+
+
+def test_orientation_weight_curriculum_holds_at_zero_before_it_ramps() -> None:
+  """The two-stage schedule: position-only, then rotation added.
+
+  Without a pin a ramp from 0 has no iteration where the weight is actually 0 --
+  it leaves the start value immediately -- so "position reward only first" would
+  not be a phase at all. The alternative that was tried, resuming a finished run
+  with a raised weight, re-randomised the policy: the action std ran to its 1.0
+  ceiling by iteration 7000 and overlap fell from 0.441 to 0.201.
+  """
+  import torch
+
+  from mjlab.managers import CurriculumTermCfg
+
+  from vbrl.tasks.push_t.mdp.curriculums import orientation_weight_curriculum
+
+  def weight_at(iteration: int, *, pin: int, ramp: int, steps: int = 16) -> float:
+    params = {
+      "command_name": "push_t_goal",
+      "start": 0.0,
+      "end": 0.8,
+      "iterations": ramp,
+      "steps_per_iteration": steps,
+      "pin_iterations": pin,
+    }
+    term = CurriculumTermCfg(func=orientation_weight_curriculum, params=params)
+    command_cfg = SimpleNamespace(orientation_weight=0.5)
+    env = SimpleNamespace(
+      device="cpu",
+      common_step_counter=iteration * steps,
+      command_manager=SimpleNamespace(
+        get_term=lambda name: SimpleNamespace(cfg=command_cfg)
+      ),
+    )
+    result = orientation_weight_curriculum(term, env)(
+      env, torch.tensor([0]), **dict(params)
+    )
+    # The term must write the command config, not only report a number.
+    assert command_cfg.orientation_weight == pytest.approx(
+      float(result["orientation_weight"])
+    )
+    return float(result["orientation_weight"])
+
+  # Held at exactly 0 for the whole pin: a genuine position-only stage.
+  for iteration in (0, 1, 1000, 1999, 2000):
+    assert weight_at(iteration, pin=2000, ramp=2000) == 0.0
+
+  assert weight_at(3000, pin=2000, ramp=2000) == pytest.approx(0.4)
+  assert weight_at(4000, pin=2000, ramp=2000) == pytest.approx(0.8)
+  assert weight_at(5999, pin=2000, ramp=2000) == pytest.approx(0.8)
+
+  # No pin keeps the old behaviour: the ramp starts on the first iteration.
+  assert weight_at(0, pin=0, ramp=4000) == 0.0
+  assert weight_at(2000, pin=0, ramp=4000) == pytest.approx(0.4)
+
+
 # --- Push-T rewards, observations, terminations ------------------------------
 
 

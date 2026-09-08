@@ -1,0 +1,171 @@
+PUSH-T -- SECOND BATCH: SEED REPLICATION, KEYPOINT REWARD, KL BUDGET
+====================================================================================================
+8 runs submitted 2026-09-06, 4 arms x 2 architectures. Chance yaw error = pi/2 = 1.571.
+Arms read from env_cfg.rewards.maniskill_dense.func and train_cfg, never from the run name.
+
+variant     arm                        architecture              st       it    yaw    ovl     at    pos  upd
+----------------------------------------------------------------------------------------------------
+VisualSlow  LIN yawRANGE seed100       DinoV2ViTS14-LocalGrid16   fin   5994  0.642  0.568  0.080  0.021   29
+VisualSlow  LIN yawRANGE seed100       CompactVit-Flatten         fin   5994  1.523  0.407  0.002  0.029   33
+VisualSlow  KEYPT yawRANGE             DinoV2ViTS14-LocalGrid16   fin   5994  0.761  0.499  0.028  0.027   30
+VisualSlow  KEYPT yawRANGE             CompactVit-Flatten         fin   5994  1.548  0.391  0.000  0.033   29
+VisualSlow  LIN yawRANGE kl0.15        DinoV2ViTS14-LocalGrid16   fin   5994  0.857  0.434  0.008  0.032   39
+VisualSlow  LIN yawRANGE kl0.15        CompactVit-Flatten         run   5434  1.569  0.233  0.001  0.073   77
+VisualGoal  KEYPT (no curriculum)      DinoV2ViTS14-LocalGrid16   fin   5994  1.378  0.417  0.003  0.029   27
+VisualGoal  KEYPT (no curriculum)      CompactVit-Flatten         fin   5994  1.547  0.395  0.001  0.032   32
+
+
+1. THE SEED REPLICATES
+----------------------------------------------------------------------------------------------------
+Mean over the last 500 iterations, DinoV2ViTS14-LocalGrid16, all on VisualSlow:
+
+    arm                      yaw error         episode_success
+    LIN  seed 0            0.582 +- 0.110            0.235
+    LIN  seed 100          0.674 +- 0.111            0.213
+    KEYPT seed 0           0.788 +- 0.129            0.098
+    LIN kl0.15 seed 0      0.882 +- 0.121            0.043
+    maniskill seed 0       1.082 +- 0.136            0.007
+
+The two LIN seeds differ by 0.092, less than one within-run standard deviation.
+This is a real effect, not a lucky seed. 21-24% episode success at the 0.90
+overlap threshold against a full-circle goal, versus 0.7% for the same
+curriculum with ManiSkill's own reward -- a 30x gap from the orientation factor
+alone.
+
+Also resolved: the caveat I attached to the first read. The seed-0 run was at
+0.600 mid-curriculum and I warned it could degrade once the circle opened at
+iteration 4750. It did degrade, from 0.263 at iteration 3000, but it stabilised
+rather than collapsing:
+
+    iteration          3000   4000   4500   4750   5000   5500   5990
+    LIN seed 0         0.263  0.444  0.562  0.624  0.698  0.766  0.622
+    LIN seed 100       0.266  0.523  0.486  0.572  0.746  0.844  0.631
+    maniskill seed 0   0.591  0.817  0.909  0.885  0.989  1.117  1.295
+
+That last row is the finding. With ManiSkill's factor the curriculum's gains are
+destroyed as the range opens -- 0.591 to 1.295, back to chance -- which is
+exactly the collapse recorded for the coarse 45-degree schedule, now reproduced
+at 22.5 degrees. The linear factor is what makes the gains survive the full
+circle. Curriculum and reward shape are not independent levers here: the
+curriculum gets the policy to a good place and the factor is what lets it stay.
+
+
+2. THE KEYPOINT REWARD DOES NOT HELP -- my idea, and it did not work
+----------------------------------------------------------------------------------------------------
+Both arms answer cleanly.
+
+With the curriculum, keypoint is worse than linear: 0.788 vs 0.582 yaw, 9.8% vs
+23.5% success. The gap is about 2 within-run standard deviations, so this is not
+noise.
+
+Without the curriculum it does nothing at all. VisualGoal KEYPT scores 1.378 on
+DinoV2, and the three existing VisualGoal baselines on that architecture span
+1.349 to 1.589. It is inside the baseline band.
+
+So the diagnosis that motivated it -- that the position/orientation split is
+what blocks orientation learning -- is not supported. Removing the split did not
+help; sharpening the orientation factor's gradient (linear) did. The competing
+gradients were apparently not the binding constraint.
+
+Two candidate reasons, neither tested: the non-monotonicity in yaw that I
+measured before submitting (sign changes at 43 and 133 degrees at a 10 cm
+offset) may cost more than the removed dead zone is worth; and merging the terms
+fixes the position/orientation ratio at whatever the T's geometry implies, which
+removes a knob rather than setting it well.
+
+Keeping the code -- it is tested, cheap, and the negative result is worth having
+recorded -- but I would not spend more GPUs on it without a different kernel.
+
+
+3. THE UPDATE BUDGET WAS NOT THE BOTTLENECK -- also my idea, also wrong
+----------------------------------------------------------------------------------------------------
+The mechanism worked exactly as predicted: raising desired_kl from 0.05 to 0.15
+raised realised minibatch updates per iteration from 29 to 39 on DinoV2 and from
+33 to 77 on CompactVit. So the early stop really was the thing limiting updates.
+
+The outcome went the wrong way. DinoV2 fell from 0.582 to 0.882 yaw and from
+23.5% to 4.3% success. CompactVit, which got the largest budget increase (77 of
+128, more than double), is the worst run in the batch on overlap (0.233) and
+position (0.073) -- and it is still running at 5434, so treat that one as
+provisional.
+
+Reading it back: 8 epochs at desired_kl 0.05 realising ~2 epochs is not a
+misconfiguration that was costing performance. It is a working trust region, and
+the config's stated 8 epochs is better understood as a ceiling the early stop is
+supposed to cut. I was wrong to call it mis-set.
+
+
+4. STILL ONE ARCHITECTURE
+----------------------------------------------------------------------------------------------------
+CompactVit-Flatten fails in all four new arms at 1.52-1.57, and failed at 1.514
+on the original seed. Five arms, two seeds, no movement. The architecture, not
+the seed and not the reward.
+
+What has never been tried is this arm on the encoders already known to be strong
+on this task -- DinoV2-Afa6 and the SpatialSoftmax rows. The reason CompactVit
+and LocalGrid16 were picked was that success on a weak pair implies success on a
+good one; half that bet has now paid. The obvious next 4 jobs:
+
+  bash cluster/submit_sweep.sh --variant VisualSlow --profile b200 \
+    --arch "DinoV2ViTS14-Afa6,DinoV2ViTS14-SpatialSoftmax" \
+    -- --orientation-reward linear \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+  bash cluster/submit_sweep.sh --variant VisualSlow --profile b200 \
+    --arch "DinoV2ViTS14-Afa6,DinoV2ViTS14-SpatialSoftmax" \
+    -- --orientation-reward linear --agent.seed 100 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+Beyond that, the two ideas with support behind them and no run yet are the
+success-gated separation curriculum (arXiv:2607.10892 gates on 50 successes per
+stage; ours is a wall clock) and a goal-relative observation/action frame, which
+is the larger of the two gaps to that paper and not a flag-sized change.
+
+
+APPENDIX: HAS CompactVit-Flatten EVER LEARNED ORIENTATION?
+====================================================================================================
+Swept every Push-T run in the project carrying the CompactVit-Flatten tag -- 30
+runs across SlowGoal, Curriculum, Uniform, UniformQuad, FreeStart, SlowFree,
+NearGoal, GrowStart, FrontCam, VisualGoal, VisualFree, VisualGrow, VisualSlow,
+and all four reward shapes.
+
+Answer: no. Not fully, and not partially in any useful sense.
+
+Measured as the best 200-iteration rolling mean of yaw error at any point in any
+run -- single logged points are noise and give a misleadingly good number, so
+they are not used here -- the best CompactVit-Flatten has ever achieved is:
+
+    1.199 rad = 68.7 deg     PushT-SlowGoal, maniskill reward, iteration 2725
+                             episode_success 0.004   overlap 0.334
+
+Chance is pi/2 = 1.571 rad = 90 deg. So the best moment in the architecture's
+entire history is 21 degrees below chance with a 0.4% success rate. Every one of
+the 30 runs sits at 1.19 or above; most sit at 1.45-1.52.
+
+On the specific question of the pinned phase: correct, it does not learn it
+there either. That 1.199 IS the pinned-goal phase -- SlowGoal holds the goal yaw
+fixed for the first 3,000 iterations and the best rolling mean inside the pin,
+across every SlowGoal and VisualSlow run, is that same 1.199. The current arm's
+CompactVit runs reach only 1.369 and 1.378 during the pin before returning to
+1.51-1.54.
+
+The same run's trajectory shows what it is doing instead:
+
+    at its best-yaw moment (it 2725)   yaw 1.230   success 0.004   overlap 0.334
+    final 500 iterations               yaw 1.362   success 0.046   overlap 0.448
+
+Success and overlap improve while yaw error gets worse. It is learning to
+transport the T and ignoring the goal orientation -- the failure mode this whole
+campaign is about, except that for this encoder no intervention has moved it at
+all.
+
+One correction to the sweep: the single best row initially looked like a 1.191,
+but that run is tagged CompactVit-**FlattenRelu**, a different adapter, and it
+collapsed to overlap 0.000 by the end. It is not this architecture.
+
+Implication. Five arms, two seeds and thirteen variants have now failed on this
+encoder while the same interventions work on DinoV2-LocalGrid16. It is not the
+reward, the curriculum, the seed or the goal visibility. A 128-dim scratch ViT
+with a plain flatten head is not extracting object yaw from these images at all,
+and there is no reason to keep it as the second architecture in this comparison.
+Replace it with DinoV2-Afa6 and DinoV2-SpatialSoftmax, per the commands above.

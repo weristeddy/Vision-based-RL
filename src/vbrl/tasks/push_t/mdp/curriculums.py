@@ -183,7 +183,13 @@ class goal_yaw_resolution_curriculum:
 
 
 class _LinearToRegistered:
-  """Ramp one command-config float from a starting value to its registered one."""
+  """Ramp one command-config float from a starting value to its registered one.
+
+  ``pin_iterations`` holds the start value before the ramp begins, the same way
+  :class:`separation_curriculum` does. Without it a ramp from 0 has no phase
+  where the field is actually 0 -- it leaves the start value on the first
+  iteration -- so a two-stage schedule needs the hold to be the stage.
+  """
 
   _field: str
 
@@ -191,9 +197,12 @@ class _LinearToRegistered:
     self._command_cfg = env.command_manager.get_term(cfg.params["command_name"]).cfg
     self._start = float(cfg.params["start"])
     self._end = float(cfg.params["end"])
-    self._steps = int(cfg.params["iterations"]) * int(
-      cfg.params["steps_per_iteration"]
-    )
+    per_iteration = int(cfg.params["steps_per_iteration"])
+    pin = int(cfg.params.get("pin_iterations", 0))
+    if pin < 0:
+      raise ValueError(f"{type(self).__name__} needs pin_iterations >= 0.")
+    self._pin = pin * per_iteration
+    self._steps = int(cfg.params["iterations"]) * per_iteration
     if self._steps <= 0:
       raise ValueError(f"{type(self).__name__} needs iterations > 0.")
 
@@ -206,9 +215,12 @@ class _LinearToRegistered:
     end: float,
     iterations: int,
     steps_per_iteration: int,
+    pin_iterations: int = 0,
   ) -> dict[str, torch.Tensor]:
     del env_ids, command_name, start, end, iterations, steps_per_iteration
-    fraction = min(1.0, int(env.common_step_counter) / self._steps)
+    del pin_iterations
+    elapsed = int(env.common_step_counter) - self._pin
+    fraction = min(1.0, max(0.0, elapsed / self._steps))
     value = self._start + fraction * (self._end - self._start)
     setattr(self._command_cfg, self._field, value)
     return {self._field: torch.tensor(value, device=env.device)}

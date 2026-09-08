@@ -54,14 +54,57 @@ Three of them swing hard under rotation; the stem's inner end sits 7.5 mm from
 the centre and so contributes almost pure position signal. Non-collinear, which
 is what makes the four distances pin SE(2) rather than position alone.
 
-Provenance, since you asked and it matters: the quantity is established, the
-shaping is mine. Averaging ||R1 p + t1 - (R2 p + t2)|| over model points is the
-ADD metric of Hinterstoisser et al. (ACCV 2012), the standard 6-DoF pose error
-in the LineMOD/BOP line; specifying a manipulation target through keypoints
-instead of a pose is kPAM (Manuelli et al., ISRR 2019). Using it as a dense RL
-reward is common in manipulation. But this is not a transcription of any one
-paper's reward -- the four points, the tanh and the scale are chosen here to
-match the factor being replaced. A translation
+Precedent. Two PPO papers arrive at this construction from the same complaint:
+
+  Whole-body End-Effector Pose Tracking          arXiv:2409.16048
+    Tracks a pose through three vertices of a 0.3 m cube on the end-effector --
+    the minimum that defines a pose uniquely -- scored exp(-||d||/0.05) summed
+    over keypoints. Its reason for not decomposing is exactly what this batch
+    measured: separate position and orientation terms need "a fixed trade-off
+    ... which may not be optimal for all workspace poses" and mean "balancing
+    two quantities with different units and magnitudes, often causing training
+    to collapse", whereas "the keypoint-based pose representation required far
+    less tuning due to its unified representation". Its ablation puts keypoints
+    ahead of quaternion, Euler and 6D pose representations.
+
+  Iterative Keypoint Rewards (IKER)              arXiv:2502.08643
+    PPO on rewards over keypoints placed "at the object's extremities along its
+    axes" -- the same rule used here -- from RGB-D, handling orientation through
+    keypoint positions rather than any rotation term, on prehensile and
+    non-prehensile tasks. Real-to-sim-to-real, 2025.
+
+  ADD metric, Hinterstoisser et al., ACCV 2012
+    The underlying quantity: mean over model points of ||R1 p + t1 - (R2 p +
+    t2)||, the standard 6-DoF pose error in the LineMOD/BOP line.
+
+Two things I did NOT copy, both checked rather than assumed:
+
+  * The kernel. exp(-d/0.05) measured against (1 - tanh(5 d))^2 on this
+    footprint is three times FLATTER in the far field -- gradient at 170 degrees
+    is 7.4e-03 of peak against 2.4e-02 -- so ours stays.
+  * The count. That paper uses the minimum 3 keypoints; ours has 4, and the
+    fourth (stem inner, 7.5 mm from centre) is close to redundant -- it carries
+    almost pure position signal. Harmless, but if this arm needs a variant,
+    dropping it is the obvious knob.
+
+
+ONE MORE IDEA FROM THE SEARCH, NOT YET SUBMITTED
+----------------------------------------------------------------------------------------------------
+
+"A Single Diffusion-Policy Controller for Multi-Task Block Pushing with Zero-Shot
+Sim-to-Real Transfer" (arXiv:2607.10892) trains block pushing from scratch with
+RL and no demonstrations, on T-, C- and L-shaped blocks, and reaches for
+*reverse curriculum generation* to get past exploration in the sparse-reward
+setting -- initialise near the goal state and walk the start distribution
+backwards.
+
+That is the family GrowStart and NearGoal were reaching for and both failed at.
+Worth noting the repo's recorded reason: the relative-yaw variant failed because
+its easy end started the object already at the goal orientation, so every action
+made the orientation term worse and the gate never advanced. A reverse
+curriculum over the *start pose* has the same hazard unless the initial yaw
+stays uniform while the position walks back -- which is a genuinely different
+configuration from anything run so far, and cheap to add. I have not built it. A translation
 moves all four points, a rotation moves them in opposing directions, so both are
 one currency and the relative worth of position and orientation is set by the
 T's geometry (16.5 cm of stem-tip travel for a half turn) rather than by a

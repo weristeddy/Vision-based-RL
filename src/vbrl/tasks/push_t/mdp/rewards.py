@@ -239,15 +239,33 @@ def keypoint_reward(
   therefore unused, and ``--orientation-weight`` has no effect when this shape
   is selected.
 
-  Provenance, since it matters for how much to trust it: the *quantity* is
-  established and the *shaping* is chosen here. Averaging ||R1 p + t1 - (R2 p +
-  t2)|| over points p of the model is the ADD metric of Hinterstoisser et al.
-  (ACCV 2012), the standard 6-DoF pose error in the LineMOD/BOP line of work,
-  and specifying a manipulation target through keypoints rather than a pose is
-  kPAM (Manuelli et al., ISRR 2019). Using that quantity as a dense RL reward is
-  common in manipulation, but this is not a transcription of any one paper's
-  reward: the four points, the tanh shaping and the scale are picked here to
-  match the position factor this replaces.
+  Precedent, since it matters for how much to trust this. Two PPO papers reach
+  the same construction from the same complaint:
+
+  * *Whole-body End-Effector Pose Tracking* (arXiv:2409.16048) tracks a pose
+    through three vertices of a 0.3 m cube on the end-effector -- the minimum
+    that defines a pose uniquely -- scored as ``exp(-||d|| / 0.05)`` summed over
+    keypoints. Its stated reason for not decomposing is the one measured here:
+    separate position and orientation terms need "a fixed trade-off ... which
+    may not be optimal for all workspace poses" and mean "balancing two
+    quantities with different units and magnitudes, often causing training to
+    collapse", where "the keypoint-based pose representation required far less
+    tuning due to its unified representation". Its ablation puts keypoints ahead
+    of quaternion, Euler and 6D pose representations.
+  * *Iterative Keypoint Rewards* (arXiv:2502.08643) trains PPO on rewards over
+    keypoints placed "at the object's extremities along its axes" -- the same
+    rule used here -- from RGB-D, and handles orientation through keypoint
+    positions rather than any rotation term, on prehensile *and* non-prehensile
+    tasks.
+
+  The underlying quantity is older still: averaging ``||R1 p + t1 - (R2 p +
+  t2)||`` over model points is the ADD metric of Hinterstoisser et al. (ACCV
+  2012).
+
+  What is not borrowed is the kernel. ``exp(-d / 0.05)`` was measured against
+  ``(1 - tanh(5 d))**2`` on this footprint and is three times *flatter* in the
+  far field -- gradient at 170 degrees is 7.4e-03 of peak against 2.4e-02 -- so
+  the shape stays matched to the position factor it replaces rather than copied.
 
   **It is not flat nowhere, and the reason is geometric rather than a choice of
   shape.** Under a pure rotation about the object's centre every keypoint

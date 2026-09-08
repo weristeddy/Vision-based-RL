@@ -1,0 +1,175 @@
+PUSH-T -- TWO-STAGE WEIGHT, AND 100% GOAL-BIASED STARTS
+====================================================================================================
+12 jobs. Both architectures (DinoV2ViTS14-LocalGrid16, CompactVit-Flatten) and
+both reward shapes (maniskill = no flag, linear = --orientation-reward linear).
+Both smoke-tested end to end; 544 tests pass.
+
+
+WHY THE w=0.8 FINETUNE FAILED -- it was the resume, not the weight
+----------------------------------------------------------------------------------------------------
+You said finetuning a position-learned model at w=0.8 did not help, so a plain
+weight change is not the answer. Pulled the two resume runs. The weight is not
+what broke:
+
+  DinoV2-LocalGrid16, w=0.8, resumed at iteration 5999
+      it     std    value      kl  entropy    yaw    ovl
+    6010   0.256    2.586  0.0233    0.04  1.649  0.412
+    6200   0.481    4.169  0.0286    3.76  1.557  0.401
+    6500   0.870    4.651  0.0246    7.57  1.530  0.347
+    7000   1.000    4.700  0.0252    8.51  1.592  0.325
+    8990   1.000    6.445  0.0258    8.51  1.537  0.311
+
+  NatureCnn-SpatialSoftmax, same setup
+    6010   0.187    2.114  0.0272   -1.72  1.557  0.398
+    7000   0.575    4.605  0.0292    2.82  1.430  0.336
+    8990   0.575    4.281  0.0214    2.82  1.525  0.241
+
+The action std ran from 0.250 to its 1.0 ceiling by iteration 7000 and stayed
+pinned there for the remaining 2,000 iterations; entropy saturated at 8.51.
+Overlap fell 0.441 -> 0.201 and Loss/value climbed 4.1 -> 6.4, so the critic
+never re-converged either. The policy was re-randomised, not finetuned: it lost
+the transport skill it had and never acquired orientation.
+
+The mechanism is the discontinuity. The reward changed in one step under a
+critic trained on the old one, so advantages carried no consistent direction,
+the surrogate gradient averaged out, and the entropy bonus walked log-std up
+until it hit the cap. From the cap nothing recovers.
+
+So your original idea is untested, not refuted. What has to change is the
+mechanism: do it inside one run as a continuous ramp, so the critic tracks the
+reward as it moves and there is no shock to lag behind.
+
+
+VARIANT A -- POSITION ONLY, THEN ROTATION ADDED                        4 jobs
+----------------------------------------------------------------------------------------------------
+Added `pin_iterations` to the ramp curricula (the pattern separation_curriculum
+already used), because without a hold a ramp from 0 has no iteration where the
+weight is actually 0 -- it leaves the start value on the first step, so
+"position only first" would not be a phase at all. Now it is three phases:
+
+    iterations 0-2000      w = 0.0        pure position + tcp reward
+    iterations 2000-4000    w: 0.0 -> 0.8  rotation ramped in
+    iterations 4000-6000    w = 0.8        held
+
+0.8 is the value the repo measured as having positive net gradient at 2 cm
+(+0.00331/step against -0.00127 at the 0.5 split), so it is the smallest weight
+at which rotating near the goal is not punished.
+
+Base is VisualGoal: visible goal, both colours randomized, full circle from the
+first episode, no other curriculum, so the weight schedule is the only variable.
+
+  bash cluster/submit_sweep.sh --variant VisualGoal --profile b200 \
+    --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+    -- --orientation-weight-start 0.0 --orientation-weight-pin-iterations 2000 \
+       --orientation-weight 0.8 --orientation-weight-iterations 2000 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+  bash cluster/submit_sweep.sh --variant VisualGoal --profile b200 \
+    --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+    -- --orientation-reward linear \
+       --orientation-weight-start 0.0 --orientation-weight-pin-iterations 2000 \
+       --orientation-weight 0.8 --orientation-weight-iterations 2000 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+What to watch: Policy/mean_std through iterations 2000-4000. If it climbs toward
+1.0 the way the resume did, the ramp is still too abrupt and the fix is a longer
+--orientation-weight-iterations, not a different weight. Baselines to compare
+against are the VisualGoal runs on these architectures at constant w=0.5:
+DinoV2 1.349-1.589, CompactVit 1.515-1.558.
+
+
+VARIANT B -- 100% GOAL-BIASED STARTS                                   8 jobs
+----------------------------------------------------------------------------------------------------
+Every episode starts the object 1-2 cm from the goal position, so most of the
+position term is already earned and rotation is what is left. Both spreads, as
+you asked:
+
+    uniform      --near-goal-yaw-spread-deg 180   yaw error uniform over the
+                 full circle: the pure orientation task
+    default      (no flag)                        yaw error 5-20 deg: whether
+                 the final correction can be made and the sparse 0.90 bonus earned
+
+Base is VisualFree, not VisualGoal, and this is not a free choice. VisualGoal
+holds the goal at least 15 cm from the object and draws the two from offset x
+ranges, so a goal 6-15 mm away can never land inside the target rectangle -- it
+raises "Goal sampling did not converge in 512 draws". VisualFree uses a 1 cm
+floor, which is why NearGoal was registered on the FreeStart family in the first
+place. VisualFree keeps the visible goal and both colour randomizations.
+
+The 1-2 cm band is your call and it is the better one for this purpose, but it
+is a trade, so both halves are worth knowing. `--near-goal-separation-cm 1.0,2.0`
+sets it (comma-separated, one argument -- tyro will not take two).
+
+  What widening buys. The dense position factor (1 - tanh(5 d))^2 sits at 0.941
+  at 6 mm with only 0.059 left to gain, against 0.903 at 1 cm and 0.811 at 2 cm.
+  So pushing toward the goal still pays, which is what softens the hazard below:
+  at 6-15 mm the position term is nearly maxed and can only fall.
+
+  What it costs. Overlap at perfect alignment is 0.891 at 6 mm -- one correction
+  short of the 0.90 bonus, which is what the registered band was sized around --
+  but 0.810 at 1 cm and 0.620 at 2 cm. The sparse bonus now needs real transport
+  rather than a nudge. And at 2 cm overlap is flat in yaw below 20 degrees
+  (0.620 at 0 deg, 0.626 at 5, 0.633 at 10 -- it slightly *rises*), so at the top
+  of the band the bonus carries no orientation signal at all. At 1 cm it does
+  (0.810, 0.813, 0.799, then 0.675 at 20 deg).
+
+  Net: the dense reward gets better, the sparse bonus gets weaker and partly
+  yaw-blind. Since the dense term is what these runs are testing, widening is
+  right -- but if the runs end up leaning on the bonus, narrow the top of the
+  band to 1.5 cm rather than 2.
+
+The registered NearGoal default is left at 0.6-1.5 cm. Changing it would move the
+distribution the existing NearGoal results were measured on.
+
+Verified at reset: position error 0.0341 m when the band is set to 3-4 cm, so the
+flag reaches the sampler. Yaw error 0.28 rad under the default spread and 2.32
+rad under the uniform one.
+
+  # uniform yaw -- the pure orientation task
+  bash cluster/submit_sweep.sh --variant VisualFree --profile b200 \
+    --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+    -- --near-goal-probability 1.0 --near-goal-separation-cm 1.0,2.0 \
+       --near-goal-yaw-spread-deg 180 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+  bash cluster/submit_sweep.sh --variant VisualFree --profile b200 \
+    --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+    -- --orientation-reward linear \
+       --near-goal-probability 1.0 --near-goal-separation-cm 1.0,2.0 \
+       --near-goal-yaw-spread-deg 180 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+  # default 5-20 deg band -- the finishing task
+  bash cluster/submit_sweep.sh --variant VisualFree --profile b200 \
+    --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+    -- --near-goal-probability 1.0 --near-goal-separation-cm 1.0,2.0 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+  bash cluster/submit_sweep.sh --variant VisualFree --profile b200 \
+    --arch "DinoV2ViTS14-LocalGrid16,CompactVit-Flatten" \
+    -- --orientation-reward linear \
+       --near-goal-probability 1.0 --near-goal-separation-cm 1.0,2.0 \
+       --agent.algorithm.gamma 0.996 --agent.max-iterations 6000
+
+The hazard on the uniform arm, stated up front so the result is readable either
+way: the position term starts at its maximum and can only fall once the T is
+touched, and rotating a T requires pushing it off-centre. Under maniskill at
+w=0.5 the measured trade is -0.00127 per step at 2 cm, so doing nothing may be
+locally optimal and the run may sit still. That is not a wasted job -- it is the
+cleanest possible measurement of the competition between the two terms, and it
+is exactly why the linear arm is paired with it. If the maniskill arm stalls and
+the linear one does not, the split is the problem. If both stall, the
+"satisfy position, isolate orientation" idea is dead and no weight fixes it.
+
+Read position_error alongside yaw_error on every one of these. If position
+degrades while yaw improves, the policy is trading one for the other rather than
+learning both, which is the -0.755 correlation the repo already recorded.
+
+
+NOT INCLUDED
+----------------------------------------------------------------------------------------------------
+A hard switch at iteration 3000 instead of the ramp. It is closer to what you
+described, but it is the same discontinuity that destroyed the resume -- just
+without the checkpoint reload. If the ramp works, the switch is unnecessary; if
+the ramp shows std climbing, the switch would be worse. Worth revisiting only if
+the ramp stalls for a reason that is not the std.
