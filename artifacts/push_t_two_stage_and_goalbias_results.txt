@@ -1,0 +1,138 @@
+PUSH-T -- TWO-STAGE WEIGHT AND 100% GOAL-BIASED STARTS: RESULTS
+====================================================================================================
+10 of the 12 runs finished. The two missing ones are the VisualFree LIN pair at
+the 5-20 degree spread; both died in Warp's CUDA kernel build with
+"error while writing PCH file: No space left on device". Cause and fix at the
+bottom -- it is the job's /tmp, not the task.
+
+Arms read from env_cfg, never from the run name. Confirmed on every run:
+  variant A   curriculum orientation_weight  start=0  end=0.8  pin=2000  iters=2000
+  variant B   near_goal_probability=1.0  near_goal_separation_range=[0.01, 0.02]
+              near_goal_yaw_range upper = pi (uniform) or 0.349 rad (20 deg)
+
+variant     arm                  rew   architecture                yaw   succ     at    ovl    pos
+----------------------------------------------------------------------------------------------------
+VisualGoal  RAMP w0->0.8         LIN   DinoV2ViTS14-LocalGrid16  0.958  0.072  0.012  0.440  0.028
+VisualGoal  RAMP w0->0.8         ms    DinoV2ViTS14-LocalGrid16  1.106  0.028  0.002  0.354  0.041
+VisualGoal  RAMP w0->0.8         ms    CompactVit-Flatten        1.517  0.002  0.000  0.252  0.066
+VisualGoal  RAMP w0->0.8         LIN   CompactVit-Flatten        1.574  0.002  0.000  0.212  0.079
+VisualFree  GOALBIAS yaw<=20     ms    DinoV2ViTS14-LocalGrid16  0.218  0.000  0.000  0.625  0.015
+VisualFree  GOALBIAS yaw<=20     ms    CompactVit-Flatten        0.222  0.001  0.001  0.625  0.015
+VisualFree  GOALBIAS yaw<=180    LIN   CompactVit-Flatten        1.545  0.000  0.000  0.458  0.015
+VisualFree  GOALBIAS yaw<=180    ms    DinoV2ViTS14-LocalGrid16  1.559  0.000  0.000  0.458  0.015
+VisualFree  GOALBIAS yaw<=180    ms    CompactVit-Flatten        1.574  0.000  0.000  0.460  0.015
+VisualFree  GOALBIAS yaw<=180    LIN   DinoV2ViTS14-LocalGrid16  1.577  0.000  0.000  0.458  0.015
+
+
+VARIANT A -- THE TWO-STAGE WEIGHT WORKS, ON DinoV2
+----------------------------------------------------------------------------------------------------
+DinoV2 with the linear factor reached yaw 0.958 and 7.2% episode success. Against
+the right baseline -- VisualGoal on the same architecture, same full-circle goal,
+no yaw curriculum, constant w=0.5 -- that is a large gain:
+
+    VisualGoal LIN constant w=0.5   1.531
+    VisualGoal ms  constant w=0.5   1.349 / 1.589
+    VisualGoal RAMP w0->0.8 + ms    1.106
+    VisualGoal RAMP w0->0.8 + LIN   0.958      <-- this batch
+
+So your original idea is sound, and the earlier w=0.8 *resume* really was the
+mechanism that broke it rather than the weight: run inside one job as a ramp, the
+same endpoint improves yaw by 0.57 rad over the constant-weight control.
+
+It does not beat the goal-yaw curriculum. VisualSlow LIN yawRANGE on the same
+architecture is 0.582/0.674 across two seeds with 21-24% success. The ramp gets
+about half that.
+
+The thing I said to watch did not happen. Action std through the ramp:
+
+    rew  arch                      std@2000  std@3000  std@4000  std@end
+    LIN  DinoV2ViTS14-LocalGrid16      0.20      0.18      0.17     0.15
+    ms   DinoV2ViTS14-LocalGrid16      0.22      0.21      0.20     0.17
+    LIN  CompactVit-Flatten            0.28      0.24      0.24     0.24
+    ms   CompactVit-Flatten            0.25      0.20      0.19     0.19
+
+It decays monotonically through the whole ramp. Nothing like the resume, where it
+ran from 0.250 to the 1.0 ceiling by iteration 7000. Gradually changing the
+reward under a live critic is simply a different thing from swapping it under a
+stale one, which is what the resume did.
+
+Yaw across the phases, DinoV2 LIN: 1.442 at iteration 2000 (end of the
+position-only stage, still chance), 1.300 at 4000 (ramp complete), 0.958 at 5999.
+So the orientation learning happens *after* the weight arrives at 0.8, in the
+last 2000 iterations, and it was still improving at the end. That is the one
+place more budget would obviously pay -- but per your constraint, a better use of
+6000 is to start the ramp earlier.
+
+CompactVit fails here too, at 1.517 and 1.574. Consistent with the appendix on
+that encoder: 30 runs, 13 variants, never below 1.19 sustained.
+
+
+VARIANT B -- BOTH SPREADS FAILED, AND THE 5-20 DEGREE NUMBER IS A TRAP
+----------------------------------------------------------------------------------------------------
+Uniform spread: all four runs at 1.545-1.577 against a chance of 1.571. Exactly
+nothing learned. Position sits at 0.015 m -- where the episode starts -- so the
+policy is not even moving the T. This is the hazard flagged before submitting:
+the position term begins at its maximum and can only fall once the T is touched,
+so under both reward shapes doing nothing is locally optimal, and the linear
+factor does not rescue it. The idea is dead, and it is dead for a reason that was
+predicted rather than discovered.
+
+The 5-20 degree arm looks like a triumph at yaw 0.218 and it is not. That arm
+*starts* at a mean absolute yaw error of 0.218 rad: near_goal_yaw_range is
+(0.087, 0.349) rad sampled as a magnitude with a random sign, mean 0.218. The
+runs ended at 0.218 and 0.222. They held the starting condition and closed none
+of it. Episode success 0.000 and 0.001, at_goal 0.000 and 0.001, and overlap
+0.625 against the 0.90 the bonus needs.
+
+So the correct reference for that arm is 0.218, not 1.571, and both runs are at
+it. Chance, not success. Worth stating plainly because 0.218 next to a 1.571
+chance line is the most misleading number in this batch.
+
+The two LIN runs of this arm are the ones that crashed. Given both ms runs sat
+exactly on their initial condition, they are not worth resubmitting.
+
+
+WHY THE LAST TWO CRASHED, AND THE FIX
+----------------------------------------------------------------------------------------------------
+    Catastrophic error: error while writing PCH file: No space left on device
+    -> Warp NVRTC compilation error 6 -> CUDA kernel build failed with error code 6
+
+Raised from mjwarp.step inside Simulation.__init__, so before training started.
+
+cluster/train.slurm already redirects Warp's kernel cache to the job-local disk
+(WARP_CACHE_PATH=${RUNTIME_DIR}/warp, which is why the log shows
+/data/local/jobs/1119012/warp/1.15.0). But Warp writes its NVRTC *precompiled
+headers* to $TMPDIR, which is a different path and was never set -- the log shows
+them going to /tmp/wp_pch_5uij71dk inside the container. Four ranks each
+compiling a full module set filled it.
+
+Fixed in cluster/train.slurm, cluster/evaluate.sh and cluster/view.sh: TMP_DIR is
+now ${RUNTIME_DIR}/tmp, created alongside the warp and torchrunx dirs, and passed
+in as TMPDIR, TMP and TEMP. RUNTIME_DIR is already bind-mounted, so no new bind
+is needed. bash -n passes on all three.
+
+Nothing about the two runs' configuration was wrong; resubmitting them unchanged
+on the patched script would work. I would not bother, for the reason above.
+
+
+WHERE THIS LEAVES THE CAMPAIGN
+----------------------------------------------------------------------------------------------------
+Ranking every orientation intervention tried so far on DinoV2-LocalGrid16, by
+sustained yaw error:
+
+    0.582 / 0.674   VisualSlow LIN yawRANGE          two seeds, 21-24% success
+    0.761           VisualSlow KEYPT yawRANGE
+    0.857           VisualSlow LIN yawRANGE kl0.15
+    0.958           VisualGoal RAMP w0->0.8 LIN      <-- this batch
+    1.075           VisualSlow yawRANGE (ms)
+    1.106           VisualGoal RAMP w0->0.8 ms       <-- this batch
+    1.19-1.59       every VisualGoal / VisualFree / VisualGrow arm
+    1.559           VisualFree GOALBIAS uniform      <-- this batch
+
+The goal-yaw curriculum remains the only intervention that gets below 0.7, and
+the weight ramp is the best thing found that does not use it. They are
+independent mechanisms -- one controls which goals appear, the other when
+orientation starts paying -- and have never been combined. That is the obvious
+next 2 jobs: VisualSlow, linear factor, plus --orientation-weight-start 0.0
+--orientation-weight-pin-iterations 2000 --orientation-weight 0.8
+--orientation-weight-iterations 2000, on DinoV2-LocalGrid16 with two seeds.

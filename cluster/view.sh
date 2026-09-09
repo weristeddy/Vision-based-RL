@@ -161,7 +161,10 @@ if [[ -f /etc/slurm/local_job_dir.sh ]]; then
 fi
 RUNTIME_DIR="${LOCAL_JOB_DIR:-/tmp/vbrl-view-${SLURM_JOB_ID:-manual}}"
 WARP_DIR="${RUNTIME_DIR}/warp-viewer"
-mkdir -p "${WARP_DIR}"
+# Warp writes NVRTC precompiled headers into $TMPDIR, not WARP_CACHE_PATH;
+# unset, that fills the container's /tmp and the kernel build dies.
+TMP_DIR="${RUNTIME_DIR}/tmp"
+mkdir -p "${WARP_DIR}" "${TMP_DIR}"
 
 if [[ "${MODEL_ROOT}" != /* ]]; then
   echo "VBRL_MODEL_ROOT must be absolute; got ${MODEL_ROOT}" >&2
@@ -211,6 +214,9 @@ exec apptainer exec --nv \
   --env "VBRL_REPO_ROOT=${CONTAINER_REPO}" \
   --env "VBRL_MODEL_ROOT=${MODEL_ROOT}" \
   --env "WARP_CACHE_PATH=${WARP_DIR}" \
+  --env "TMPDIR=${TMP_DIR}" \
+  --env "TMP=${TMP_DIR}" \
+  --env "TEMP=${TMP_DIR}" \
   --bind "${REPO}:${CONTAINER_REPO}" \
   --bind "${RUNTIME_DIR}:${RUNTIME_DIR}" \
   "${MODEL_BIND_ARGS[@]}" \

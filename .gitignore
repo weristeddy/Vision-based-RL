@@ -53,6 +53,16 @@ MUJOCO_LOG.TXT
 # artifacts/**
 # !artifacts/.gitkeep
 
+# ...except the two the analysis pipeline writes at hundreds of MB each. A
+# capture is 1024 raw 224x224 frames and a feature dump is every activation for
+# them -- one four-run probe came to 962 MB, and GitHub hard-rejects any blob
+# over 100 MB, which blocks the whole push and needs a history rewrite to undo.
+# Both regenerate from the manifest in configs/analysis/, so they are outputs,
+# not inputs. Existing tracked copies are unaffected; ignore rules do not
+# untrack.
+artifacts/analysis/**/capture.npz
+artifacts/analysis/**/features.npz
+
 # Trained policies may be copied here locally or fetched from W&B on demand.
 # Exported ONNX graphs are the same weights in the deployable format, so they
 # live beside their .pt and are ignored on the same grounds -- 90 MB each, and

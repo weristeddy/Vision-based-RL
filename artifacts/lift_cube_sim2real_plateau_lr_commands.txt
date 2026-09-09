@@ -1,0 +1,217 @@
+Sim2Real Lift-Cube -- FULL SUBMIT COMMANDS, plateau-corrected learning rates
+==============================================================================
+
+Supersedes the learning rates in lift_cube_sim2real_submit_commands.txt.
+Everything else about those commands -- camera, task IDs, profile, the rest of
+the hyperparameters -- is unchanged.
+
+Why the learning rates move. The retained runs all used schedule=adaptive, so
+the rate in their run config is a starting point, not the rate they trained at.
+Every one of them sits in the same reach-but-never-lift plateau -- `lift` near
+1.1, `lift_precise` exactly 0, cube height 0.019 -- and then escapes. The rate
+that matters is the median while still in the plateau, read out of
+Loss/learning_rate in each retained run's own history:
+
+  architecture                    config lr  plateau lr  ratio  escaped  retained
+  -------------------------------------------------------------------------------
+  NatureCnn-SpatialSoftmax         1.25e-04    1.32e-03  10.57     2032     0.567
+  R3MResNet50-SpatialSoftmax       5.01e-04    1.30e-03   2.59     1471     0.624
+  DinoV2ViTS14-LocalGrid7          1.60e-04    3.84e-04   2.40      996     0.692
+  DinoV2ViTS14-Linear              1.70e-04    2.56e-04   1.51     2788     0.189
+  R3MResNet50-Afa32                8.53e-05    1.14e-04   1.34     2139     0.609
+  DinoV2ViTS14-Afa6                1.34e-04    1.71e-04   1.27     1593     0.708
+  CompactVit-SpatialSoftmax        1.88e-04    1.88e-04   1.00     1705     0.634
+  CompactVit-LocalGrid8            2.65e-04    2.56e-04   0.97     1274     0.673
+  DinoV2ViTS14-SpatialSoftmax      1.30e-04    1.14e-04   0.88     1871     0.728
+  R3MResNet50-Linear               4.43e-04    2.56e-04   0.58     2212     0.512
+  R3MResNet50-LocalGrid7           5.56e-04    2.56e-04   0.46     1397     0.645
+  NatureCnn-LocalGrid16            3.27e-04    7.59e-05   0.23     1590     0.608
+
+The two that failed on the new camera are the two extremes: NatureCnn-
+SpatialSoftmax needed 10.57x its configured rate and R3M-SpatialSoftmax 2.59x,
+and both were re-run at 1.00x. DinoV2-SpatialSoftmax needed 0.88x, was re-run
+at 1.32x, and worked -- which is why it was the one unaffected encoder.
+
+schedule=fixed everywhere below, deliberately. Adaptive ramps to its 1.0e-02
+ceiling in the first iteration -- a fresh policy makes tiny updates, KL comes
+out near zero, and the rule multiplies by 1.5 per minibatch -- and whether it
+recovers is luck. The retained R3M run recovered to 1.30e-03; the new one took
+a KL spike to 0.64 at iteration 2,000 and was driven to the 1.0e-05 floor for
+its last 4,000 iterations. Fixing the rate removes that coin flip. The cost is
+that a fixed rate cannot back off, so watch Loss/approx_kl against each job's
+desired-kl in the first few hundred iterations.
+
+The DinoV2 rows could equally keep --agent.algorithm.schedule adaptive, since
+that is proven on the new camera for DinoV2-SpatialSoftmax. Fixed is used here
+only for consistency.
+
+CAMERA -- verified, not assumed. All twelve Sim2Real task IDs share one camera
+setup: sensor `cam`, 224x224, enabled_geom_groups (0, 2). All twelve CollisionCam
+IDs use (0, 3). Checked by loading every registered config; one distinct setup
+per generation, no per-architecture variation.
+
+What (0, 2) buys, from commit fb67b28:
+  * the visual meshes instead of the collision proxies the retained runs saw
+  * group 1 excluded, and fb67b28 moved camera_visual, appearance_camera_face
+    and the four lens/optic geoms into group 1 -- an external camera still sees
+    the D405 body, the wrist imager behind it does not. The commit message notes
+    MuJoCo was drawing camera_glass as an opaque surface 4 mm from the imager,
+    which blacked out the wrist view.
+
+The FOV is part of this too, and reading the XML alone hides it: both XMLs still
+say fovy="87" on robot/cam, but wxai_constants.py overrides it at build time with
+_D405_CROP_VERTICAL_FOV_DEG = 54.49, which tasks/utils/camera.py passes into
+CameraSensorCfg. Resolving every registered config gives fovy=54.49. That is the
+D405's measured 224-crop vertical FOV; the old 87 was its horizontal FOV in the
+vertical field, which rendered every object 1.72x too small.
+
+The override is unconditional, so the CollisionCam IDs render 54.49 now as well.
+Two consequences worth keeping straight:
+  * The retained numbers in the last column were measured at fovy 87. Comparing
+    a new run against them mixes the FOV change with the geom-group change.
+  * The r3m_old / r3m_new probe comparison in
+    artifacts/lift_cube_sim2real_results.txt therefore isolated geom groups
+    only, both at 54.49 -- not "old camera vs new camera" as that section says.
+
+Run from the repo root on the cluster login node. Independent; submit any subset.
+
+
+##############################################################################
+# 1. THE TWO TO RE-RUN -- these failed or underperformed on the new camera
+##############################################################################
+
+# R3MResNet50-SpatialSoftmax
+# retained run j2eio3bw reached 0.624, escaped the plateau at iteration 1471
+# previous attempt: failed 0.000 -- both schedules
+# learning rate 5.008e-04 -> 1.297e-03  (2.59x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00129746 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.035 \
+  --agent.algorithm.num-learning-epochs 3 \
+  --agent.algorithm.num-mini-batches 24
+
+# NatureCnn-SpatialSoftmax
+# retained run cz8klrb3 reached 0.567, escaped the plateau at iteration 2032
+# previous attempt: 0.49, escaped only at 5588
+# learning rate 1.246e-04 -> 1.317e-03  (10.57x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-NatureCnn-SpatialSoftmax-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00131687 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.num-learning-epochs 3
+
+
+##############################################################################
+# 2. ALREADY WORKING -- do not resubmit
+##############################################################################
+#   DinoV2ViTS14-SpatialSoftmax    0.653 -- DONE, leave alone
+#   CompactVit-SpatialSoftmax      0.559 -- DONE, leave alone
+
+
+##############################################################################
+# 3. THE EIGHT NOT YET SUBMITTED
+##############################################################################
+
+# CompactVit-LocalGrid8
+# retained run l341d4p6 reached 0.673, escaped the plateau at iteration 1274
+# learning rate 2.648e-04 -> 2.563e-04  (0.97x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-CompactVit-LocalGrid8-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00025629 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.max-grad-norm 0.5
+
+# DinoV2ViTS14-Afa6
+# retained run hmace229 reached 0.708, escaped the plateau at iteration 1593
+# learning rate 1.340e-04 -> 1.709e-04  (1.27x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Afa6-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00017086 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.03 \
+  --agent.algorithm.entropy-coef 0.002 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16
+
+# DinoV2ViTS14-Linear
+# retained run d8s3z42w reached 0.189, escaped the plateau at iteration 2788
+# learning rate 1.701e-04 -> 2.563e-04  (1.51x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Linear-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00025629 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.gradient-accumulation-steps 1
+
+# DinoV2ViTS14-LocalGrid7
+# retained run t9m12tqk reached 0.692, escaped the plateau at iteration 996
+# learning rate 1.600e-04 -> 3.844e-04  (2.40x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-LocalGrid7-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00038443 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.025 \
+  --agent.algorithm.entropy-coef 0.003 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16
+
+# NatureCnn-LocalGrid16
+# retained run b57mpbee reached 0.608, escaped the plateau at iteration 1590
+# learning rate 3.274e-04 -> 7.594e-05  (0.23x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-NatureCnn-LocalGrid16-TrossenRealistic \
+  --agent.algorithm.learning-rate 7.594e-05 \
+  --agent.algorithm.schedule fixed
+
+# R3MResNet50-Afa32
+# retained run njz9q97r reached 0.609, escaped the plateau at iteration 2139
+# learning rate 8.532e-05 -> 1.139e-04  (1.34x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-Afa32-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00011391 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.entropy-coef 0.003 \
+  --agent.algorithm.num-learning-epochs 3 \
+  --agent.algorithm.num-mini-batches 32
+
+# R3MResNet50-Linear
+# retained run m5dnsjcc reached 0.512, escaped the plateau at iteration 2212
+# learning rate 4.426e-04 -> 2.563e-04  (0.58x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-Linear-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00025629 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.02 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 16 \
+  --agent.algorithm.gradient-accumulation-steps 1
+
+# R3MResNet50-LocalGrid7
+# retained run mbsk74zp reached 0.645, escaped the plateau at iteration 1397
+# learning rate 5.559e-04 -> 2.563e-04  (0.46x)
+
+bash cluster/submit.sh --profile b200 -- \
+  Mjlab-LiftCube-Sim2Real-R3MResNet50-LocalGrid7-TrossenRealistic \
+  --agent.algorithm.learning-rate 0.00025629 \
+  --agent.algorithm.schedule fixed \
+  --agent.algorithm.desired-kl 0.025 \
+  --agent.algorithm.num-learning-epochs 5 \
+  --agent.algorithm.num-mini-batches 32
+

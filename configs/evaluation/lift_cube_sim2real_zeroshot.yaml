@@ -1,0 +1,26 @@
+# Do the retained CollisionCam policies already work under the new visual
+# camera? If so they are a warm start that begins past the reach-but-never-lift
+# plateau, which is what a fresh 6,000-iteration run cannot get out of for the
+# two slow encoders. The checkpoints load unchanged: the Sim2Real and
+# CollisionCam task configs have identical vision configs, actor/critic dims and
+# observation terms, and the critic reads no camera at all.
+version: 1
+name: lift_cube_sim2real_zeroshot
+
+models:
+  - name: r3m_ss_retained_on_new_cam
+    task_id: Mjlab-LiftCube-Sim2Real-R3MResNet50-SpatialSoftmax-TrossenRealistic
+    checkpoint_file: ckpts/lift_cube/r3m_resnet50_spatial_softmax_real.pt
+  - name: nature_cnn_ss_retained_on_new_cam
+    task_id: Mjlab-LiftCube-Sim2Real-NatureCnn-SpatialSoftmax-TrossenRealistic
+    checkpoint_file: ckpts/lift_cube/nature_cnn_spatial_softmax_real.pt
+  - name: dinov2_ss_retained_on_new_cam
+    task_id: Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic
+    checkpoint_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_real.pt
+
+scenes:
+  - real_texture_matched
+
+episodes: 64
+seeds: [20000, 21000]
+output: artifacts/evaluation/lift_cube_sim2real_zeroshot

@@ -1,0 +1,255 @@
+LIFT-CUBE SIM2REAL -- WHAT RAN AND WHAT WORKED
+====================================================================================================
+8 runs, 2026-09-01 to 2026-09-03. These are the retrained lift-cube RGB policies
+on the corrected D405 wrist-camera FOV and the *visual* geom groups (0, 2),
+against the 12 retained CollisionCam policies that trained on groups (0, 3).
+
+Success is `Metrics/lift_height/episode_success`: the cube coming within
+success_threshold = 0.05 m of the commanded lift goal, latched once per episode.
+So 0.65 means 65% of episodes reached the goal at some point.
+
+
+ONLY 4 OF THE 12 PLANNED ARCHITECTURES RAN
+----------------------------------------------------------------------------------------------------
+Every one of the 8 runs is the SpatialSoftmax adapter -- the whole
+SpatialSoftmax row of the grid, with retries. Four encoders:
+
+    DinoV2ViTS14-SpatialSoftmax     1 run  (in two parts, resumed)
+    CompactVit-SpatialSoftmax       1 run
+    NatureCnn-SpatialSoftmax        3 runs (1 crash, 2 learning rates)
+    R3MResNet50-SpatialSoftmax      2 runs (2 learning-rate schedules)
+
+Not yet submitted, from artifacts/lift_cube_sim2real_submit_commands.txt:
+CompactVit-LocalGrid8, DinoV2ViTS14-Afa6, DinoV2ViTS14-Linear,
+DinoV2ViTS14-LocalGrid7, NatureCnn-LocalGrid16, R3MResNet50-Afa32,
+R3MResNet50-Linear, R3MResNet50-LocalGrid7.
+
+
+RESULTS, AGAINST THE CollisionCam BASELINE
+----------------------------------------------------------------------------------------------------
+                              new (visual cam, 6000 it)      retained (CollisionCam, 3000 it)
+  encoder                  success   best     lr   sched      success   verdict
+  DinoV2ViTS14              0.653   0.746  1.3e-4  adaptive     0.715   MATCHED
+  CompactVit                0.563   0.604  1.9e-4  fixed        0.625   MATCHED
+  NatureCnn                 0.285   0.494  1.2e-4  fixed        0.567   STILL CLIMBING, not converged
+  NatureCnn                 0.000   0.000  2.0e-4  fixed        0.567   FAILED (lr too high)
+  NatureCnn                 0.000   0.000  1.2e-4  adaptive     0.567   CRASHED at it 2036
+  R3MResNet50               0.000   0.000  5.0e-4  adaptive     0.629   FAILED
+  R3MResNet50               0.000   0.000  5.0e-4  fixed        0.629   FAILED
+
+"success" is the mean over the last 500 iterations; "best" is the best
+rolling-50 window.
+
+
+SUCCEEDED: DinoV2ViTS14 and CompactVit
+----------------------------------------------------------------------------------------------------
+Both land within about a tenth of their CollisionCam baselines, which is the
+result you wanted -- the camera change did not cost the task.
+
+It did cost *time*. Trajectories, rolling-50 mean:
+
+  DinoV2 new         it 1799: 0.00   2399: 0.00   2849: 0.22   2999: 0.56   5998: 0.65
+  DinoV2 CollisionCam   1799: 0.01   2400: 0.67                2990: 0.73
+
+Same long latent phase, but takeoff slipped from ~2000 to ~2800 and the plateau
+came in 0.08 lower. Raising max_iterations to 6000 is what saved this run: at
+3000, where the baseline had finished at 0.73, the new camera was at 0.56 and
+still rising. The DinoV2 run is also two W&B runs -- 0-2999 then a resume from
+3000 to 5998 -- and it is the one exported to ckpts/lift_cube/
+dinov2_vits14_spatial_softmax_sim2real_5998.onnx.
+
+  CompactVit new     it 2399: 0.00   3598: 0.47   4799: 0.56   5996: 0.59
+
+Takeoff at ~3000, so this one would have scored 0.00 under the old 3000-iteration
+budget. The iteration increase was not optional for it.
+
+
+NatureCnn: NOT a failure, an unfinished run
+----------------------------------------------------------------------------------------------------
+  NatureCnn lr1.2e-4 it 4799: 0.00   5696: 0.15   5996: 0.49
+
+It took off in the last 600 iterations of 6000 and was still rising steeply when
+the run ended. The 0.285 last-500 mean understates it; the endpoint is 0.49
+against a 0.567 baseline. This wants more iterations, not a different
+hyperparameter -- 9000 or 12000 would likely close the gap.
+
+The learning rate matters and 2.0e-4 is too high: that run ended at
+Policy/mean_std 0.05, a collapsed near-deterministic policy that never lifted.
+1.2e-4 fixed is the setting that works. The adaptive-schedule run crashed at
+2036 with its lr driven to the 1.0e-5 floor, which is the same divergence
+already recorded for this encoder.
+
+
+R3MResNet50: the one real regression
+----------------------------------------------------------------------------------------------------
+0.629 on the collision camera, 0.000 on the visual camera, twice, under both
+schedules. Flat at zero for all 6000 iterations in both runs.
+
+The cube never left the table: object_height 0.019 m against a rest height of
+about 0.02, and position_error pinned at 0.350 m for the whole run. This is not
+slow learning, it is no learning.
+
+It is also not the learning rate. The adaptive run drove lr to the 1.1e-5 floor,
+which was the earlier diagnosis, but the fixed run held 5.0e-4 for all 6000
+iterations and scored exactly the same 0.000. Whatever is wrong survives both.
+The remaining difference from the baseline is the camera itself -- R3M is the
+only frozen ResNet in the set, its features were trained on real photographs,
+and the collision-proxy geometry it originally saw is a very different image
+statistic from the visual meshes. Worth a targeted look with
+vbrl-analyze before spending more GPUs on it.
+
+
+WHAT I WOULD RUN NEXT
+----------------------------------------------------------------------------------------------------
+1. NatureCnn-SpatialSoftmax at lr 1.2e-4 fixed, 12000 iterations. The cheapest
+   open question in the set -- it was still climbing.
+2. The 8 unsubmitted architectures, at the per-architecture hyperparameters in
+   artifacts/lift_cube_sim2real_submit_commands.txt. Note both scratch encoders
+   here needed 6000 iterations to take off at all, so any row with a scratch
+   encoder should not be judged at 3000.
+3. R3M: feature-drift analysis rather than another training run.
+
+
+====================================================================================================
+APPENDIX: WHY R3M FAILED -- MEASURED, AND MY EARLIER GUESS WAS WRONG
+====================================================================================================
+
+I said R3M's frozen features were the likely cause, since they cannot adapt to
+the new visual-mesh images. That is wrong. Measured it with the repo's own probe
+pipeline: capture 1024 frames, extract features, ridge-regress cube position,
+report held-out R2. Same retained checkpoint in both configs. Manifests in
+configs/analysis/lift_cube_rgb/trossen_realistic/.
+
+Scope correction on this comparison: `r3m_old` and `r3m_new` differ in geom
+groups only, (0, 3) against (0, 2). Both render fovy 54.49, because
+wxai_constants.py overrides the XML's 87 unconditionally, for the CollisionCam
+task IDs as well. So this measures collision proxies against visual meshes at a
+fixed FOV -- it is not "old camera vs new camera", and it says nothing about the
+87-to-54.49 change the retained checkpoints actually crossed.
+
+  adapter stage (the 256-d vector the policy MLP actually reads)
+  run            R2 x     R2 y     R2 z
+  r3m_old       0.940    0.850    0.996
+  r3m_new       0.924    0.961    0.850     <-- new camera is fine
+  dino_old      0.855    0.858    0.956
+  dino_new      0.938    0.904    0.978
+
+R3M localises the cube on the new camera as well as on the old one. And the
+retained R3M policy, run zero-shot under the new camera during that capture,
+lifted the cube to a maximum height of 0.236 m. Perception is not the problem
+and neither is the representation.
+
+
+WHAT IS ACTUALLY HAPPENING: THE SAME PLATEAU NatureCnn SAT IN
+----------------------------------------------------------------------------------------------------
+Training signals, sampled through each run:
+
+  DinoV2 (works)        lift 1.46-1.80   lift_precise 0.45-0.70   height 0.17-0.23
+  NatureCnn it<5000     lift 1.09-1.13   lift_precise 0.0000      height 0.019-0.020
+  NatureCnn it 5984     lift 1.45        lift_precise 0.3132      height 0.129
+  R3M fixed  (all it)   lift 1.03-1.13   lift_precise 0.0000      height 0.019-0.022
+  R3M adapt  (all it)   lift 0.93-1.14   lift_precise 0.0000      height 0.019-0.022
+
+R3M's signature is *identical* to NatureCnn's for its first 5,400 iterations:
+the shaped `lift` term parked at about 1.1, `lift_precise` at exactly zero, the
+cube never leaving the table. That is the reach-but-never-lift local optimum.
+NatureCnn escaped it at iteration ~5,400 and reached 0.49. R3M had not escaped
+by 6,000.
+
+The escape time ordering across the three is DinoV2 ~2,800, NatureCnn ~5,400,
+R3M >6,000 -- the new camera pushed every encoder's escape later, and only the
+weakest ran out of budget. R3M is a truncated run, not a broken one.
+
+Supporting evidence that nothing is pathological in the fixed-LR run:
+Loss/approx_kl 0.024-0.036 against a desired_kl of 0.035, Policy/mean_std 0.249
+at the end, episode length at the 1,000-step cap, no ground-collision
+terminations. A healthy run that simply has not escaped.
+
+The one real pathology is in the ADAPTIVE run only: Loss/approx_kl reached
+0.9890 at iteration 2,092, twenty-eight times its 0.035 target, and stayed
+elevated at 0.13-0.38 for the rest of training. That trust region is blown.
+Note early_stop_kl is False on every lift-cube task, so nothing caught it. Use
+`schedule fixed` for R3M, which is what the second run already did.
+
+
+THE ACTUAL CAUSE: THE LEARNING RATE DURING THE PLATEAU
+----------------------------------------------------------------------------------------------------
+Correcting two things I got wrong earlier in this analysis.
+
+First: I framed this as `schedule fixed` being the culprit. Both schedules were
+run for R3M and both failed, so that framing was wrong -- and they failed for
+different reasons, which the table below separates.
+
+Second: I quoted the retained R3M run's *whole-run median* learning rate,
+8.65e-04, as the target. That number is wrong for this purpose. It averages the
+post-escape phase, where the adaptive schedule settles down to about 6e-04 once
+the task is solved. What matters is the rate while the policy is still stuck.
+
+Every one of these runs sits in the same reach-but-never-lift plateau -- `lift`
+parked near 1.1, `lift_precise` exactly 0, cube height 0.019, cube-to-goal
+0.33 m -- and then either escapes or does not. Splitting the learning rate at
+the escape point:
+
+  run                                 escaped at   plateau lr median   vs config
+  RETAINED R3M-SS       0.629               1471            1.30e-03      2.59x
+  RETAINED NatureCnn-SS 0.567               2032            1.32e-03     10.57x
+  RETAINED DinoV2-SS    0.715               1871            1.14e-04      0.88x
+  NEW R3M-SS fixed      0.000              never            5.01e-04      1.00x
+  NEW R3M-SS adaptive   0.000              never            1.00e-05      0.02x
+  NEW NatureCnn fixed   0.49                5588            1.25e-04      1.00x
+  NEW DinoV2-SS         0.653               3011            1.71e-04      1.32x
+
+Both retained runs that had to escape this plateau did it at essentially the
+same rate: 1.30e-03 and 1.32e-03. DINOv2 escaped at 1.14e-04 and never needed
+the high rate, which is exactly why it was the one encoder unaffected.
+
+The two new R3M failures are then two different ways of being too slow:
+  * `fixed` held 5.01e-04 for all 6,000 iterations -- stable the whole way,
+    approx_kl 0.024-0.036 against its 0.035 target, and 2.6x below the escape
+    rate. It never escaped and never destabilised.
+  * `adaptive` was in the right regime early -- 1.98e-03 at iteration 100,
+    8.65e-04 through iteration 1,800, approx_kl 0.032-0.044 -- then took a KL
+    spike to 0.64 around iteration 2,000 and was driven to the 1.0e-05 floor,
+    where approx_kl stayed at 0.13-0.21, above the 0.0175 needed to climb back
+    out. It spent its last 4,000 iterations at 130x below the escape rate.
+
+And NatureCnn confirms the scale: it ran the whole 6,000 at 1.25e-04, 10.6x
+below its retained escape rate, and escaped at iteration 5,588 -- just inside
+the budget, which is why it finished at 0.49 rather than 0.567.
+
+Ruled out along the way, each measured rather than assumed: the frozen features
+(probe R2 0.92-0.96 on the new camera, above the old one), the bfloat16 feature
+cache (R3M features round-trip with 0.00000 relative error; DINOv2 has more
+error and works), NaN terminations (none logged in any run), and the penalty
+terms (joint_pos_limits -0.001 to -0.007, negligible everywhere).
+
+
+WHAT TO RUN -- 6,000 ITERATIONS, NO CURRICULUM, NO RESUME
+----------------------------------------------------------------------------------------------------
+Fix the schedule at the rate each encoder historically escaped the plateau at,
+which is 1.3e-03 for both of the affected ones.
+
+  R3M-SpatialSoftmax          5.01e-04 -> 1.3e-03   (2.6x)
+    --agent.algorithm.learning-rate 0.0013 --agent.algorithm.schedule fixed \
+    --agent.algorithm.desired-kl 0.035 --agent.max-iterations 6000
+
+  NatureCnn-SpatialSoftmax    1.25e-04 -> 1.3e-03   (10.6x)
+    --agent.algorithm.learning-rate 0.0013 --agent.algorithm.schedule fixed \
+    --agent.algorithm.desired-kl 0.02 --agent.max-iterations 6000
+
+  DinoV2-SpatialSoftmax       leave alone. 0.653, escaped at 3011 on 1.71e-04.
+  CompactVit-SpatialSoftmax   leave alone. 0.559 on fixed 1.88e-04.
+
+Both retained runs escaped by iteration 2,032 at this rate and were at 0.63-0.67
+within 500 iterations of escaping, so 6,000 is a comfortable budget -- the
+retained results themselves were measured in 3,000.
+
+One caution, from the retained trajectories rather than theory: after escaping,
+the adaptive schedule *lowered* the rate to about 6e-04. A fixed 1.3e-03 cannot
+do that, so if a run escapes and then degrades, the fix is to keep 1.3e-03 only
+through the escape and drop to 6e-04 after -- but check whether it actually
+degrades before adding that complication.
+
+For the eight architectures not yet submitted, take the plateau-phase median
+from each retained run rather than the configured value. For DINOv2 the two
+agree; for R3M and the scratch encoders they differ by 2.6x to 10.6x.

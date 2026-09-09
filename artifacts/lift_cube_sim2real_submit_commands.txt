@@ -12,7 +12,20 @@ under the corrected wrist camera and nothing else:
   FOV, replacing the 87 that was its *horizontal* FOV), geom groups (0, 2) --
   the visual meshes, not the collision proxies the retained runs rendered --
   at 224x224, with the D405 housing, window, lenses and optics moved to group
-  1 so the imager no longer looks at the inside of its own body.
+  1 so the imager no longer looks at the inside of its own body (fb67b28).
+
+  Where the FOV lives, because reading the XML alone is misleading: both
+  wxai.xml and wxai_realistic.xml still carry fovy="87" on robot/cam and always
+  have. It is overridden at build time -- wxai_constants.py sets
+  fovy=_D405_CROP_VERTICAL_FOV_DEG = 54.49 on the camera spec, and
+  tasks/utils/camera.py passes that straight into CameraSensorCfg. Resolving
+  every registered task config confirms fovy=54.49 on the sensor.
+
+  Note this override is unconditional, so the twelve CollisionCam task IDs now
+  render 54.49 as well. The retained checkpoints trained at 87, where objects
+  projected 1.72x smaller, so replaying one through its own task ID no longer
+  reproduces the distribution it learned. _RETIRED_WRIST_FOV_DEG = 87.0 is kept
+  in wxai_constants.py as documentation and is referenced nowhere in the code.
 
 The hyperparameters below are NOT the rl_cfg defaults. Each of the twelve
 retained runs came out of its own Bayesian sweep (configs/sweeps/), so every

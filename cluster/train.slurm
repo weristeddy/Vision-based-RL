@@ -86,7 +86,13 @@ fi
 RUNTIME_DIR="${LOCAL_JOB_DIR:-/tmp/vbrl-${SLURM_JOB_ID:-manual}}"
 TORCHRUNX_DIR="${RUNTIME_DIR}/torchrunx"
 WARP_DIR="${RUNTIME_DIR}/warp"
-mkdir -p "${TORCHRUNX_DIR}" "${WARP_DIR}"
+# Warp compiles its CUDA kernels through NVRTC and writes a precompiled header
+# per module into $TMPDIR, which is *not* WARP_CACHE_PATH. Unset, that lands in
+# the container's /tmp and a four-rank job filled it: "error while writing PCH
+# file: No space left on device", surfacing as "CUDA kernel build failed with
+# error code 6" from mjwarp.step during Simulation init.
+TMP_DIR="${RUNTIME_DIR}/tmp"
+mkdir -p "${TORCHRUNX_DIR}" "${WARP_DIR}" "${TMP_DIR}"
 
 # Compute nodes may add a cluster CA to the host trust bundle.  The inherited
 # SSL_CERT_FILE then points outside the container, so copy that bundle into the
@@ -197,6 +203,9 @@ apptainer exec --nv \
   --env "VBRL_MODEL_ROOT=${MODEL_ROOT}" \
   --env "TORCHRUNX_LOG_DIR=${TORCHRUNX_DIR}" \
   --env "WARP_CACHE_PATH=${WARP_DIR}" \
+  --env "TMPDIR=${TMP_DIR}" \
+  --env "TMP=${TMP_DIR}" \
+  --env "TEMP=${TMP_DIR}" \
   --bind "${REPO}:${CONTAINER_REPO}" \
   --bind "${RUNTIME_DIR}:${RUNTIME_DIR}" \
   "${MODEL_BIND_ARGS[@]}" \
