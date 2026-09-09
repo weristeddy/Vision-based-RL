@@ -86,7 +86,7 @@ expected = {
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
+    "Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
     "Mjlab-PushT-SlowGoal-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
     "Mjlab-PushT-Balanced-NatureCnn-FlattenRelu-TrossenRealistic",
     "Mjlab-PushT-VisualGoal-NatureCnn-Flatten-TrossenRealistic",

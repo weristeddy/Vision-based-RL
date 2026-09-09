@@ -27,15 +27,22 @@ TABLE_LIGHT_NAME = "sun"
 FILL_LIGHT_NAME = "sim2sim_fill"
 TABLE_VISUAL_MESH_NAME = "table_top_visual_mesh"
 
-# 1.0 x 1.0 m, matching the plywood the real rig is built on. Was
-# (0.45, 0.35): 300 mm narrower in y, which is why the sim table's side edges
-# cut into the tilted camera's view well before the real table's do.
+# 1.015 m along the robot's reach by 0.975 m across, measured off the real
+# tabletop. Was 1.0 x 1.0, and (0.45, 0.35) before that -- the early table was
+# 300 mm narrower in y, which is why the sim's side edges cut into the tilted
+# camera's view well before the real ones do.
 #
-# push_t's out-of-bounds termination reads these too, so the boundary moves --
-# outwards only. Object and goal sampling stay far inside it, so this can
-# retire a termination that would have fired but cannot introduce one.
-TABLE_HALF_EXTENTS = (0.5, 0.5, 0.02)
-TABLE_CENTER = (0.3, 0.0, -0.02)
+# The centre is not a free choice any more: the robot stands on a 190 x 80 x 5 mm
+# plate (see `mount_plate` in the robot MJCF) whose rear short edge is flush with
+# the rear edge of the table, and the arm's square base is centred on that plate.
+# So the base sits 95 mm in front of the rear edge, which fixes
+#   centre_x = -0.095 + half_extent_x
+# and is what puts the robot where it actually stands on the real rig.
+#
+# push_t's out-of-bounds termination reads these too, so the boundary moves.
+# Object and goal sampling stay far inside it on both axes.
+TABLE_HALF_EXTENTS = (0.5075, 0.4875, 0.02)
+TABLE_CENTER = (0.4125, 0.0, -0.02)
 CAMERA_POSITION_DR_RANGE_M = 0.025
 CAMERA_ROTATION_DR_RANGE_RAD = 0.03
 

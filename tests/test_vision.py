@@ -169,7 +169,9 @@ def test_afa_head_count_follows_the_published_64_wide_split() -> None:
     assert channels % config.afa_num_heads == 0, token
     assert token.endswith(f"-Afa{config.afa_num_heads}"), token
 
-  assert seen == 5
+  # Three: the frozen backbones. AFA was dropped for the two scratch encoders,
+  # whose CNN features carry no position for it to attend over.
+  assert seen == 3
 
 
 @pytest.mark.usefixtures("_fake_pretrained_backbones")

@@ -23,7 +23,7 @@
         class="collision"
         type="box"
         size="0.06 0.015 0.012"
-        pos="0 -0.0225 0"
+        pos="0 -0.02571428571 0"
         mass="0.0987428571428571"
         group="5"
         rgba="0 0 0 0"
@@ -33,7 +33,7 @@
         class="collision"
         type="box"
         size="0.015 0.045 0.012"
-        pos="0 0.0375 0"
+        pos="0 0.03428571429 0"
         mass="0.0740571428571429"
         group="5"
         rgba="0 0 0 0"
@@ -43,7 +43,7 @@
         class="visual"
         type="box"
         size="0.06 0.015 0.012"
-        pos="0 -0.0225 0"
+        pos="0 -0.02571428571 0"
         material="push_t_red"
       />
       <geom
@@ -51,7 +51,7 @@
         class="visual"
         type="box"
         size="0.015 0.045 0.012"
-        pos="0 0.0375 0"
+        pos="0 0.03428571429 0"
         material="push_t_red"
       />
     </body>

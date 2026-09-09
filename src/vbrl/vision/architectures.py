@@ -2,7 +2,7 @@
 
 One row here is one encoder + adapter pairing. Crossing this table with a task
 is what produces registered IDs like
-``Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic``, so adding
+``Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic``, so adding
 a row makes that architecture available to every task that crosses it.
 
 Free of torch and MJLab imports: task ``rl_cfg`` modules import this at module
@@ -57,12 +57,8 @@ ARCHITECTURES: dict[str, VisionConfig] = {
   # "no adapter" means for a trainable trunk. Grid sizes are each encoder's own.
   "NatureCnn-Flatten": vision_cfg("nature_cnn", "flatten", target_grid_size=24),
   "NatureCnn-SpatialSoftmax": vision_cfg("nature_cnn", "spatial_softmax"),
-  "NatureCnn-Afa1": vision_cfg("nature_cnn", "afa", afa_num_heads=64 // AFA_HEAD_DIM),
   "CompactVit-Flatten": vision_cfg("compact_vit", "flatten", target_grid_size=14),
   "CompactVit-SpatialSoftmax": vision_cfg("compact_vit", "spatial_softmax"),
-  "CompactVit-Afa2": vision_cfg(
-    "compact_vit", "afa", afa_num_heads=128 // AFA_HEAD_DIM
-  ),
   # ManiSkill3's exact head for the two trainable trunks: the same projection
   # as `-Flatten`, rectified rather than layer-normed. Only the scratch encoders
   # get it -- a ReLU on a coordinate or attention readout would clip half its
@@ -138,7 +134,12 @@ ARCHITECTURES: dict[str, VisionConfig] = {
 # all. Dropping it would not remove that matrix, only move it into the policy
 # MLP's first layer -- so it is a baseline for the pooling heads, not a
 # violation of the rule above.
-CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:19]
+# The 17 rows above the superseded block. AFA is absent for the two scratch
+# encoders on purpose: it is permutation-invariant over position-free CNN
+# features, it scored the predict-the-mean baseline, and the only task IDs that
+# ever crossed those two rows were deleted with the external camera pose they
+# were shot on. It stays for the frozen backbones, whose tokens carry position.
+CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:17]
 
 
 def list_architectures() -> tuple[str, ...]:

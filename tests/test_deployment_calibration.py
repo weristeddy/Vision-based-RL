@@ -8,15 +8,11 @@ import pytest
 pytest.importorskip("mjlab")
 cv2 = pytest.importorskip("cv2")
 
+from vbrl.deployment import charuco  # noqa: E402
 from vbrl.deployment.calibration import (  # noqa: E402
   CV_TO_MUJOCO,
-  board_points,
-  camera_matrix,
-  d405_intrinsics,
-  flip_board_180,
   look_direction,
   mjcf_camera,
-  solve_board_pose,
   transform,
   wrist_camera_at_home,
 )
@@ -38,7 +34,7 @@ def test_the_mujoco_conversion_reproduces_the_xml() -> None:
   data = mujoco.MjData(model)
   mujoco.mj_kinematics(model, data)
   mujoco.mj_camlight(model, data)
-  index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "external_tilted_cam")
+  index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "external_cam")
 
   in_mujoco = transform(data.cam_xmat[index].reshape(3, 3), data.cam_xpos[index])
   in_opencv = in_mujoco @ transform(CV_TO_MUJOCO, np.zeros(3))
@@ -56,49 +52,130 @@ def test_the_mujoco_conversion_reproduces_the_xml() -> None:
   assert look_direction(in_opencv)[2] < 0.0
 
 
-def test_the_flip_is_its_own_inverse_and_keeps_the_board_in_place() -> None:
-  pose = transform(np.eye(3), np.array([0.1, -0.2, 0.6]))
-  once = flip_board_180(pose, 9, 6, 0.024)
-  twice = flip_board_180(once, 9, 6, 0.024)
-  np.testing.assert_allclose(twice, pose, atol=1e-12)
-  # The board's centre is the fixed point of a half turn about its centre.
-  centre = np.array([(9 - 1) * 0.024 / 2, (6 - 1) * 0.024 / 2, 0.0, 1.0])
-  np.testing.assert_allclose((pose @ centre)[:3], (once @ centre)[:3], atol=1e-12)
+def test_the_robot_xmls_carry_the_measured_factory_optics() -> None:
+  """Two cameras per robot, each with its own measured vertical field of view.
+
+  Both units are D405s but they are not interchangeable: the wrist crop spans
+  54.489 degrees and the external one 54.284, from each unit's own factory
+  intrinsics (`python -m vbrl.deployment.intrinsics`) reduced to the 224x224
+  centre crop the policy is fed. Nothing in Python overrides these any more --
+  `CameraSensorCfg.fovy` is left None -- so the MJCF is the only place they
+  live, and a silent edit here would change every observation the policy sees.
+  """
+  import mujoco
+
+  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_REALISTIC_XML, WXAI_XML
+
+  expected = {"cam": 54.489, "external_cam": 54.284}
+  for path in (WXAI_XML, WXAI_REALISTIC_XML):
+    model = mujoco.MjModel.from_xml_path(str(path))
+    names = {
+      mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_CAMERA, i): i
+      for i in range(model.ncam)
+    }
+    assert names.keys() == expected.keys(), f"{path.name} declares {sorted(names)}"
+    for name, fovy in expected.items():
+      assert model.cam_fovy[names[name]] == pytest.approx(fovy), (path.name, name)
 
 
-def test_the_intrinsics_scale_without_changing_the_field_of_view() -> None:
-  small, large = d405_intrinsics(424, 240), d405_intrinsics(848, 480)
-  assert large["fx"] == pytest.approx(2 * small["fx"])
-  assert (large["cx"], large["cy"]) == (424.0, 240.0)
-  fov = lambda k, px: 2 * np.degrees(np.arctan(px / (2 * k)))  # noqa: E731
-  assert fov(small["fy"], 240) == pytest.approx(fov(large["fy"], 480), abs=1e-9)
-  # The 224 centre crop the policy is fed, which is what the sim renders.
-  assert fov(small["fy"], 224) == pytest.approx(54.49, abs=0.01)
+def _render_board(rvec, tvec, camera_matrix, size=(640, 480), px=60):
+  """The real board, projected from a known pose onto a synthetic image.
 
+  ``generateImage`` with no margin spans exactly ``SQUARES * SQUARE_M``, so the
+  image's four corners map to known board coordinates and the homography that
+  takes them to their projections is exact. Guessing a margin's scale instead
+  costs about 6 mm of pose error and would be mistaken for detector error.
+  """
+  board = charuco.make_board()
+  columns, rows = charuco.SQUARES
+  image = board.generateImage((columns * px, rows * px), marginSize=0)
+  width_m, height_m = columns * charuco.SQUARE_M, rows * charuco.SQUARE_M
 
-def test_the_board_grid_matches_the_printed_square_size() -> None:
-  points = board_points(9, 6, 0.024)
-  assert points.shape == (54, 3)
-  assert np.all(points[:, 2] == 0.0)
-  assert np.linalg.norm(points[1] - points[0]) == pytest.approx(0.024)
-
-
-def test_a_synthetic_board_pose_is_recovered() -> None:
-  """Project a board from a known pose, then solve for it and compare."""
-  intrinsics = d405_intrinsics(848, 480)
-  rotation, _ = cv2.Rodrigues(np.array([0.35, -0.2, 0.1]))
-  truth = transform(rotation, np.array([0.03, -0.02, 0.55]))
-
-  objects = board_points(9, 6, 0.024)
-  rvec, _ = cv2.Rodrigues(truth[:3, :3])
+  object_corners = np.float32(
+    [[0, 0, 0], [width_m, 0, 0], [width_m, height_m, 0], [0, height_m, 0]]
+  )
   projected, _ = cv2.projectPoints(
-    objects, rvec, truth[:3, 3], camera_matrix(intrinsics), None
+    object_corners, rvec, tvec, camera_matrix, np.zeros(5)
   )
-  recovered, error = solve_board_pose(
-    projected.astype(np.float32), 9, 6, 0.024, intrinsics
+  source = np.float32(
+    [
+      [0, 0],
+      [image.shape[1], 0],
+      [image.shape[1], image.shape[0]],
+      [0, image.shape[0]],
+    ]
   )
-  assert error < 1e-3, "a noiseless projection must reproject exactly"
-  np.testing.assert_allclose(recovered, truth, atol=1e-6)
+  homography = cv2.getPerspectiveTransform(
+    source, projected.reshape(-1, 2).astype(np.float32)
+  )
+  return cv2.warpPerspective(
+    cv2.cvtColor(image, cv2.COLOR_GRAY2RGB),
+    homography,
+    size,
+    borderValue=(255, 255, 255),
+  )
+
+
+@pytest.mark.parametrize(
+  ("rvec", "tvec"),
+  [
+    ((0.0, 0.0, 0.0), (0.0, 0.0, 0.90)),
+    ((0.25, -0.18, 0.06), (0.02, -0.01, 0.80)),
+    ((-0.40, 0.30, -0.10), (-0.03, 0.02, 0.70)),
+  ],
+)
+def test_a_synthetic_charuco_pose_is_recovered(rvec, tvec) -> None:
+  """The board model plus the solve, round-tripped against a known pose.
+
+  This is the end-to-end guard on ``SQUARES``, ``SQUARE_M``, ``MARKER_M`` and
+  ``LEGACY_PATTERN``. Every one of them was identified by fitting rather than
+  read off the board, and getting the layout wrong is silent: the markers still
+  decode, and only the interpolated corner count collapses. Here a wrong model
+  cannot interpolate the corners it needs and the pose does not come back.
+  """
+  rvec = np.array(rvec, dtype=np.float64).reshape(3, 1)
+  tvec = np.array(tvec, dtype=np.float64).reshape(3, 1)
+  camera_matrix = np.array([[600.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]])
+
+  detection = charuco.detect_dictionary(_render_board(rvec, tvec, camera_matrix))
+  assert detection["n_corners"] >= charuco.MIN_CORNERS
+
+  pose = charuco.board_pose(detection, camera_matrix, np.zeros(5))
+  assert pose["rms_px"] < 1.0
+
+  truth, _ = cv2.Rodrigues(rvec)
+  assert np.linalg.norm(pose["pose"][:3, 3] - tvec.ravel()) < 0.003
+  relative = truth.T @ pose["pose"][:3, :3]
+  angle = np.degrees(np.arccos(np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0)))
+  assert angle < 1.0
+
+
+def test_the_board_model_is_the_one_that_was_fitted() -> None:
+  """A modern-layout board of the same size interpolates nothing.
+
+  Recorded because it is the failure that cost the most: with
+  ``LEGACY_PATTERN`` off, the markers decode identically and the corner count
+  goes to zero, which looks like a bad photograph rather than a wrong model.
+  """
+  camera_matrix = np.array([[600.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]])
+  scene = _render_board(
+    np.zeros((3, 1)), np.array([[0.0], [0.0], [0.9]]), camera_matrix
+  )
+
+  board = cv2.aruco.CharucoBoard(
+    charuco.SQUARES,
+    charuco.SQUARE_M,
+    charuco.MARKER_M,
+    cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
+  )
+  board.setLegacyPattern(False)
+  corners, ids, _, marker_ids = cv2.aruco.CharucoDetector(board).detectBoard(
+    cv2.cvtColor(scene, cv2.COLOR_RGB2GRAY)
+  )
+  assert marker_ids is not None and len(marker_ids) > 0, "markers still decode"
+  assert ids is None or len(ids) < charuco.MIN_CORNERS, (
+    "the wrong layout must not interpolate a usable corner set"
+  )
 
 
 def test_the_wrist_camera_sits_where_the_arm_puts_it() -> None:

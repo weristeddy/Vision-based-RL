@@ -100,11 +100,13 @@ def trossen_realistic_push_t_rgb_env_cfg(
 ) -> ManagerBasedRlEnvCfg:
   """One RGB Push-T environment.
 
-  ``camera`` names a camera the robot declares. ``external`` is the calibrated
-  D435 pose and the default. ``external_front`` is the near-overhead pose the
-  earlier generations used; ``external_tilted`` is that pose tilted back to 45
-  degrees, which keeps 79% of the object's silhouette visible while the gripper
-  is on it instead of 37%, and is what the current generation uses.
+  ``camera`` names a camera the robot declares, and ``external`` is the only
+  external one left. It is the 45-degree tilted pose, measured against the
+  ChArUco board on 2026-09-09: it keeps 79% of the object's silhouette visible
+  while the gripper is on it, against 37% for the near-overhead pose the earlier
+  generations used. Those two retired poses (``external_front``, and the old
+  near-overhead ``external``) were deleted along with the task IDs that named
+  them, because a pose that is no longer in the MJCF cannot be replayed.
 
   ``success_threshold`` is 0.98 for the retained generations. The curriculum
   generation uses ManiSkill3's 0.90, which also restores the sparse at-goal

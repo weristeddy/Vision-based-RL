@@ -46,10 +46,8 @@ COLLISION_CAM_ARCHITECTURES = tuple(
 CURRENT_ARCHITECTURES = (
   "NatureCnn-Flatten",
   "NatureCnn-SpatialSoftmax",
-  "NatureCnn-Afa1",
   "CompactVit-Flatten",
   "CompactVit-SpatialSoftmax",
-  "CompactVit-Afa2",
   "DinoV2ViTS14-Linear",
   "DinoV2ViTS14-LocalGrid16",
   "DinoV2ViTS14-SpatialSoftmax",
@@ -59,14 +57,12 @@ CURRENT_ARCHITECTURES = (
   "R3MResNet50-SpatialSoftmax",
   "R3MResNet50-Afa32",
 )
-# R3M tapped one stage earlier. Added after the FrontCam generation had already
-# trained, so only the Curriculum arm crosses these.
+# R3M tapped one stage earlier. Crossed by SlowGoal onwards; the Curriculum arm
+# that introduced them was deleted with the external camera pose it was shot on.
 # AFA is dropped for the scratch encoders from SlowGoal on: it is
 # permutation-invariant over position-free CNN features and scored the
 # predict-the-mean baseline. It stays for the frozen backbones.
-SLOW_GOAL_ARCHITECTURES = tuple(
-  a for a in CURRENT_ARCHITECTURES if a not in ("NatureCnn-Afa1", "CompactVit-Afa2")
-)
+SLOW_GOAL_ARCHITECTURES = CURRENT_ARCHITECTURES
 LAYER3_ARCHITECTURES = (
   "R3MResNet50L3-LocalGrid14",
   "R3MResNet50L3-SpatialSoftmax",
@@ -92,19 +88,6 @@ EXPECTED_TASK_IDS = frozenset(
       for arch in COLLISION_CAM_ARCHITECTURES
     ),
     *(f"Mjlab-LiftCube-RealTexture-{arch}-Trossen" for arch in POOLED_ARCHITECTURES),
-    *(
-      f"Mjlab-PushT-{variant}-{arch}-TrossenRealistic"
-      for variant in ("RealTexture", "Default")
-      for arch in POOLED_ARCHITECTURES
-    ),
-    *(
-      f"Mjlab-PushT-{variant}-{arch}-TrossenRealistic"
-      for variant in ("FrontCam", "Curriculum")
-      for arch in CURRENT_ARCHITECTURES
-    ),
-    *(
-      f"Mjlab-PushT-Curriculum-{arch}-TrossenRealistic" for arch in LAYER3_ARCHITECTURES
-    ),
     *(
       f"Mjlab-PushT-SlowGoal-{arch}-TrossenRealistic"
       for arch in SLOW_GOAL_ARCHITECTURES + LAYER3_ARCHITECTURES
@@ -160,11 +143,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_273_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_218_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 273
+  assert len(EXPECTED_TASK_IDS) == 218
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -197,49 +180,44 @@ def test_rl_def_asserts_task_ids_that_actually_exist() -> None:
   assert not missing, f"rl.def's %test requires unregistered task IDs: {missing}"
 
 
-def test_the_candidate_camera_reaches_only_the_arms_evaluating_it() -> None:
-  """Each non-default camera reaches only the generations that use it.
+def test_every_visual_task_sees_the_one_external_camera() -> None:
+  """There is exactly one external camera, and it is named ``external_cam``.
 
-  ``external`` is still the MJCF default. ``external_front`` belongs to the two
-  generations that evaluated it, and ``external_tilted`` -- which keeps twice as
-  much of the object visible during contact -- to the current one. Promoting one
-  means moving its pose onto ``external``, not spreading a third name through the
-  registry.
+  The registry used to carry three -- ``external_cam`` (near-overhead),
+  ``external_front_cam`` (a second near-overhead pose) and
+  ``external_tilted_cam`` (tilted back to 45 degrees) -- and a test here mapped
+  each name onto the generations that evaluated it. Only the tilted pose
+  survived the 2026-09-09 recalibration; it now *is* ``external_cam``, and the
+  other two names are gone from both MJCFs along with the task IDs that
+  selected them. So the property left to pin is that no task reintroduces a
+  second external name, which is what would silently split the registry across
+  two camera poses again.
   """
   from mjlab.tasks.registry import load_env_cfg
 
   from vbrl.tasks import vbrl_task_ids
 
-  candidate_arms = ("-FrontCam-", "-Curriculum-")
-  tilted_arms = (
-    "-SlowGoal-",
-    "-Uniform-",
-    "-UniformQuad-",
-    "-Balanced-",
-    "-VisualGoal-",
-    "-SlowFree-",
-    "-VisualFree-",
-    "-VisualGrow-",
-    "-VisualSlow-",
-    "-FreeStart-",
-    "-NearGoal-",
-    "-GrowStart-",
-  )
+  retired = {"external_front_cam", "external_tilted_cam"}
+  seen_external = 0
   for task_id in vbrl_task_ids():
     sensors = {s.name for s in (load_env_cfg(task_id).scene.sensors or ())}
-    assert ("external_front_cam" in sensors) is any(
-      arm in task_id for arm in candidate_arms
-    ), task_id
-    assert ("external_tilted_cam" in sensors) is any(
-      arm in task_id for arm in tilted_arms
-    ), task_id
+    assert not (sensors & retired), f"{task_id} names a retired camera"
+    external = {s for s in sensors if s.startswith("external")}
+    assert external <= {"external_cam"}, f"{task_id} has {external}"
+    seen_external += bool(external)
+
+  # Only Push-T looks through it. Lift-Cube is a wrist-camera task, so its 36
+  # visual IDs declare `cam` alone -- which is why this is not simply
+  # 'every visual task'.
+  assert seen_external == 180
 
 
 def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
   """Which variants schedule the goal yaw, and which use ManiSkill's threshold.
 
-  The two are no longer the same set. `Curriculum` and `SlowGoal` schedule the
-  goal; `Uniform` and `UniformQuad` deliberately do not, but share the 0.90
+  The two are no longer the same set. `SlowGoal`, `Balanced`, `SlowFree` and
+  `VisualSlow` schedule the goal; `Uniform` and `UniformQuad` deliberately do
+  not, but share the 0.90
   threshold because they are meant to be compared against `SlowGoal`. Every
   other generation keeps the 0.98 threshold its results were measured against.
   """
@@ -261,7 +239,6 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
     arm = any(
       m in task_id
       for m in (
-        "-Curriculum-",
         "-SlowGoal-",
         "-Balanced-",
         "-SlowFree-",
@@ -288,7 +265,7 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 77
+  assert seen == 60
   # Starts fixed, ends at the full circle -- strictly harder than ManiSkill3,
   # whose goal pose stays fixed for the whole of training.
   for stages in (GOAL_YAW_CURRICULUM_STAGES, GOAL_YAW_SLOW_STAGES):
@@ -383,7 +360,7 @@ print(json.dumps(list(vbrl_task_ids())))
 def test_native_registry_returns_independent_environment_and_agent_copies() -> None:
   from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
-  task_id = "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic"
+  task_id = "Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic"
   first_env, second_env = load_env_cfg(task_id), load_env_cfg(task_id)
   first_agent, second_agent = load_rl_cfg(task_id), load_rl_cfg(task_id)
 

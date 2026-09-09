@@ -50,7 +50,7 @@ TASK_IDS = (
   "Mjlab-PushCube-State-Trossen",
   "Mjlab-PushT-State-TrossenRealistic",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-RealTexture-NatureCnn-SpatialSoftmax-TrossenRealistic",
+  "Mjlab-PushT-SlowGoal-NatureCnn-SpatialSoftmax-TrossenRealistic",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
 STATE_TASK_ID = "Mjlab-PushCube-State-Trossen"
@@ -271,7 +271,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-RealTexture-NatureCnn-SpatialSoftmax-TrossenRealistic"
+  task_id = "Mjlab-PushT-SlowGoal-NatureCnn-SpatialSoftmax-TrossenRealistic"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model

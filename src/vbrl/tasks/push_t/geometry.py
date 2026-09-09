@@ -24,16 +24,57 @@ class FootprintPart:
 HALF_HEIGHT = 0.012
 REST_HEIGHT = 0.013
 MASK_HALF_WIDTH = 0.09
-FOOTPRINT_PARTS = (
-  FootprintPart(
-    center_xy=(0.0, -0.0225),
-    half_extents_xy=(0.06, 0.015),
-  ),
-  FootprintPart(
-    center_xy=(0.0, 0.0375),
-    half_extents_xy=(0.015, 0.045),
-  ),
+
+# The T as drawn: a crossbar and a stem meeting at y = -0.0075, laid out around
+# the corner of the design rather than around any physical centre.
+_DESIGN_PARTS = (
+  FootprintPart(center_xy=(0.0, -0.0225), half_extents_xy=(0.06, 0.015)),
+  FootprintPart(center_xy=(0.0, 0.0375), half_extents_xy=(0.015, 0.045)),
 )
+
+
+def _centre_of_mass(parts: Sequence[FootprintPart]) -> tuple[float, float]:
+  """Area centroid of the parts, which is the centre of mass at one density.
+
+  The slab is a single thickness and push_t.xml gives each box a mass in
+  proportion to its area, so area centroid and centre of mass coincide. That is
+  ManiSkill3's own choice -- it sets one total mass on the builder and lets the
+  engine spread it over the collision geometry -- so matching it means keeping
+  the density uniform, not equalising the two boxes.
+  """
+  weights = [4.0 * p.half_extents_xy[0] * p.half_extents_xy[1] for p in parts]
+  total = sum(weights)
+  return tuple(
+    sum(w * p.center_xy[axis] for w, p in zip(weights, parts, strict=True)) / total
+    for axis in (0, 1)
+  )  # type: ignore[return-value]
+
+
+# Origin on the centre of mass, as ManiSkill3 does it ("we have to center tee at
+# its com so rotations are applied to com"). Computed rather than typed so the
+# invariant cannot drift, and so push_t.xml has one place to agree with.
+#
+# Why it matters: the dense reward measures `root_link_pos_w`, which MuJoCo fills
+# from `data.xpos` -- the body frame origin, not `xipos`. With the origin off the
+# centre of mass by 3.21 mm, the point the reward watched orbited the mass centre
+# as the T turned, so a pure rotation in place moved the *position* term: 6.42 mm
+# of apparent displacement for half a turn, costing 0.063 of the position factor
+# right where that factor is steepest. Re-centring removes the coupling and makes
+# `xpos` the centre of mass, so the reward needs no change to match ManiSkill.
+CENTRE_OF_MASS_OFFSET = _centre_of_mass(_DESIGN_PARTS)
+FOOTPRINT_PARTS = tuple(
+  FootprintPart(
+    center_xy=(
+      part.center_xy[0] - CENTRE_OF_MASS_OFFSET[0],
+      part.center_xy[1] - CENTRE_OF_MASS_OFFSET[1],
+    ),
+    half_extents_xy=part.half_extents_xy,
+  )
+  for part in _DESIGN_PARTS
+)
+assert _centre_of_mass(FOOTPRINT_PARTS) == (0.0, 0.0) or all(
+  abs(v) < 1e-15 for v in _centre_of_mass(FOOTPRINT_PARTS)
+), "FOOTPRINT_PARTS must be centred on the centre of mass."
 
 
 def _part_tensors(

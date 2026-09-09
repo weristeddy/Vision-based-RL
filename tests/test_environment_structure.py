@@ -181,10 +181,13 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   camera = _camera(rgb, "external_cam")
   assert camera.camera_name == "robot/external_cam"
   assert camera.enabled_geom_groups == (0, 2)
-  # Every view now renders the D405's measured optics: a 224x224 centre crop of
-  # its 424x240 colour stream spans 54.49 degrees (fy = 217.5 px). Was 42.5, a
-  # D435's vertical FOV, while the hardware is a D405.
-  assert camera.fovy == 54.49
+  # `fovy` is None on purpose, and that is the contract: mjlab's
+  # `CameraSensorCfg` only overrides the MJCF when this field is set, so leaving
+  # it unset hands the field of view to the `<camera>` element, which carries
+  # each unit's own factory optics. There used to be a computed override here
+  # instead, which meant one number stood for two physically different cameras.
+  # `test_the_robot_xmls_carry_the_measured_factory_optics` pins the values.
+  assert camera.fovy is None
   assert (camera.width, camera.height) == (224, 224)
   assert rgb.viewer.geom_group == (1, 1, 1, 0, 0, 0)
 
@@ -257,7 +260,7 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
     (
-      "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic"
+      "Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic"
     ),
   ):
     train = load_env_cfg(task_id)

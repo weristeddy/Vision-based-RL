@@ -1,0 +1,274 @@
+[
+  {
+    "name": "RealSense D405",
+    "serial": "260322270027",
+    "firmware": "5.15.1.55",
+    "modes": {
+      "424x240": {
+        "native": {
+          "width": 424.0,
+          "height": 240.0,
+          "fx": 219.0181,
+          "fy": 218.4701,
+          "cx": 209.3634,
+          "cy": 123.1169
+        },
+        "distortion": {
+          "model": "inverse_brown_conrady",
+          "coeffs": [
+            -0.05302846,
+            0.05663531,
+            -8.284e-05,
+            -0.00046701,
+            -0.01887411
+          ]
+        },
+        "fov_deg": [
+          88.134,
+          57.558
+        ],
+        "crop_224": {
+          "width": 224.0,
+          "height": 224.0,
+          "fx": 219.0181,
+          "fy": 218.4701,
+          "cx": 109.36340000000001,
+          "cy": 115.1169
+        },
+        "crop_224_fov_deg": [
+          54.168,
+          54.284
+        ],
+        "fps": 5,
+        "frame": "artifacts/deployment/intrinsics/260322270027_424x240.png",
+        "exposure": {
+          "auto_exposure": false,
+          "exposure_us": 5490.375,
+          "saturated_fraction": 0.0
+        }
+      },
+      "848x480": {
+        "native": {
+          "width": 848.0,
+          "height": 480.0,
+          "fx": 438.0361,
+          "fy": 436.9402,
+          "cx": 418.7269,
+          "cy": 246.2337
+        },
+        "distortion": {
+          "model": "inverse_brown_conrady",
+          "coeffs": [
+            -0.05302846,
+            0.05663531,
+            -8.284e-05,
+            -0.00046701,
+            -0.01887411
+          ]
+        },
+        "fov_deg": [
+          88.134,
+          57.558
+        ],
+        "crop_224": {
+          "width": 224.0,
+          "height": 224.0,
+          "fx": 438.0361,
+          "fy": 436.9402,
+          "cx": 106.7269,
+          "cy": 118.2337
+        },
+        "crop_224_fov_deg": [
+          28.685,
+          28.754
+        ],
+        "fps": 5,
+        "frame": "artifacts/deployment/intrinsics/260322270027_848x480.png",
+        "exposure": {
+          "auto_exposure": true,
+          "exposure_us": 5490.0,
+          "saturated_fraction": 0.0
+        }
+      },
+      "1280x720": {
+        "native": {
+          "width": 1280.0,
+          "height": 720.0,
+          "fx": 657.0542,
+          "fy": 655.4102,
+          "cx": 632.0903,
+          "cy": 369.3506
+        },
+        "distortion": {
+          "model": "inverse_brown_conrady",
+          "coeffs": [
+            -0.05302846,
+            0.05663531,
+            -8.284e-05,
+            -0.00046701,
+            -0.01887411
+          ]
+        },
+        "fov_deg": [
+          88.493,
+          57.558
+        ],
+        "crop_224": {
+          "width": 224.0,
+          "height": 224.0,
+          "fx": 657.0542,
+          "fy": 655.4102,
+          "cx": 104.09029999999996,
+          "cy": 121.35059999999999
+        },
+        "crop_224_fov_deg": [
+          19.347,
+          19.395
+        ],
+        "fps": 5,
+        "frame": "artifacts/deployment/intrinsics/260322270027_1280x720.png",
+        "exposure": {
+          "auto_exposure": true,
+          "exposure_us": 5490.0,
+          "saturated_fraction": 0.0
+        }
+      }
+    }
+  },
+  {
+    "name": "RealSense D405",
+    "serial": "412622271761",
+    "firmware": "5.13.0.55",
+    "modes": {
+      "424x240": {
+        "native": {
+          "width": 424.0,
+          "height": 240.0,
+          "fx": 217.6715,
+          "fy": 217.5138,
+          "cx": 208.0442,
+          "cy": 120.4303
+        },
+        "distortion": {
+          "model": "inverse_brown_conrady",
+          "coeffs": [
+            -0.04992713,
+            0.05434321,
+            0.0005691,
+            -4.796e-05,
+            -0.01727158
+          ]
+        },
+        "fov_deg": [
+          88.488,
+          57.77
+        ],
+        "crop_224": {
+          "width": 224.0,
+          "height": 224.0,
+          "fx": 217.6715,
+          "fy": 217.5138,
+          "cx": 108.04419999999999,
+          "cy": 112.4303
+        },
+        "crop_224_fov_deg": [
+          54.455,
+          54.489
+        ],
+        "fps": 5,
+        "frame": "artifacts/deployment/intrinsics/412622271761_424x240.png",
+        "exposure": {
+          "auto_exposure": true,
+          "exposure_us": 33000.0,
+          "saturated_fraction": 0.0
+        }
+      },
+      "848x480": {
+        "native": {
+          "width": 848.0,
+          "height": 480.0,
+          "fx": 435.3431,
+          "fy": 435.0276,
+          "cx": 416.0884,
+          "cy": 240.8606
+        },
+        "distortion": {
+          "model": "inverse_brown_conrady",
+          "coeffs": [
+            -0.04992713,
+            0.05434321,
+            0.0005691,
+            -4.796e-05,
+            -0.01727158
+          ]
+        },
+        "fov_deg": [
+          88.488,
+          57.77
+        ],
+        "crop_224": {
+          "width": 224.0,
+          "height": 224.0,
+          "fx": 435.3431,
+          "fy": 435.0276,
+          "cx": 104.08839999999998,
+          "cy": 112.8606
+        },
+        "crop_224_fov_deg": [
+          28.855,
+          28.875
+        ],
+        "fps": 5,
+        "frame": "artifacts/deployment/intrinsics/412622271761_848x480.png",
+        "exposure": {
+          "auto_exposure": true,
+          "exposure_us": 33000.0,
+          "saturated_fraction": 0.0
+        }
+      },
+      "1280x720": {
+        "native": {
+          "width": 1280.0,
+          "height": 720.0,
+          "fx": 653.0146,
+          "fy": 652.5414,
+          "cx": 628.1327,
+          "cy": 361.2909
+        },
+        "distortion": {
+          "model": "inverse_brown_conrady",
+          "coeffs": [
+            -0.04992713,
+            0.05434321,
+            0.0005691,
+            -4.796e-05,
+            -0.01727158
+          ]
+        },
+        "fov_deg": [
+          88.847,
+          57.77
+        ],
+        "crop_224": {
+          "width": 224.0,
+          "height": 224.0,
+          "fx": 653.0146,
+          "fy": 652.5414,
+          "cx": 100.1327,
+          "cy": 113.29090000000002
+        },
+        "crop_224_fov_deg": [
+          19.464,
+          19.478
+        ],
+        "fps": 5,
+        "frame": "artifacts/deployment/intrinsics/412622271761_1280x720.png",
+        "exposure": {
+          "auto_exposure": true,
+          "exposure_us": 33000.0,
+          "saturated_fraction": 0.0016
+        }
+      }
+    }
+  }
+]

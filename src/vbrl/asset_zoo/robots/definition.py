@@ -12,7 +12,7 @@ from typing import Any, Literal
 ArticulationFactory = Callable[[bool], Any]
 CollisionFactory = Callable[[], tuple[Any, ...]]
 CameraGeometry = Literal["collision", "visual"]
-CameraView = Literal["wrist", "external", "external_front", "external_tilted"]
+CameraView = Literal["wrist", "external"]
 
 DEFAULT_CAMERA_VIEW: CameraView = "wrist"
 

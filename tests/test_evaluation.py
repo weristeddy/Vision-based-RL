@@ -190,10 +190,6 @@ def test_committed_thesis_evaluations_pin_local_structural_references() -> None:
       "Mjlab-PushT-State-TrossenRealistic",
       "ckpts/push_t/state.pt",
     ),
-    (
-      "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
-      "ckpts/push_t/dinov2_vits14_local_grid7_real_texture_success98.pt",
-    ),
   }
 
 

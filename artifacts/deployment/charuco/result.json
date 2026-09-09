@@ -1,0 +1,245 @@
+{
+  "per_view": [
+    {
+      "image": "wrist_00.png",
+      "n_corners": 43,
+      "rms_px": 0.436,
+      "board_xyz": [
+        0.45907,
+        -0.19826,
+        0.00129
+      ],
+      "camera_distance_m": 0.4058
+    },
+    {
+      "image": "wrist_01.png",
+      "n_corners": 40,
+      "rms_px": 0.4627,
+      "board_xyz": [
+        0.45828,
+        -0.19822,
+        0.00055
+      ],
+      "camera_distance_m": 0.4253
+    },
+    {
+      "image": "wrist_02.png",
+      "n_corners": 39,
+      "rms_px": 0.3333,
+      "board_xyz": [
+        0.45984,
+        -0.19844,
+        0.00144
+      ],
+      "camera_distance_m": 0.3894
+    },
+    {
+      "image": "wrist_03.png",
+      "n_corners": 31,
+      "rms_px": 0.3621,
+      "board_xyz": [
+        0.45964,
+        -0.19696,
+        0.00168
+      ],
+      "camera_distance_m": 0.4098
+    },
+    {
+      "image": "wrist_04.png",
+      "n_corners": 32,
+      "rms_px": 0.3739,
+      "board_xyz": [
+        0.45977,
+        -0.19924,
+        0.00014
+      ],
+      "camera_distance_m": 0.404
+    },
+    {
+      "image": "wrist_05.png",
+      "n_corners": 42,
+      "rms_px": 0.4084,
+      "board_xyz": [
+        0.4604,
+        -0.19873,
+        0.00252
+      ],
+      "camera_distance_m": 0.3964
+    },
+    {
+      "image": "wrist_06.png",
+      "n_corners": 42,
+      "rms_px": 0.4766,
+      "board_xyz": [
+        0.45926,
+        -0.19739,
+        0.00084
+      ],
+      "camera_distance_m": 0.4145
+    },
+    {
+      "image": "wrist_07.png",
+      "n_corners": 37,
+      "rms_px": 0.4028,
+      "board_xyz": [
+        0.45932,
+        -0.19761,
+        0.00084
+      ],
+      "camera_distance_m": 0.3968
+    },
+    {
+      "image": "wrist_08.png",
+      "n_corners": 36,
+      "rms_px": 0.5028,
+      "board_xyz": [
+        0.46065,
+        -0.19897,
+        0.00252
+      ],
+      "camera_distance_m": 0.4132
+    },
+    {
+      "image": "wrist_09.png",
+      "n_corners": 41,
+      "rms_px": 0.4667,
+      "board_xyz": [
+        0.45948,
+        -0.1993,
+        0.00199
+      ],
+      "camera_distance_m": 0.4144
+    },
+    {
+      "image": "wrist_10.png",
+      "n_corners": 41,
+      "rms_px": 0.4033,
+      "board_xyz": [
+        0.45983,
+        -0.19769,
+        0.00106
+      ],
+      "camera_distance_m": 0.3988
+    },
+    {
+      "image": "wrist_11.png",
+      "n_corners": 36,
+      "rms_px": 0.4172,
+      "board_xyz": [
+        0.45877,
+        -0.19806,
+        0.00248
+      ],
+      "camera_distance_m": 0.3835
+    },
+    {
+      "image": "wrist_12.png",
+      "n_corners": 41,
+      "rms_px": 0.4183,
+      "board_xyz": [
+        0.46005,
+        -0.19916,
+        0.00079
+      ],
+      "camera_distance_m": 0.422
+    },
+    {
+      "image": "wrist_13.png",
+      "n_corners": 40,
+      "rms_px": 0.4112,
+      "board_xyz": [
+        0.45878,
+        -0.19774,
+        0.00035
+      ],
+      "camera_distance_m": 0.4115
+    },
+    {
+      "image": "wrist_14.png",
+      "n_corners": 41,
+      "rms_px": 0.4918,
+      "board_xyz": [
+        0.46062,
+        -0.19873,
+        0.00236
+      ],
+      "camera_distance_m": 0.4001
+    }
+  ],
+  "n_used": 15,
+  "board_in_base": [
+    [
+      -0.9997788555931649,
+      -0.0035833601129903444,
+      0.020721955484983495,
+      0.4595608478213124
+    ],
+    [
+      -0.003478422164330667,
+      0.9999809556972981,
+      0.005097923299168473,
+      -0.1982456334103075
+    ],
+    [
+      -0.02073982854480002,
+      0.0050247162126974,
+      -0.9997722799412444,
+      0.0013331419955432784
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "board_spread_mm": {
+    "median": 1.33,
+    "max": 1.77
+  },
+  "board_angle_spread_deg": {
+    "median": 0.1978,
+    "max": 0.4425
+  },
+  "external": {
+    "n_corners": 49,
+    "rms_px": 0.3447,
+    "distance_m": 0.6111
+  },
+  "external_tilted_cam": {
+    "pos": [
+      0.812099,
+      -0.021484,
+      0.468208
+    ],
+    "quat": [
+      0.662909,
+      0.265531,
+      0.247583,
+      0.654788
+    ],
+    "xyaxes": [
+      0.019909,
+      0.999612,
+      0.019484,
+      -0.736648,
+      0.00149,
+      0.676275
+    ]
+  },
+  "wrist_intrinsic_self_check": {
+    "n_views": 15,
+    "rms_px": 0.34949686818278847,
+    "fx": 659.6663614943024,
+    "fy": 658.093449331825,
+    "cx": 625.7058196144573,
+    "cy": 360.6550507148003,
+    "distortion": [
+      -0.052997263666505666,
+      0.0780213233854655,
+      -0.00038625111660081467,
+      5.6659060056416573e-05,
+      -0.03385568399904636
+    ]
+  }
+}

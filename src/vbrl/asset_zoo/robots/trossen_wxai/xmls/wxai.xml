@@ -33,28 +33,41 @@
 
   <worldbody>
     <body name="base_link" pos="0 0 0" gravcomp="1">
-      <!-- Fixed RealSense D435 RGB approximation. MuJoCo uses an ideal
-           pinhole model, so fovy matches the nominal 42.5-degree vertical
-           field of view. The farther pose preserves the Push-T workspace
-           coverage for the centered square 224x224 crop. -->
-      <camera name="external_cam" pos="0.739228 -0.536438 0.682704"
-              xyaxes="0.808736 0.588172 0 -0.420543 0.578247 0.698445"
-              mode="fixed" fovy="42.5"/>
-      <!-- Candidate replacement under evaluation; see wxai_realistic.xml. -->
-      <camera name="external_front_cam" pos="0.554 0 0.777"
-              xyaxes="0 1 0 -0.966153 0 0.257976"
-              mode="fixed" fovy="42.5"/>
-      <!-- The front pose tilted back to 45 degrees and brought in to 0.70 m,
-           looking at the Push-T workspace centre (0.35, 0, 0.013). Sweeping
-           elevation showed the near-overhead front pose loses 63% of the
-           object's silhouette while the gripper is on it; this loses 21%, and
-           projects a larger object than either shipped camera. -->
-      <!-- Real-rig extrinsics calibrated from the 9x6 chessboard with
-           24 mm squares, using wrist-camera FK at the deployed home pose. -->
-      <camera name="external_tilted_cam" pos="0.797637 -0.012298 0.491834"
-              quat="0.663905 0.275736 0.247716 0.649489"
-              mode="fixed" fovy="54.49"/>
+      <!-- The rig's one external camera: a RealSense D405 on a tripod, looking
+           down at the tabletop from the robot's right.
+
+           Extrinsics measured 2026-09-09 against a 40 mm ChArUco board seen by
+           both this camera and the wrist camera, the wrist pose coming from
+           forward kinematics at 15 poses around home. All 15 agreed on the
+           board to a median 1.33 mm / 0.198 deg, and placed it 1.33 mm above
+           z = 0 -- nothing in the solve knew the board lies on the table, so
+           that is a free end-to-end check on the scale.
+
+           This frame is base_link's, which is what an MJCF camera inside it
+           wants; the 5 mm mounting plate is a world-frame offset and is not
+           added here. Reproduce with:
+             python -m vbrl.deployment.capture_board --execute
+             python -m vbrl.deployment.recalibrate
+
+           fovy is this unit's own factory value for the 224 crop of the
+           deployed 424x240 stream, 54.284 deg. It is NOT shared with the wrist
+           camera: the two D405s differ by 0.6% in focal length, so each carries
+           its own number and nothing in Python overrides them. -->
+      <camera name="external_cam" pos="0.812099 -0.021484 0.468208"
+              quat="0.662909 0.265531 0.247583 0.654788"
+              mode="fixed" fovy="54.284"/>
       <inertial pos="-0.00014175 -5.228e-05 0.03175177" quat="0.503748 -0.507380 -0.494230 -0.494510" mass="0.45969858" diaginertia="0.000213926 0.000416701 0.000448963"/>
+      <!-- Mounting plate, measured off the real rig: 190 x 80 x 5 mm, the same
+           black as the arm, with the arm's square base centred on it. Its rear
+           short edge is flush with the rear edge of the table, which is what
+           fixes the robot's position on the tabletop -- see TABLE_CENTER in
+           scenes/presets.py. Sits below base_link so `home_position` lifts the
+           arm by the plate's 5 mm and the plate's underside lands on z = 0.
+           Visual only: group 2 so every camera sees it, no contact, no mass.
+           Nothing reaches back this far -- object sampling starts at x = 0.2 --
+           so collision would never be consulted. -->
+      <geom name="mount_plate" class="visual" type="box"
+            size="0.095 0.04 0.0025" pos="0 0 -0.0025"/>
       <geom name="base_visual" class="visual" mesh="base_link"/>
       <geom name="base_collision" class="collision" type="cylinder" size="0.031 0.0325" pos="0 0 0.0325" quat="1 0 0 0"/>
       <body name="link_1" pos="0 0 0.05725" gravcomp="1">
@@ -103,7 +116,7 @@
                        collision twin below was already hidden for the same reason. -->
                   <geom name="camera_visual" class="visual" group="1" type="box" size="0.0115 0.021 0.021" pos="0.0513206 0 0.0569399" quat="0.984808 0 0.173648 0"/>
                   <site name="camera_color_frame" pos="0.05864 0.009 0.05427" quat="0.9848078 0 0.1736482 0" size="0.005"/>
-                  <camera name="cam" pos="0.05864 0.009 0.05427" quat="0.5793 0.4056 -0.4056 -0.5793" mode="fixed" fovy="87"/>
+                  <camera name="cam" pos="0.05864 0.009 0.05427" quat="0.5793 0.4056 -0.4056 -0.5793" mode="fixed" fovy="54.489"/>
                   <body name="carriage_right" pos="0.0865 -0.023 0" gravcomp="1">
                     <inertial pos="0.00169015 0.00592793 0.00201817" quat="-0.370973 0.740886 -0.0847721 0.553427" mass="0.081271" diaginertia="4.29565e-05 3.87081e-05 2.21528e-05"/>
                     <joint name="right_carriage_joint" pos="0 0 0" axis="0 -1 0" type="slide" range="0 0.044" armature="0.1" frictionloss="0.1" actuatorgravcomp="true"/>

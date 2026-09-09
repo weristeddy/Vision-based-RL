@@ -102,8 +102,13 @@ def test_deployment_observation_matches_the_simulator(simulation) -> None:
 
   robot = unwrapped.scene["robot"]
   command = unwrapped.command_manager.get_term("lift_height")
-  origin = unwrapped.scene.env_origins[0].cpu().numpy()
-  goal = command.target_pos[0].cpu().numpy() - origin
+  # `Policy.goal` is in the arm's BASE frame -- the frame its forward kinematics
+  # work in -- so the goal has to be referred to the robot's own root, not to the
+  # env origin. The two coincided only while the base sat at z = 0; it now sits
+  # on the 5 mm mounting plate, and using the origin here left the deployment
+  # side reading a goal 5 mm high.
+  base = robot.data.root_link_pos_w[0].cpu().numpy()
+  goal = command.target_pos[0].cpu().numpy() - base
 
   policy = Policy(_Session(simulation), goal=tuple(goal))
   # ``actions`` is mdp.last_action, the raw policy output, which is exactly

@@ -68,7 +68,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 273
+  assert len(task_ids) == 218
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     visual = agent.actor.cnn_cfg is not None
@@ -509,6 +509,47 @@ def test_push_t_reward_exactly_matches_maniskill_normalized_dense_formula() -> N
     maniskill_dense_reward(env, "push_t_goal", "object", asset_cfg),
     torch.ones(2),
   )
+
+
+def test_push_t_object_origin_sits_on_its_centre_of_mass() -> None:
+  """ManiSkill3 centres its tee on the centre of mass so a rotation is applied
+  about it; its dense reward then measures that point through `pose.p`.
+
+  mjlab's `root_link_pos_w` reads `data.xpos`, the body frame origin, not
+  `xipos`. So this reward matches ManiSkill only while the two coincide. They
+  once differed by 3.21 mm, which made the measured point orbit the mass centre
+  as the T turned -- 6.42 mm of apparent displacement for half a turn, moving
+  the *position* term for a rotation that never translated the object. This
+  pins them together across both files: the compiled asset, and the footprint
+  the reward, the goal marker and the overlap rasteriser all share.
+  """
+  import mujoco
+
+  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
+
+  model = mujoco.MjModel.from_xml_path("src/vbrl/asset_zoo/objects/push_t.xml")
+  body = model.body("push_t")
+
+  # The compiled inertial frame sits on the body origin.
+  assert max(abs(float(v)) for v in body.ipos) < 1.0e-9
+  # Uniform density, as ManiSkill does it: one total mass over the geometry.
+  # Equalising the two boxes instead would move the centre of mass to 7.5 mm.
+  assert float(body.mass[0]) == pytest.approx(0.1728, abs=1.0e-4)
+
+  # The footprint agrees with the geoms, so neither file can be re-centred
+  # without the other.
+  for part, suffix in zip(FOOTPRINT_PARTS, ("crossbar", "stem"), strict=True):
+    for kind in ("collision", "visual"):
+      geom = model.geom(f"push_t_{suffix}_{kind}")
+      assert float(geom.pos[1]) == pytest.approx(part.center_xy[1], abs=1.0e-9)
+      assert float(geom.size[0]) == pytest.approx(part.half_extents_xy[0])
+      assert float(geom.size[1]) == pytest.approx(part.half_extents_xy[1])
+
+  # And the footprint's own area centroid is the origin, which is the invariant
+  # the reward depends on rather than a property of the compiled file.
+  areas = [4.0 * p.half_extents_xy[0] * p.half_extents_xy[1] for p in FOOTPRINT_PARTS]
+  centroid = sum(a * p.center_xy[1] for a, p in zip(areas, FOOTPRINT_PARTS, strict=True))
+  assert centroid / sum(areas) == pytest.approx(0.0, abs=1.0e-12)
 
 
 def _push_t_reward_env(target_pos, target_yaw, object_pos, object_yaw, weight=0.5):

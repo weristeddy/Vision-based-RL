@@ -25,26 +25,15 @@ from .rl_cfg import (
 )
 
 
-_REAL_TEXTURE_ENV = trossen_realistic_push_t_rgb_env_cfg(scene="real_texture")
-_REAL_TEXTURE_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
-  scene="real_texture", play=True
-)
-_DEFAULT_ENV = trossen_realistic_push_t_rgb_env_cfg(scene="default")
-_DEFAULT_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(scene="default", play=True)
-_FRONT_CAM_ENV = trossen_realistic_push_t_rgb_env_cfg(
-  scene="real_texture", camera="external_front"
-)
-_FRONT_CAM_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
-  scene="real_texture", camera="external_front", play=True
-)
+# The base every current variant is a delta from. It was `_CURRICULUM` before
+# the front camera and the three retired variants went with it: same scene,
+# same 0.90 threshold, the goal-yaw schedule that `SlowGoal` then slowed down.
 _CURRICULUM = {
   "scene": "real_texture",
-  "camera": "external_front",
+  "camera": "external",
   "success_threshold": 0.90,
   "goal_yaw_stages": GOAL_YAW_CURRICULUM_STAGES,
 }
-_CURRICULUM_ENV = trossen_realistic_push_t_rgb_env_cfg(**_CURRICULUM)
-_CURRICULUM_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_CURRICULUM, play=True)
 # `SlowGoal` is the current generation. It keeps the goal-yaw curriculum that
 # produced the best result to date and adds the two changes a one-at-a-time
 # ablation showed are safe: the tilted camera, which keeps 79% of the object's
@@ -53,7 +42,7 @@ _CURRICULUM_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_CURRICULUM, play=
 # landed within a 1.2:1 luminance ratio of its tabletop.
 _SLOW_GOAL = {
   **_CURRICULUM,
-  "camera": "external_tilted",
+  "camera": "external",
   "scene": "real_texture_red",
   "goal_yaw_stages": GOAL_YAW_SLOW_STAGES,
 }
@@ -194,7 +183,7 @@ def _uniform(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum",),
     ),
@@ -211,57 +200,17 @@ def _uniform_quad(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "quadratic_orientation"),
     ),
   )
 
 
-def _real_texture(task_id: str, architecture: str) -> None:
-  """Register one photographic-tabletop policy. ``architecture`` keys ARCHITECTURES."""
-  register_mjlab_task(
-    task_id,
-    _REAL_TEXTURE_ENV,
-    _REAL_TEXTURE_PLAY_ENV,
-    trossen_realistic_push_t_rgb_ppo_runner_cfg(
-      task_id, ARCHITECTURES[architecture], scene="real_texture"
-    ),
-  )
 
 
-def _default(task_id: str, architecture: str) -> None:
-  """Register one solid-colour-tabletop policy."""
-  register_mjlab_task(
-    task_id,
-    _DEFAULT_ENV,
-    _DEFAULT_PLAY_ENV,
-    trossen_realistic_push_t_rgb_ppo_runner_cfg(
-      task_id, ARCHITECTURES[architecture], scene="default"
-    ),
-  )
 
 
-def _curriculum(task_id: str, architecture: str) -> None:
-  """Register one goal-yaw-curriculum policy.
-
-  ``Curriculum`` names the whole configuration, as every variant token does:
-  photographic tabletop, the front camera, ManiSkill3's 0.90 success threshold,
-  and a goal yaw that starts fixed and widens to the full circle.
-  """
-  register_mjlab_task(
-    task_id,
-    _CURRICULUM_ENV,
-    _CURRICULUM_PLAY_ENV,
-    trossen_realistic_push_t_rgb_ppo_runner_cfg(
-      task_id,
-      ARCHITECTURES[architecture],
-      scene="real_texture",
-      camera="external_front_cam",
-      success_tag="success_90",
-      extra_tags=("goal_yaw_curriculum",),
-    ),
-  )
 
 
 def _slow_goal(task_id: str, architecture: str) -> None:
@@ -278,7 +227,7 @@ def _slow_goal(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("goal_yaw_curriculum", "slow_goal"),
     ),
@@ -301,7 +250,7 @@ def _free_start(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "free_start"),
     ),
@@ -324,7 +273,7 @@ def _near_goal(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "free_start", "near_goal"),
     ),
@@ -346,7 +295,7 @@ def _grow_start(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("free_start", "separation_curriculum"),
     ),
@@ -371,7 +320,7 @@ def _visual_goal(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "visual_goal"),
     ),
@@ -393,7 +342,7 @@ def _slow_goal_free(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("slow_goal_curriculum", "free_start"),
     ),
@@ -413,7 +362,7 @@ def _visual_goal_free(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "visual_goal", "free_start"),
     ),
@@ -433,7 +382,7 @@ def _visual_slow(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("goal_yaw_curriculum", "visual_goal"),
     ),
@@ -453,7 +402,7 @@ def _visual_grow(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("no_curriculum", "visual_goal", "free_start", "grow_start"),
     ),
@@ -483,7 +432,7 @@ def _balanced(task_id: str, architecture: str) -> None:
       task_id,
       ARCHITECTURES[architecture],
       scene="real_texture_red",
-      camera="external_tilted_cam",
+      camera="external_cam",
       success_tag="success_90",
       extra_tags=("goal_yaw_curriculum", "slow_goal", "balanced_state"),
       actor_class="vbrl.vision.model:BalancedVisionModel",
@@ -491,19 +440,6 @@ def _balanced(task_id: str, architecture: str) -> None:
   )
 
 
-def _front_cam(task_id: str, architecture: str) -> None:
-  """Register one photographic-tabletop policy seen from the candidate camera."""
-  register_mjlab_task(
-    task_id,
-    _FRONT_CAM_ENV,
-    _FRONT_CAM_PLAY_ENV,
-    trossen_realistic_push_t_rgb_ppo_runner_cfg(
-      task_id,
-      ARCHITECTURES[architecture],
-      scene="real_texture",
-      camera="external_front_cam",
-    ),
-  )
 
 
 # --- State: no camera, plain scene -------------------------------------------
@@ -513,247 +449,6 @@ register_mjlab_task(
   trossen_realistic_push_t_state_env_cfg(),
   trossen_realistic_push_t_state_env_cfg(play=True),
   trossen_realistic_push_t_state_ppo_runner_cfg(),
-)
-
-# --- RealTexture: 1203 photographic tabletops --------------------------------
-
-_real_texture(
-  "Mjlab-PushT-RealTexture-NatureCnn-LocalGrid7-TrossenRealistic",
-  "NatureCnn-LocalGrid7",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "NatureCnn-SpatialSoftmax",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-CompactVit-LocalGrid8-TrossenRealistic",
-  "CompactVit-LocalGrid8",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-CompactVit-SpatialSoftmax-TrossenRealistic",
-  "CompactVit-SpatialSoftmax",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-DinoV2ViTS14-Linear-TrossenRealistic",
-  "DinoV2ViTS14-Linear",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
-  "DinoV2ViTS14-LocalGrid7",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
-  "DinoV2ViTS14-SpatialSoftmax",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-DinoV2ViTS14-Afa6-TrossenRealistic",
-  "DinoV2ViTS14-Afa6",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-R3MResNet50-Linear-TrossenRealistic",
-  "R3MResNet50-Linear",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-R3MResNet50-LocalGrid7-TrossenRealistic",
-  "R3MResNet50-LocalGrid7",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-R3MResNet50-SpatialSoftmax-TrossenRealistic",
-  "R3MResNet50-SpatialSoftmax",
-)
-_real_texture(
-  "Mjlab-PushT-RealTexture-R3MResNet50-Afa32-TrossenRealistic",
-  "R3MResNet50-Afa32",
-)
-
-# --- Default: one randomized solid tabletop colour ---------------------------
-
-_default(
-  "Mjlab-PushT-Default-NatureCnn-LocalGrid7-TrossenRealistic",
-  "NatureCnn-LocalGrid7",
-)
-_default(
-  "Mjlab-PushT-Default-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "NatureCnn-SpatialSoftmax",
-)
-_default(
-  "Mjlab-PushT-Default-CompactVit-LocalGrid8-TrossenRealistic",
-  "CompactVit-LocalGrid8",
-)
-_default(
-  "Mjlab-PushT-Default-CompactVit-SpatialSoftmax-TrossenRealistic",
-  "CompactVit-SpatialSoftmax",
-)
-_default(
-  "Mjlab-PushT-Default-DinoV2ViTS14-Linear-TrossenRealistic",
-  "DinoV2ViTS14-Linear",
-)
-_default(
-  "Mjlab-PushT-Default-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
-  "DinoV2ViTS14-LocalGrid7",
-)
-_default(
-  "Mjlab-PushT-Default-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
-  "DinoV2ViTS14-SpatialSoftmax",
-)
-_default(
-  "Mjlab-PushT-Default-DinoV2ViTS14-Afa6-TrossenRealistic",
-  "DinoV2ViTS14-Afa6",
-)
-_default(
-  "Mjlab-PushT-Default-R3MResNet50-Linear-TrossenRealistic",
-  "R3MResNet50-Linear",
-)
-_default(
-  "Mjlab-PushT-Default-R3MResNet50-LocalGrid7-TrossenRealistic",
-  "R3MResNet50-LocalGrid7",
-)
-_default(
-  "Mjlab-PushT-Default-R3MResNet50-SpatialSoftmax-TrossenRealistic",
-  "R3MResNet50-SpatialSoftmax",
-)
-_default(
-  "Mjlab-PushT-Default-R3MResNet50-Afa32-TrossenRealistic",
-  "R3MResNet50-Afa32",
-)
-
-# --- FrontCam: photographic tabletop, candidate camera, native grids ---------
-#
-# The full current architecture table under the near-overhead front camera. The
-# scene is `real_texture`; the variant token names the camera because that is
-# the one thing that differs from the RealTexture arm above. Provisional: if the
-# camera proves out it becomes `external`, and these fold back into RealTexture.
-
-_front_cam(
-  "Mjlab-PushT-FrontCam-NatureCnn-Flatten-TrossenRealistic",
-  "NatureCnn-Flatten",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "NatureCnn-SpatialSoftmax",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-NatureCnn-Afa1-TrossenRealistic",
-  "NatureCnn-Afa1",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-CompactVit-Flatten-TrossenRealistic",
-  "CompactVit-Flatten",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-CompactVit-SpatialSoftmax-TrossenRealistic",
-  "CompactVit-SpatialSoftmax",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-CompactVit-Afa2-TrossenRealistic",
-  "CompactVit-Afa2",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-DinoV2ViTS14-Linear-TrossenRealistic",
-  "DinoV2ViTS14-Linear",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
-  "DinoV2ViTS14-LocalGrid16",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
-  "DinoV2ViTS14-SpatialSoftmax",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-DinoV2ViTS14-Afa6-TrossenRealistic",
-  "DinoV2ViTS14-Afa6",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-R3MResNet50-Linear-TrossenRealistic",
-  "R3MResNet50-Linear",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-R3MResNet50-LocalGrid7-TrossenRealistic",
-  "R3MResNet50-LocalGrid7",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-R3MResNet50-SpatialSoftmax-TrossenRealistic",
-  "R3MResNet50-SpatialSoftmax",
-)
-_front_cam(
-  "Mjlab-PushT-FrontCam-R3MResNet50-Afa32-TrossenRealistic",
-  "R3MResNet50-Afa32",
-)
-
-# --- Curriculum: front camera, 0.90 success, goal yaw fixed then widening ---
-#
-# The generation that tests whether the goal representation, not perception,
-# is what stalls yaw. Probes show seven of these fourteen cannot encode yaw
-# even with 150k labels; they are registered so the comparison stays complete.
-
-_curriculum(
-  "Mjlab-PushT-Curriculum-NatureCnn-Flatten-TrossenRealistic",
-  "NatureCnn-Flatten",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "NatureCnn-SpatialSoftmax",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-NatureCnn-Afa1-TrossenRealistic",
-  "NatureCnn-Afa1",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-CompactVit-Flatten-TrossenRealistic",
-  "CompactVit-Flatten",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-CompactVit-SpatialSoftmax-TrossenRealistic",
-  "CompactVit-SpatialSoftmax",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-CompactVit-Afa2-TrossenRealistic",
-  "CompactVit-Afa2",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-DinoV2ViTS14-Linear-TrossenRealistic",
-  "DinoV2ViTS14-Linear",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
-  "DinoV2ViTS14-LocalGrid16",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
-  "DinoV2ViTS14-SpatialSoftmax",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-DinoV2ViTS14-Afa6-TrossenRealistic",
-  "DinoV2ViTS14-Afa6",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50-Linear-TrossenRealistic",
-  "R3MResNet50-Linear",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50-LocalGrid7-TrossenRealistic",
-  "R3MResNet50-LocalGrid7",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50-SpatialSoftmax-TrossenRealistic",
-  "R3MResNet50-SpatialSoftmax",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50-Afa32-TrossenRealistic",
-  "R3MResNet50-Afa32",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50L3-LocalGrid14-TrossenRealistic",
-  "R3MResNet50L3-LocalGrid14",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50L3-SpatialSoftmax-TrossenRealistic",
-  "R3MResNet50L3-SpatialSoftmax",
-)
-_curriculum(
-  "Mjlab-PushT-Curriculum-R3MResNet50L3-Afa16-TrossenRealistic",
-  "R3MResNet50L3-Afa16",
 )
 
 # --- SlowGoal: the current generation -------------------------------------

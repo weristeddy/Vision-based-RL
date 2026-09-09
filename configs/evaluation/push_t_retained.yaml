@@ -1,13 +1,10 @@
 version: 1
-name: push_t_retained_state_rgb
+name: push_t_retained_state
 
 models:
   - name: push_t_state
     task_id: Mjlab-PushT-State-TrossenRealistic
     checkpoint_file: ckpts/push_t/state.pt
-  - name: push_t_dinov2_local_grid_real_texture_success98
-    task_id: Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic
-    checkpoint_file: ckpts/push_t/dinov2_vits14_local_grid7_real_texture_success98.pt
 
 scenes:
   - wood_fixed

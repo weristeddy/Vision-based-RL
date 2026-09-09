@@ -6,7 +6,7 @@ small PPO extension. Simulation, distributed launch, W&B logging, and
 checkpoint handling are MJLab and RSL-RL doing their normal jobs.
 
 **The task ID is the contract.** A registered ID such as
-`Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic` fully
+`Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic` fully
 determines the task, robot, scene, camera, encoder, adapter, and network
 architecture. It does *not* encode learning rate, seed, epochs, or iteration
 count — those are flags, and many runs share one ID.
@@ -148,7 +148,7 @@ run-specific, so many runs share one ID:
 # Same architecture, three different runs.
 vbrl-train Mjlab-PushCube-State-Trossen
 vbrl-train Mjlab-PushCube-State-Trossen --agent.seed 1 --agent.max-iterations 3000
-vbrl-train Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic \
+vbrl-train Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic \
   --agent.algorithm.learning-rate 2e-4 --env.scene.num-envs 1024 \
   --video True --gpu-ids all
 ```
@@ -415,7 +415,7 @@ architecture token keys `ARCHITECTURES`:
 ```python
 # tasks/push_t/config/trossen_realistic/__init__.py
 _real_texture(
-  "Mjlab-PushT-RealTexture-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
+  "Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
   "DinoV2ViTS14-LocalGrid7",
 )
 _default(
