@@ -956,8 +956,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
 
   from vbrl.asset_zoo.robots import get_robot
   from vbrl.tasks.push_t.push_t_env_cfg import (
-    MOTION_PENALTY_CURRICULUM_STEP,
+    MOTION_PENALTY_ONSET_STEP,
+    MOTION_PENALTY_WEIGHTS,
     VERTICAL_CONTACT_FORCE_CURRICULUM_STEP,
+    VERTICAL_CONTACT_FORCE_RAMP_STEP,
+    VERTICAL_CONTACT_FORCE_WEIGHTS,
   )
 
   cfg = _push_t()
@@ -968,8 +971,14 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 4
   assert cfg.scale_rewards_by_dt is False
-  assert set(cfg.metrics) == {"peak_table_force", "peak_object_force"}
-  assert all(term.reduce == "max" for term in cfg.metrics.values())
+  assert set(cfg.metrics) == {
+    "peak_table_force",
+    "peak_object_force",
+    "top_contact_share",
+  }
+  assert cfg.metrics["peak_table_force"].reduce == "max"
+  assert cfg.metrics["peak_object_force"].reduce == "max"
+  assert cfg.metrics["top_contact_share"].reduce == "mean"
 
   action = cfg.actions["joint_pos"]
   assert isinstance(action, RelativeJointPositionActionCfg)
@@ -1003,9 +1012,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "joint_speed_hinge",
   )
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
-  assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.001)
-  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.005)
-  assert cfg.rewards["action_acc_l2"].weight == pytest.approx(-0.001)
+  # All three action-derived penalties are off at step 0 and switched on by the
+  # curriculum: carried from the start they tax exploration noise and collapse
+  # the action std before the policy can push.
+  for name in MOTION_PENALTY_WEIGHTS:
+    assert cfg.rewards[name].weight == pytest.approx(0.0)
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.02)
   assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(0.0)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
@@ -1022,15 +1033,26 @@ def test_push_t_config_pins_the_trained_contract() -> None:
       == definition.arm_actuator_names
     )
 
+  # Top-face contact is the measured failure mode -- 78.6% of a trained
+  # policy's contacts pressed straight down -- so this is the load-bearing
+  # weight, ramped in two rungs once transport exists.
   assert VERTICAL_CONTACT_FORCE_CURRICULUM_STEP == 3200
+  assert VERTICAL_CONTACT_FORCE_WEIGHTS == (-0.25, -0.75)
   assert cfg.curriculum["vertical_contact_force_weight"].params["stages"] == [
     {"step": 0, "weight": 0.0},
-    {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.05},
+    {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.25},
+    {"step": VERTICAL_CONTACT_FORCE_RAMP_STEP, "weight": -0.75},
   ]
-  assert cfg.curriculum["action_path_length_weight"].params["stages"] == [
-    {"step": 0, "weight": -0.001},
-    {"step": MOTION_PENALTY_CURRICULUM_STEP, "weight": -0.003},
-  ]
+  assert MOTION_PENALTY_WEIGHTS == {
+    "action_path_length": -0.003,
+    "action_rate_l2": -0.005,
+    "action_acc_l2": -0.001,
+  }
+  for name, weight in MOTION_PENALTY_WEIGHTS.items():
+    assert cfg.curriculum[f"{name}_weight"].params["stages"] == [
+      {"step": 0, "weight": 0.0},
+      {"step": MOTION_PENALTY_ONSET_STEP, "weight": weight},
+    ]
 
   assert tuple(cfg.terminations) == (
     "time_out",

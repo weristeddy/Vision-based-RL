@@ -154,6 +154,27 @@ def vertical_contact_force(
   )
 
 
+def top_contact_share(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  verticality_threshold: float = 0.7,
+) -> torch.Tensor:
+  """1.0 while the gripper presses a horizontal face of the object, else 0.0.
+
+  The behaviour measure for the drag-versus-push failure: a policy that scrapes
+  the top of the T sits near 1.0 whenever it is touching, a clean side push near
+  0.0, and not touching is also 0.0. Logged as a metric rather than shaped --
+  ``vertical_contact_force`` already carries the gradient, and its weight moves
+  over training, which makes the reward channel unreadable as behaviour.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  if data.found is None or data.normal is None:
+    raise RuntimeError(f"Contact sensor {sensor_name!r} requires found and normal.")
+  vertical = data.normal[..., 2].abs() > verticality_threshold
+  return ((data.found > 0) & vertical).any(dim=-1).float()
+
+
 def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
   """Penalize total commanded travel: the L1 norm of the raw policy action.
 
@@ -397,5 +418,6 @@ __all__ = [
   "maniskill_dense_reward",
   "max_contact_force",
   "quadratic_orientation_reward",
+  "top_contact_share",
   "vertical_contact_force",
 ]

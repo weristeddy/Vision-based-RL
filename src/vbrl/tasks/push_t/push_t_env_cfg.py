@@ -32,6 +32,22 @@ _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _ACTION_DELTA = 0.1
 VERTICAL_CONTACT_FORCE_CURRICULUM_STEP = 3200
+# Second rung for the top-contact penalty, and the weights both rungs apply.
+#
+# Measured on run 8z5zwqj8's finished policy, 128 envs x 250 steps: 78.6% of its
+# contacts with the T have |normal_z| > 0.7 and the median is 0.998 -- it presses
+# almost straight down on the top face and drags the object, and the repeated
+# forward/backward correction is the symptom of that. Only 9.7% of contacts are
+# side pushes (|normal_z| < 0.3).
+#
+# The term already detects this exactly; it was simply far too weak to change
+# anything, averaging 0.0582 raw per env-step and so costing 0.0029 per step at
+# -0.05 against a task margin of ~0.28. These rungs take a policy that keeps
+# dragging to roughly 5% and then 15% of that margin, while a side push stays
+# about 10x cheaper because the term scales with the contact normal. Ramped in
+# two steps rather than one so the critic tracks the change.
+VERTICAL_CONTACT_FORCE_RAMP_STEP = 8000
+VERTICAL_CONTACT_FORCE_WEIGHTS = (-0.25, -0.75)
 
 # --- safety and motion shaping ----------------------------------------------
 #
@@ -41,11 +57,29 @@ VERTICAL_CONTACT_FORCE_CURRICULUM_STEP = 3200
 # signal worth protecting is about 0.28 per step. A clean push pays under 5% of
 # that, while thrashing, scratching and unsafe force grow steeply.
 
-# The L1 travel penalty is the one term with a genuine do-nothing incentive, so
-# it starts near zero and only bites once the policy can already push. 8,000
-# steps is 500 iterations at the registered num_steps_per_env of 16.
-MOTION_PENALTY_CURRICULUM_STEP = 8000
-ACTION_PATH_LENGTH_WEIGHTS = (-0.001, -0.003)
+# Every action-derived penalty starts at exactly zero and switches on here.
+#
+# This is measured, not cautious. For a Gaussian policy whose *mean* action
+# never changes, consecutive raw actions still differ by 2*sigma^2 per joint, so
+# `action_rate_l2` and `action_acc_l2` charge 6*2*sigma^2 and 6*6*sigma^2 for
+# pure sampling noise: 0.091 per step at the initial sigma of 0.975, a third of
+# the task margin, decaying as sigma^2. They are an anti-entropy bonus, and the
+# state actor has `entropy_coef = 0.0` and no std floor to resist it. Run
+# 8z5zwqj8 carried them from step 0 and collapsed sigma twice as fast as the
+# baseline -- 0.181 by iteration 200 against 0.297 -- so exploration died before
+# the policy could push: final overlap 0.077 against the baseline's 0.804.
+#
+# These terms exist to clean up jitter in a policy that already works, so they
+# are absent until it does. The baseline solved transport by iteration 200
+# (position error 0.012 m, overlap 0.678), and 4,800 steps is iteration 300 at
+# the registered num_steps_per_env of 16. By then sigma is low enough that the
+# switch-on is nearly free for exploration and only deliberate oscillation pays.
+MOTION_PENALTY_ONSET_STEP = 4800
+MOTION_PENALTY_WEIGHTS = {
+  "action_path_length": -0.003,
+  "action_rate_l2": -0.005,
+  "action_acc_l2": -0.001,
+}
 # Half MJLab's own 10 N "illegal contact" level for this end-effector, with the
 # normalizer chosen so 10 N costs exactly the -0.02 the retired binary
 # `illegal_contact` reward paid. 20 N then costs -0.18 per step.
@@ -267,16 +301,16 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
+    # The three action-derived penalties. All start at zero and are switched on
+    # by the curriculum below; see MOTION_PENALTY_ONSET_STEP for why.
+    #
     # Total commanded travel, which is what a forward/backward correction cycle
     # doubles. L1 so splitting one motion into many is never cheaper.
-    "action_path_length": RewardTermCfg(
-      func=mdp.action_path_length_l1,
-      weight=ACTION_PATH_LENGTH_WEIGHTS[0],
-    ),
+    "action_path_length": RewardTermCfg(func=mdp.action_path_length_l1, weight=0.0),
     # Oscillation and jitter, on the raw command. Zero for a constant action.
-    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.005),
+    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=0.0),
     # Jerky reversals specifically; weak because it correlates with the rate.
-    "action_acc_l2": RewardTermCfg(func=mdp.action_acc_l2, weight=-0.001),
+    "action_acc_l2": RewardTermCfg(func=mdp.action_acc_l2, weight=0.0),
     # Graded table force. Replaces a binary illegal_contact that paid the same
     # at 10 N as at 100 N, so nothing pushed the force back down.
     "table_contact_force": RewardTermCfg(
@@ -325,6 +359,13 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR},
     ),
+    # Fraction of the episode spent pressing a horizontal face of the T. The
+    # drag-versus-push behaviour measure; 0.134 on run 8z5zwqj8's policy.
+    "top_contact_share": MetricsTermCfg(
+      func=mdp.top_contact_share,
+      reduce="mean",
+      params={"sensor_name": _CONTACT_SENSOR},
+    ),
   }
   cfg.terminations.update(
     object_off_table=TerminationTermCfg(
@@ -344,23 +385,30 @@ def build_env_cfg(
         "reward_name": "vertical_contact_force",
         "stages": [
           {"step": 0, "weight": 0.0},
-          {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.05},
-        ],
-      },
-    ),
-    "action_path_length_weight": CurriculumTermCfg(
-      func=mdp.reward_curriculum,
-      params={
-        "reward_name": "action_path_length",
-        "stages": [
-          {"step": 0, "weight": ACTION_PATH_LENGTH_WEIGHTS[0]},
           {
-            "step": MOTION_PENALTY_CURRICULUM_STEP,
-            "weight": ACTION_PATH_LENGTH_WEIGHTS[1],
+            "step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP,
+            "weight": VERTICAL_CONTACT_FORCE_WEIGHTS[0],
+          },
+          {
+            "step": VERTICAL_CONTACT_FORCE_RAMP_STEP,
+            "weight": VERTICAL_CONTACT_FORCE_WEIGHTS[1],
           },
         ],
       },
     ),
+    **{
+      f"{name}_weight": CurriculumTermCfg(
+        func=mdp.reward_curriculum,
+        params={
+          "reward_name": name,
+          "stages": [
+            {"step": 0, "weight": 0.0},
+            {"step": MOTION_PENALTY_ONSET_STEP, "weight": weight},
+          ],
+        },
+      )
+      for name, weight in MOTION_PENALTY_WEIGHTS.items()
+    },
   }
   if separation_curriculum:
     cfg.curriculum["separation_range"] = CurriculumTermCfg(
