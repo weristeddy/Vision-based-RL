@@ -664,6 +664,45 @@ def test_push_t_keypoint_reward_ignores_the_orientation_weight() -> None:
   assert torch.allclose(scores[0], scores[1]) and torch.allclose(scores[1], scores[2])
 
 
+def test_push_t_action_path_length_is_l1_so_splitting_a_move_is_never_cheaper() -> None:
+  from vbrl.tasks.push_t.mdp import action_path_length_l1
+
+  def cost(action: list[float]) -> float:
+    env = SimpleNamespace(
+      action_manager=SimpleNamespace(action=torch.tensor([action]))
+    )
+    return float(action_path_length_l1(env)[0])
+
+  assert cost([0.0] * 6) == 0.0
+  # One decisive step costs exactly what two half steps cost: the term measures
+  # path, not speed, so a back-and-forth correction cycle pays double.
+  assert cost([1.0, 0, 0, 0, 0, 0]) == pytest.approx(2 * cost([0.5, 0, 0, 0, 0, 0]))
+  assert cost([0.5, -0.5, 0, 0, 0, 0]) == pytest.approx(1.0)
+
+
+def test_push_t_contact_force_hinge_is_zero_below_onset_then_quadratic() -> None:
+  from vbrl.tasks.push_t.mdp import contact_force_hinge, max_contact_force
+
+  def sensor(*newtons: float):
+    force = torch.tensor([[[[n, 0.0, 0.0]]] for n in newtons])  # [B, 1, 1, 3]
+    return SimpleNamespace(
+      data=SimpleNamespace(force=None, force_history=force)
+    )
+
+  env = SimpleNamespace(scene={"table": sensor(0.0, 5.0, 10.0, 20.0)})
+  assert torch.allclose(
+    max_contact_force(env, "table"), torch.tensor([0.0, 5.0, 10.0, 20.0])
+  )
+  # Zero at and below the onset; 10 N reproduces the -0.02 the retired binary
+  # illegal_contact reward paid at its own threshold, and 20 N costs 9x that.
+  assert torch.allclose(
+    contact_force_hinge(env, "table", onset=5.0, scale=5.0),
+    torch.tensor([0.0, 0.0, 1.0, 9.0]),
+  )
+  with pytest.raises(ValueError, match="onset >= 0 and scale > 0"):
+    contact_force_hinge(env, "table", onset=5.0, scale=0.0)
+
+
 def test_push_t_vertical_contact_force_penalizes_forceful_top_contact() -> None:
   from vbrl.tasks.push_t.mdp import vertical_contact_force
 
@@ -917,6 +956,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
 
   from vbrl.asset_zoo.robots import get_robot
   from vbrl.tasks.push_t.push_t_env_cfg import (
+    MOTION_PENALTY_CURRICULUM_STEP,
     VERTICAL_CONTACT_FORCE_CURRICULUM_STEP,
   )
 
@@ -928,7 +968,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 4
   assert cfg.scale_rewards_by_dt is False
-  assert cfg.metrics == {}
+  assert set(cfg.metrics) == {"peak_table_force", "peak_object_force"}
+  assert all(term.reduce == "max" for term in cfg.metrics.values())
 
   action = cfg.actions["joint_pos"]
   assert isinstance(action, RelativeJointPositionActionCfg)
@@ -949,19 +990,46 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert command.resampling_time_range == (1.0e9, 1.0e9)
   assert command.mask_resolution == 64
 
+  # The task term plus the safety regularizers, every one of them logged
+  # separately. Weights are sized against the measured ~0.28/step task margin.
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
-    "ee_table_contact",
+    "action_path_length",
+    "action_rate_l2",
+    "action_acc_l2",
+    "table_contact_force",
     "vertical_contact_force",
+    "joint_pos_limits",
+    "joint_speed_hinge",
   )
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
-  assert cfg.rewards["ee_table_contact"].weight == pytest.approx(-0.02)
+  assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.001)
+  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.005)
+  assert cfg.rewards["action_acc_l2"].weight == pytest.approx(-0.001)
+  assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.02)
   assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(0.0)
+  assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
+  assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
+
+  table_contact = cfg.rewards["table_contact_force"].params
+  assert table_contact["onset"] == pytest.approx(5.0)
+  assert table_contact["scale"] == pytest.approx(5.0)
+  assert cfg.rewards["joint_speed_hinge"].params["max_vel"] == pytest.approx(5.0)
+  # Only the arm: the gripper is held closed for the whole task.
+  for name in ("joint_pos_limits", "joint_speed_hinge"):
+    assert (
+      cfg.rewards[name].params["asset_cfg"].joint_names
+      == definition.arm_actuator_names
+    )
 
   assert VERTICAL_CONTACT_FORCE_CURRICULUM_STEP == 3200
   assert cfg.curriculum["vertical_contact_force_weight"].params["stages"] == [
     {"step": 0, "weight": 0.0},
-    {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.025},
+    {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.05},
+  ]
+  assert cfg.curriculum["action_path_length_weight"].params["stages"] == [
+    {"step": 0, "weight": -0.001},
+    {"step": MOTION_PENALTY_CURRICULUM_STEP, "weight": -0.003},
   ]
 
   assert tuple(cfg.terminations) == (

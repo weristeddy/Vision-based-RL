@@ -154,6 +154,58 @@ def vertical_contact_force(
   )
 
 
+def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """Penalize total commanded travel: the L1 norm of the raw policy action.
+
+  L1 rather than L2 because the objective is total *path*, not speed. Under L1
+  one 0.1 rad step costs exactly what two 0.05 rad steps cost, so splitting a
+  motion is never cheaper and a forward/backward correction cycle -- which
+  doubles the path -- costs double. L2 would make many tiny moves cheaper than
+  one decisive move, which is the opposite of what is wanted.
+
+  Operates on the raw policy output, as MJLab's own ``action_rate_l2`` and
+  ``action_acc_l2`` do. The action term scales every arm joint by the same
+  0.1 rad and clips the delta, so this is proportional to commanded radians.
+  """
+  return torch.sum(torch.abs(env.action_manager.action), dim=1)
+
+
+def max_contact_force(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+  """Peak contact-force magnitude on one sensor, in newtons.
+
+  Reads the substep history when the sensor keeps one, so a spike that resolves
+  inside a policy step is not missed -- the same quantity MJLab's
+  ``illegal_contact`` thresholds.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  force = data.force_history if data.force_history is not None else data.force
+  if force is None:
+    raise RuntimeError(f"Contact sensor {sensor_name!r} requires the force field.")
+  magnitude = torch.linalg.vector_norm(force, dim=-1)
+  return torch.nan_to_num(magnitude, nan=0.0).flatten(1).amax(dim=-1)
+
+
+def contact_force_hinge(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  onset: float,
+  scale: float,
+) -> torch.Tensor:
+  """Quadratic hinge on contact force: exactly zero below ``onset`` newtons.
+
+  Replaces the binary ``illegal_contact`` reward, which paid the same penalty at
+  10 N as at 100 N and nothing at all below, so it offered no gradient toward
+  gentler contact. Quadratic above the hinge -- the shape MJLab's
+  ``joint_velocity_hinge_penalty`` uses for velocity -- so a graze stays
+  negligible while a genuinely unsafe press grows fast.
+  """
+  if onset < 0.0 or scale <= 0.0:
+    raise ValueError("contact_force_hinge needs onset >= 0 and scale > 0.")
+  excess = (max_contact_force(env, sensor_name) - onset).clamp_min(0.0)
+  return (excess / scale).square()
+
+
 def linear_orientation_reward(
   env: ManagerBasedRlEnv,
   command_name: str,
@@ -338,9 +390,12 @@ def _place(
 
 __all__ = [
   "KEYPOINTS_XY",
+  "action_path_length_l1",
+  "contact_force_hinge",
   "keypoint_reward",
   "linear_orientation_reward",
   "maniskill_dense_reward",
+  "max_contact_force",
   "quadratic_orientation_reward",
   "vertical_contact_force",
 ]

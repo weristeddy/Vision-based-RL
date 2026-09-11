@@ -10,6 +10,7 @@ from mjlab.envs.mdp.actions import RelativeJointPositionActionCfg
 from mjlab.managers import (
   CurriculumTermCfg,
   EventTermCfg,
+  MetricsTermCfg,
   ObservationTermCfg,
   RewardTermCfg,
   SceneEntityCfg,
@@ -17,9 +18,10 @@ from mjlab.managers import (
 )
 from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
+from mjlab.viewer import ViewerConfig
 
 from vbrl.asset_zoo.robots.definition import RobotDefinition
-from vbrl.tasks.utils import make_tabletop_env_cfg
+from vbrl.tasks.utils import EE_GROUND_CONTACT_SENSOR, make_tabletop_env_cfg
 
 from . import mdp
 from .geometry import HALF_HEIGHT, REST_HEIGHT
@@ -30,6 +32,31 @@ _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _ACTION_DELTA = 0.1
 VERTICAL_CONTACT_FORCE_CURRICULUM_STEP = 3200
+
+# --- safety and motion shaping ----------------------------------------------
+#
+# Every term below regularizes *how* the arm moves; none of them touches the
+# task. They are sized against the measured task margin: over a 250-step
+# episode a do-nothing policy returns ~11-16 and a working one ~86, so the
+# signal worth protecting is about 0.28 per step. A clean push pays under 5% of
+# that, while thrashing, scratching and unsafe force grow steeply.
+
+# The L1 travel penalty is the one term with a genuine do-nothing incentive, so
+# it starts near zero and only bites once the policy can already push. 8,000
+# steps is 500 iterations at the registered num_steps_per_env of 16.
+MOTION_PENALTY_CURRICULUM_STEP = 8000
+ACTION_PATH_LENGTH_WEIGHTS = (-0.001, -0.003)
+# Half MJLab's own 10 N "illegal contact" level for this end-effector, with the
+# normalizer chosen so 10 N costs exactly the -0.02 the retired binary
+# `illegal_contact` reward paid. 20 N then costs -0.18 per step.
+TABLE_CONTACT_ONSET_N = 5.0
+TABLE_CONTACT_SCALE_N = 5.0
+# Measured on this task over 64 envs: sustained full-scale commands peak at
+# 3.1-4.4 rad/s, while per-step sign flips peak at 7.9-11.6. So 5 rad/s is zero
+# for any decisive motion and only jitter crosses it. Mean joint speed does not
+# separate the two (0.77 against 0.68) -- the peak does, which is why this is a
+# hinge and not `joint_vel_l2`.
+JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
 # 500 iterations and fully random for the last 1,000.
@@ -169,6 +196,8 @@ def build_env_cfg(
   )
   robot_ee = SceneEntityCfg("robot", site_names=(robot.ee_site,))
   common = {"command_name": _COMMAND, "object_name": object_name}
+  # The gripper is held closed, so the safety terms watch the arm joints only.
+  arm_joints = robot.arm_actuator_names
 
   base_terms = cfg.observations["actor"].terms
   terms = {
@@ -238,18 +267,63 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
-    "ee_table_contact": RewardTermCfg(
-      func=mdp.illegal_contact,
+    # Total commanded travel, which is what a forward/backward correction cycle
+    # doubles. L1 so splitting one motion into many is never cheaper.
+    "action_path_length": RewardTermCfg(
+      func=mdp.action_path_length_l1,
+      weight=ACTION_PATH_LENGTH_WEIGHTS[0],
+    ),
+    # Oscillation and jitter, on the raw command. Zero for a constant action.
+    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.005),
+    # Jerky reversals specifically; weak because it correlates with the rate.
+    "action_acc_l2": RewardTermCfg(func=mdp.action_acc_l2, weight=-0.001),
+    # Graded table force. Replaces a binary illegal_contact that paid the same
+    # at 10 N as at 100 N, so nothing pushed the force back down.
+    "table_contact_force": RewardTermCfg(
+      func=mdp.contact_force_hinge,
       weight=-0.02,
       params={
-        "sensor_name": "ee_ground_collision",
-        "force_threshold": 10.0,
+        "sensor_name": EE_GROUND_CONTACT_SENSOR,
+        "onset": TABLE_CONTACT_ONSET_N,
+        "scale": TABLE_CONTACT_SCALE_N,
       },
     ),
+    # Top-down contact on the T. Unchanged: |normal_z| * tanh(F/10) is already
+    # ~1 for a press and ~0 for a clean side push.
     "vertical_contact_force": RewardTermCfg(
       func=mdp.vertical_contact_force,
       weight=0.0,
       params={"sensor_name": _CONTACT_SENSOR, "force_scale": 10.0},
+    ),
+    # Joint-limit protection for the real arm. A hinge on the *soft* limits, so
+    # it is exactly zero anywhere inside them.
+    "joint_pos_limits": RewardTermCfg(
+      func=mdp.joint_pos_limits,
+      weight=-0.25,
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=arm_joints)},
+    ),
+    # Peak joint speed, hinged above anything a decisive push reaches.
+    "joint_speed_hinge": RewardTermCfg(
+      func=mdp.joint_velocity_hinge_penalty,
+      weight=-0.001,
+      params={
+        "max_vel": JOINT_SPEED_LIMIT_RAD_S,
+        "asset_cfg": SceneEntityCfg("robot", joint_names=arm_joints),
+      },
+    ),
+  }
+  # Peak forces in newtons, for judging whether this is safe on hardware.
+  # Metrics carry no weight and never enter the return.
+  cfg.metrics = {
+    "peak_table_force": MetricsTermCfg(
+      func=mdp.max_contact_force,
+      reduce="max",
+      params={"sensor_name": EE_GROUND_CONTACT_SENSOR},
+    ),
+    "peak_object_force": MetricsTermCfg(
+      func=mdp.max_contact_force,
+      reduce="max",
+      params={"sensor_name": _CONTACT_SENSOR},
     ),
   }
   cfg.terminations.update(
@@ -270,10 +344,23 @@ def build_env_cfg(
         "reward_name": "vertical_contact_force",
         "stages": [
           {"step": 0, "weight": 0.0},
-          {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.025},
+          {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.05},
         ],
       },
-    )
+    ),
+    "action_path_length_weight": CurriculumTermCfg(
+      func=mdp.reward_curriculum,
+      params={
+        "reward_name": "action_path_length",
+        "stages": [
+          {"step": 0, "weight": ACTION_PATH_LENGTH_WEIGHTS[0]},
+          {
+            "step": MOTION_PENALTY_CURRICULUM_STEP,
+            "weight": ACTION_PATH_LENGTH_WEIGHTS[1],
+          },
+        ],
+      },
+    ),
   }
   if separation_curriculum:
     cfg.curriculum["separation_range"] = CurriculumTermCfg(
@@ -352,8 +439,31 @@ def build_env_cfg(
       num_slots=1,
     ),
   )
+  # The table term bounds peak force, so the one retained contact has to be the
+  # strongest rather than an arbitrary one. Inherited from Lift-Cube as "none".
+  for sensor in cfg.scene.sensors:
+    if sensor.name == EE_GROUND_CONTACT_SENSOR:
+      sensor.reduce = "maxforce"
   cfg.episode_length_s = 5.0
   cfg.scale_rewards_by_dt = False
+  # Framing for the recorded training video and the Viser view, which share
+  # `cfg.viewer`. Lift-Cube looks along the table at -5 degrees from 1.5 m,
+  # which hides the T behind the arm and draws two neighbouring envs. Look down
+  # on the workspace from the front instead -- azimuth 180 is the +x side the
+  # robot faces -- and render the tracked env alone. Verified to show the robot,
+  # the tabletop, the red T and the goal overlay together.
+  # ASSET_ROOT rather than the robot's declared `viewer_body`: that body is the
+  # gripper, so the view swings with the arm and the goal leaves frame. The
+  # root is the fixed base, which keeps the whole workspace steady, and naming
+  # the entity rather than a body keeps this robot-agnostic.
+  cfg.viewer.origin_type = ViewerConfig.OriginType.ASSET_ROOT
+  cfg.viewer.entity_name = "robot"
+  cfg.viewer.max_extra_envs = 0
+  cfg.viewer.distance = 1.45
+  cfg.viewer.elevation = -42.0
+  cfg.viewer.azimuth = 170.0
+  cfg.viewer.width = 640
+  cfg.viewer.height = 480
 
   if rgb:
     actor = cfg.observations["actor"]
