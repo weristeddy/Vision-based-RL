@@ -956,8 +956,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
 
   from vbrl.asset_zoo.robots import get_robot
   from vbrl.tasks.push_t.push_t_env_cfg import (
-    MOTION_PENALTY_ONSET_STEP,
-    MOTION_PENALTY_WEIGHTS,
+    ACTION_PATH_LENGTH_WEIGHT,
     VERTICAL_CONTACT_FORCE_CURRICULUM_STEP,
     VERTICAL_CONTACT_FORCE_RAMP_STEP,
     VERTICAL_CONTACT_FORCE_WEIGHTS,
@@ -1004,19 +1003,17 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
     "action_path_length",
-    "action_rate_l2",
-    "action_acc_l2",
     "table_contact_force",
     "vertical_contact_force",
     "joint_pos_limits",
     "joint_speed_hinge",
   )
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
-  # All three action-derived penalties are off at step 0 and switched on by the
-  # curriculum: carried from the start they tax exploration noise and collapse
-  # the action std before the policy can push.
-  for name in MOTION_PENALTY_WEIGHTS:
-    assert cfg.rewards[name].weight == pytest.approx(0.0)
+  # L1, so its exploration tax scales as sigma and stays bounded -- no schedule.
+  # The quadratic action_rate_l2/action_acc_l2 pair was removed: scaling as
+  # sigma^2 they collapsed the action std before the policy could push.
+  assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
+  assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.02)
   assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(0.0)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
@@ -1043,16 +1040,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.25},
     {"step": VERTICAL_CONTACT_FORCE_RAMP_STEP, "weight": -0.75},
   ]
-  assert MOTION_PENALTY_WEIGHTS == {
-    "action_path_length": -0.003,
-    "action_rate_l2": -0.005,
-    "action_acc_l2": -0.001,
-  }
-  for name, weight in MOTION_PENALTY_WEIGHTS.items():
-    assert cfg.curriculum[f"{name}_weight"].params["stages"] == [
-      {"step": 0, "weight": 0.0},
-      {"step": MOTION_PENALTY_ONSET_STEP, "weight": weight},
-    ]
+  # Exactly one reward curriculum: the top-contact penalty, which has to be
+  # gated so the policy can learn to touch the T before touching it is costly.
+  assert tuple(cfg.curriculum) == ("vertical_contact_force_weight",)
 
   assert tuple(cfg.terminations) == (
     "time_out",

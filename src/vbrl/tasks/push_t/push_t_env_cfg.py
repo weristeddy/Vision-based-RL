@@ -57,29 +57,17 @@ VERTICAL_CONTACT_FORCE_WEIGHTS = (-0.25, -0.75)
 # signal worth protecting is about 0.28 per step. A clean push pays under 5% of
 # that, while thrashing, scratching and unsafe force grow steeply.
 
-# Every action-derived penalty starts at exactly zero and switches on here.
-#
-# This is measured, not cautious. For a Gaussian policy whose *mean* action
-# never changes, consecutive raw actions still differ by 2*sigma^2 per joint, so
-# `action_rate_l2` and `action_acc_l2` charge 6*2*sigma^2 and 6*6*sigma^2 for
-# pure sampling noise: 0.091 per step at the initial sigma of 0.975, a third of
-# the task margin, decaying as sigma^2. They are an anti-entropy bonus, and the
-# state actor has `entropy_coef = 0.0` and no std floor to resist it. Run
-# 8z5zwqj8 carried them from step 0 and collapsed sigma twice as fast as the
-# baseline -- 0.181 by iteration 200 against 0.297 -- so exploration died before
-# the policy could push: final overlap 0.077 against the baseline's 0.804.
-#
-# These terms exist to clean up jitter in a policy that already works, so they
-# are absent until it does. The baseline solved transport by iteration 200
-# (position error 0.012 m, overlap 0.678), and 4,800 steps is iteration 300 at
-# the registered num_steps_per_env of 16. By then sigma is low enough that the
-# switch-on is nearly free for exploration and only deliberate oscillation pays.
-MOTION_PENALTY_ONSET_STEP = 4800
-MOTION_PENALTY_WEIGHTS = {
-  "action_path_length": -0.003,
-  "action_rate_l2": -0.005,
-  "action_acc_l2": -0.001,
-}
+# Total commanded travel. Constant, deliberately: this penalty is L1, so it
+# scales as sigma rather than sigma^2 and its exploration tax stays bounded --
+# 0.0093 per step at the initial sigma of 0.975 (3% of the task margin) falling
+# to under 0.4% once the policy converges. `action_rate_l2` and `action_acc_l2`
+# were tried here and removed: being quadratic they scale as sigma^2, which
+# moves ~140x over training, so no constant weight both ignores sampling noise
+# early and bites on real oscillation late. Run 8z5zwqj8 carried them and
+# collapsed sigma twice as fast as the baseline (0.181 by iteration 200 against
+# 0.297), killing exploration before the policy could push. They target jitter,
+# which is not this task's failure mode.
+ACTION_PATH_LENGTH_WEIGHT = -0.002
 # Half MJLab's own 10 N "illegal contact" level for this end-effector, with the
 # normalizer chosen so 10 N costs exactly the -0.02 the retired binary
 # `illegal_contact` reward paid. 20 N then costs -0.18 per step.
@@ -301,16 +289,12 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
-    # The three action-derived penalties. All start at zero and are switched on
-    # by the curriculum below; see MOTION_PENALTY_ONSET_STEP for why.
-    #
     # Total commanded travel, which is what a forward/backward correction cycle
     # doubles. L1 so splitting one motion into many is never cheaper.
-    "action_path_length": RewardTermCfg(func=mdp.action_path_length_l1, weight=0.0),
-    # Oscillation and jitter, on the raw command. Zero for a constant action.
-    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=0.0),
-    # Jerky reversals specifically; weak because it correlates with the rate.
-    "action_acc_l2": RewardTermCfg(func=mdp.action_acc_l2, weight=0.0),
+    "action_path_length": RewardTermCfg(
+      func=mdp.action_path_length_l1,
+      weight=ACTION_PATH_LENGTH_WEIGHT,
+    ),
     # Graded table force. Replaces a binary illegal_contact that paid the same
     # at 10 N as at 100 N, so nothing pushed the force back down.
     "table_contact_force": RewardTermCfg(
@@ -396,19 +380,6 @@ def build_env_cfg(
         ],
       },
     ),
-    **{
-      f"{name}_weight": CurriculumTermCfg(
-        func=mdp.reward_curriculum,
-        params={
-          "reward_name": name,
-          "stages": [
-            {"step": 0, "weight": 0.0},
-            {"step": MOTION_PENALTY_ONSET_STEP, "weight": weight},
-          ],
-        },
-      )
-      for name, weight in MOTION_PENALTY_WEIGHTS.items()
-    },
   }
   if separation_curriculum:
     cfg.curriculum["separation_range"] = CurriculumTermCfg(
