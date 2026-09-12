@@ -74,6 +74,12 @@ ckpts/**/*.onnx
 *.sif
 *.sif.prev
 
+# Apptainer build scratch. Pointed here rather than at $HOME, whose quota is
+# what usually fails the build: the base image, the wheel cache and the baked
+# backbones all land in these. Safe to delete once rl.sif exists.
+.apptainer-tmp
+.apptainer-cache
+
 # W&B-generated sweep state
 *.sweep_path.txt
 

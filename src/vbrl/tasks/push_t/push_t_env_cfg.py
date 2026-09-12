@@ -31,53 +31,49 @@ from .goal_marker import GOAL_ENTITY_NAME
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _ACTION_DELTA = 0.1
-VERTICAL_CONTACT_FORCE_CURRICULUM_STEP = 3200
-# Second rung for the top-contact penalty, and the weights both rungs apply.
+# Top-face contact on the T: the measured failure mode. A trained policy made
+# 78.6% of its contacts with |normal_z| > 0.7 (median 0.998) -- pressing down and
+# dragging -- so this term, not the motion penalties, is the one that matters.
 #
-# Measured on run 8z5zwqj8's finished policy, 128 envs x 250 steps: 78.6% of its
-# contacts with the T have |normal_z| > 0.7 and the median is 0.998 -- it presses
-# almost straight down on the top face and drags the object, and the repeated
-# forward/backward correction is the symptom of that. Only 9.7% of contacts are
-# side pushes (|normal_z| < 0.3).
+# Constant and live from step 0, deliberately. Ramping it in later was measured
+# to be destructive: runs hwsm5odb and ortxgaqx left it at zero for 200
+# iterations, by which point *all* of the policy's contact was top contact, and
+# the penalty then arrived against a behaviour with no alternative in its
+# repertoire. It had never made a side push, so the only reachable response to
+# "contact is expensive" was to stop touching the T: contact force decayed
+# 32 N -> 4 N -> 0 and overlap went to 0.000. Present from the start it shapes
+# which contact develops instead of punishing the only one that exists.
 #
-# The term already detects this exactly; it was simply far too weak to change
-# anything, averaging 0.0582 raw per env-step and so costing 0.0029 per step at
-# -0.05 against a task margin of ~0.28. These rungs take a policy that keeps
-# dragging to roughly 5% and then 15% of that margin, while a side push stays
-# about 10x cheaper because the term scales with the contact normal. Ramped in
-# two steps rather than one so the critic tracks the change.
-VERTICAL_CONTACT_FORCE_RAMP_STEP = 8000
-VERTICAL_CONTACT_FORCE_WEIGHTS = (-0.25, -0.75)
-
-# --- safety and motion shaping ----------------------------------------------
+# -0.05 rather than the -0.25/-0.75 that collapsed those runs. The value of
+# contact to this policy is small -- it is barely solving the task -- so there is
+# very little margin to tax: a penalty worth ~8% of the task term was already
+# enough to make not touching optimal. At -0.05 a top press costs roughly 0.7%.
+VERTICAL_CONTACT_FORCE_WEIGHT = -0.05
+# Table contact, targeted at zero. No onset: any contact is charged, because the
+# T stands 24 mm tall and the gripper has that much clearance to push a side face
+# without ever reaching the surface -- so "do not touch the table" is a small
+# height adjustment, not a change of strategy. That is what separates this from
+# the top-contact term: a penalty the policy can satisfy by lifting the wrist is
+# safe to apply hard, while one it can only satisfy by abandoning contact is not.
 #
-# Every term below regularizes *how* the arm moves; none of them touches the
-# task. They are sized against the measured task margin: over a 250-step
-# episode a do-nothing policy returns ~11-16 and a working one ~86, so the
-# signal worth protecting is about 0.28 per step. A clean push pays under 5% of
-# that, while thrashing, scratching and unsafe force grow steeply.
-
-# Total commanded travel. Constant, deliberately: this penalty is L1, so it
-# scales as sigma rather than sigma^2 and its exploration tax stays bounded --
-# 0.0093 per step at the initial sigma of 0.975 (3% of the task margin) falling
-# to under 0.4% once the policy converges. `action_rate_l2` and `action_acc_l2`
-# were tried here and removed: being quadratic they scale as sigma^2, which
-# moves ~140x over training, so no constant weight both ignores sampling noise
-# early and bites on real oscillation late. Run 8z5zwqj8 carried them and
-# collapsed sigma twice as fast as the baseline (0.181 by iteration 200 against
-# 0.297), killing exploration before the policy could push. They target jitter,
-# which is not this task's failure mode.
-ACTION_PATH_LENGTH_WEIGHT = -0.002
-# Half MJLab's own 10 N "illegal contact" level for this end-effector, with the
-# normalizer chosen so 10 N costs exactly the -0.02 the retired binary
-# `illegal_contact` reward paid. 20 N then costs -0.18 per step.
-TABLE_CONTACT_ONSET_N = 5.0
+# Quadratic, so a numerical graze is nearly free (1 N costs 0.0008 per step) and
+# a real press is not (10 N costs 0.04, 16 N costs 0.10). The weight is halved
+# against the old 5 N-onset version to offset removing the onset; measured peak
+# table force during healthy pushing was 9.7-16.4 N.
+TABLE_CONTACT_ONSET_N = 0.0
 TABLE_CONTACT_SCALE_N = 5.0
-# Measured on this task over 64 envs: sustained full-scale commands peak at
-# 3.1-4.4 rad/s, while per-step sign flips peak at 7.9-11.6. So 5 rad/s is zero
-# for any decisive motion and only jitter crosses it. Mean joint speed does not
-# separate the two (0.77 against 0.68) -- the peak does, which is why this is a
-# hinge and not `joint_vel_l2`.
+TABLE_CONTACT_WEIGHT = -0.01
+# Total commanded travel (L1) and MJLab's own action-rate term. `action_rate_l2`
+# is upstream Lift-Cube's, at -0.01; it is kept here at a fifth of that because
+# for a Gaussian policy whose mean never changes consecutive actions still differ
+# by 2*sigma^2 per joint, so at the initial sigma of 0.975 it charges pure
+# exploration noise -- 0.023 per step at this weight, against 0.114 at upstream's.
+# The L1 travel term has no such problem: it scales as sigma rather than sigma^2,
+# so it stays meaningful once the policy converges instead of vanishing.
+# `action_acc_l2` is deliberately absent: it is not an upstream term, it is the
+# sharpest sigma^2 penalty of the three, and it duplicates the rate term.
+ACTION_PATH_LENGTH_WEIGHT = -0.002
+ACTION_RATE_WEIGHT = -0.002
 JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
@@ -289,17 +285,21 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
-    # Total commanded travel, which is what a forward/backward correction cycle
-    # doubles. L1 so splitting one motion into many is never cheaper.
+    # Total commanded travel: an L1 path penalty, so splitting one motion into
+    # many is never cheaper and a correction cycle costs double.
     "action_path_length": RewardTermCfg(
       func=mdp.action_path_length_l1,
       weight=ACTION_PATH_LENGTH_WEIGHT,
     ),
-    # Graded table force. Replaces a binary illegal_contact that paid the same
-    # at 10 N as at 100 N, so nothing pushed the force back down.
+    # MJLab's own action-rate term, at a fifth of upstream Lift-Cube's weight.
+    "action_rate_l2": RewardTermCfg(
+      func=mdp.action_rate_l2,
+      weight=ACTION_RATE_WEIGHT,
+    ),
+    # Table contact, charged from the first newton -- the goal is zero.
     "table_contact_force": RewardTermCfg(
       func=mdp.contact_force_hinge,
-      weight=-0.02,
+      weight=TABLE_CONTACT_WEIGHT,
       params={
         "sensor_name": EE_GROUND_CONTACT_SENSOR,
         "onset": TABLE_CONTACT_ONSET_N,
@@ -310,7 +310,7 @@ def build_env_cfg(
     # ~1 for a press and ~0 for a clean side push.
     "vertical_contact_force": RewardTermCfg(
       func=mdp.vertical_contact_force,
-      weight=0.0,
+      weight=VERTICAL_CONTACT_FORCE_WEIGHT,
       params={"sensor_name": _CONTACT_SENSOR, "force_scale": 10.0},
     ),
     # Joint-limit protection for the real arm. A hinge on the *soft* limits, so
@@ -362,25 +362,7 @@ def build_env_cfg(
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
   )
-  cfg.curriculum = {
-    "vertical_contact_force_weight": CurriculumTermCfg(
-      func=mdp.reward_curriculum,
-      params={
-        "reward_name": "vertical_contact_force",
-        "stages": [
-          {"step": 0, "weight": 0.0},
-          {
-            "step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP,
-            "weight": VERTICAL_CONTACT_FORCE_WEIGHTS[0],
-          },
-          {
-            "step": VERTICAL_CONTACT_FORCE_RAMP_STEP,
-            "weight": VERTICAL_CONTACT_FORCE_WEIGHTS[1],
-          },
-        ],
-      },
-    ),
-  }
+  cfg.curriculum = {}
   if separation_curriculum:
     cfg.curriculum["separation_range"] = CurriculumTermCfg(
       func=mdp.separation_curriculum,

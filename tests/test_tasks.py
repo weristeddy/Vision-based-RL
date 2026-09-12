@@ -957,9 +957,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.asset_zoo.robots import get_robot
   from vbrl.tasks.push_t.push_t_env_cfg import (
     ACTION_PATH_LENGTH_WEIGHT,
-    VERTICAL_CONTACT_FORCE_CURRICULUM_STEP,
-    VERTICAL_CONTACT_FORCE_RAMP_STEP,
-    VERTICAL_CONTACT_FORCE_WEIGHTS,
+    ACTION_RATE_WEIGHT,
+    TABLE_CONTACT_ONSET_N,
+    VERTICAL_CONTACT_FORCE_WEIGHT,
   )
 
   cfg = _push_t()
@@ -1003,24 +1003,35 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
     "action_path_length",
+    "action_rate_l2",
     "table_contact_force",
     "vertical_contact_force",
     "joint_pos_limits",
     "joint_speed_hinge",
   )
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
-  # L1, so its exploration tax scales as sigma and stays bounded -- no schedule.
-  # The quadratic action_rate_l2/action_acc_l2 pair was removed: scaling as
-  # sigma^2 they collapsed the action std before the policy could push.
   assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
   assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
-  assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.02)
-  assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(0.0)
+  # A fifth of upstream Lift-Cube's -0.01: the quadratic form taxes exploration
+  # noise as sigma^2, which is largest exactly at initialization.
+  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
+  assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
+  # action_acc_l2 is not an upstream term and duplicates the rate penalty.
+  assert "action_acc_l2" not in cfg.rewards
+
+  # Top-face contact is the measured failure mode and this is the term that
+  # targets it. Live from step 0 and small: ramping it in later, or setting it
+  # 5-15x higher, was measured to end in a policy that never touches the T.
+  assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(-0.05)
+  assert VERTICAL_CONTACT_FORCE_WEIGHT == pytest.approx(-0.05)
+  assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
   assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
 
+  # Aimed at zero table contact: no onset, so every newton is charged. The T is
+  # 24 mm tall, so the gripper can push a side face without reaching the surface.
   table_contact = cfg.rewards["table_contact_force"].params
-  assert table_contact["onset"] == pytest.approx(5.0)
+  assert table_contact["onset"] == pytest.approx(0.0) == TABLE_CONTACT_ONSET_N
   assert table_contact["scale"] == pytest.approx(5.0)
   assert cfg.rewards["joint_speed_hinge"].params["max_vel"] == pytest.approx(5.0)
   # Only the arm: the gripper is held closed for the whole task.
@@ -1030,19 +1041,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
       == definition.arm_actuator_names
     )
 
-  # Top-face contact is the measured failure mode -- 78.6% of a trained
-  # policy's contacts pressed straight down -- so this is the load-bearing
-  # weight, ramped in two rungs once transport exists.
-  assert VERTICAL_CONTACT_FORCE_CURRICULUM_STEP == 3200
-  assert VERTICAL_CONTACT_FORCE_WEIGHTS == (-0.25, -0.75)
-  assert cfg.curriculum["vertical_contact_force_weight"].params["stages"] == [
-    {"step": 0, "weight": 0.0},
-    {"step": VERTICAL_CONTACT_FORCE_CURRICULUM_STEP, "weight": -0.25},
-    {"step": VERTICAL_CONTACT_FORCE_RAMP_STEP, "weight": -0.75},
-  ]
-  # Exactly one reward curriculum: the top-contact penalty, which has to be
-  # gated so the policy can learn to touch the T before touching it is costly.
-  assert tuple(cfg.curriculum) == ("vertical_contact_force_weight",)
+  # No reward curriculum at all: every penalty is constant and live from step 0.
+  assert cfg.curriculum == {}
+
 
   assert tuple(cfg.terminations) == (
     "time_out",
