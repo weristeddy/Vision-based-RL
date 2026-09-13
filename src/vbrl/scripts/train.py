@@ -115,6 +115,25 @@ class TrainConfig:
   orientation at any cap. The ratio reaches 4.3x at 1.5 cm and 6.4x at 1 cm,
   which is where "only rotation pays" is actually true.
   """
+  vertical_contact_weight: float | None = None
+  """Weight of the top-face contact penalty, which discourages pressing down on
+  the object and dragging it instead of pushing a side face.
+
+  A flag rather than a variant because the workable range is narrow. Measured on
+  `Episode_Reward` totals, which is the only scale the shares below are in:
+
+  * At the registered -0.05 a solved state policy pays 0.164 against a task
+    reward of 14.0 -- 1.2% -- and still puts ~80% of its contacts on the top
+    face. Too weak to change the behaviour it exists to change.
+  * Scaling that share, -0.25 costs about 5.9% and -0.75 about 17.6%.
+  * Both weights collapsed a run to never touching the object, but those were at
+    1024 environments where exploration died before transport was learned and the
+    policy earned only 6.8; the collapse set in once the penalty reached ~3% of
+    that. At 4096 environments the same policy solves the task and earns 14.0, so
+    there is roughly twice the headroom -- not more.
+
+  Must be <= 0.
+  """
   orientation_reward: (
     Literal["maniskill", "quadratic", "linear", "keypoint"] | None
   ) = None
@@ -246,6 +265,20 @@ def _swap_orientation_reward(cfg: TrainConfig) -> None:
     "linear": mdp.linear_orientation_reward,
     "keypoint": mdp.keypoint_reward,
   }[cfg.orientation_reward]
+
+
+def _retune_contact_penalty(cfg: TrainConfig) -> None:
+  """Set the weight of the top-face contact penalty."""
+  if cfg.vertical_contact_weight is None:
+    return
+  if cfg.vertical_contact_weight > 0.0:
+    raise ValueError(
+      f"--vertical-contact-weight must be <= 0; got {cfg.vertical_contact_weight}."
+    )
+  term = (cfg.env.rewards or {}).get("vertical_contact_force")
+  if term is None:
+    raise ValueError("This task has no `vertical_contact_force` reward term.")
+  term.weight = cfg.vertical_contact_weight
 
 
 def _install_goal_curricula(cfg: TrainConfig) -> None:
@@ -498,6 +531,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   _retune_near_goal_mixture(cfg)
   _install_goal_curricula(cfg)
   _swap_orientation_reward(cfg)
+  _retune_contact_penalty(cfg)
 
   env = ManagerBasedRlEnv(
     cfg=cfg.env, device=device, render_mode="rgb_array" if cfg.video else None
