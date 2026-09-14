@@ -24,7 +24,7 @@ from vbrl.asset_zoo.robots.definition import RobotDefinition
 from vbrl.tasks.utils import EE_GROUND_CONTACT_SENSOR, make_tabletop_env_cfg
 
 from . import mdp
-from .geometry import HALF_HEIGHT, REST_HEIGHT
+from .geometry import FOOTPRINT_RADIUS, HALF_HEIGHT, REST_HEIGHT
 from .goal_marker import GOAL_ENTITY_NAME
 
 
@@ -56,8 +56,9 @@ EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
 # like this one are reported to tolerate weights well above the task reward
 # without losing task completion. This is ~16% of task reward.
 #
-# Only safe to raise because the term is now gated on contact. Ungated, more
-# pressure to get under the ceiling meant more pressure to press into the T.
+# A no-fly cylinder, so it fires only while the fingertip is actually over the T
+# rather than on every step the arm is high. During the dragging it measures ~1.0,
+# so at this weight dragging costs 0.1 per step against a task margin of 0.28.
 EE_HEIGHT_WEIGHT = -0.1
 # Table contact, targeted at zero. No onset: any contact is charged, because the
 # T stands 24 mm tall and the gripper has that much clearance to push a side face
@@ -380,15 +381,16 @@ def build_env_cfg(
     ),
     # Keep the fingertip in the object's own height band, so a side push is the
     # only geometry available; see EE_HEIGHT_CEILING_M.
-    "ee_height_ceiling": RewardTermCfg(
-      func=mdp.fingertip_height_excess,
+    "over_object_exclusion": RewardTermCfg(
+      func=mdp.over_object_exclusion,
       weight=EE_HEIGHT_WEIGHT,
       params={
         "asset_cfg": SceneEntityCfg(
           "robot", geom_names=robot.fingertip_geom_pattern
         ),
+        "object_name": object_name,
         "ceiling": EE_HEIGHT_CEILING_M,
-        "sensor_name": _CONTACT_SENSOR,
+        "radius": FOOTPRINT_RADIUS,
       },
     ),
     # Joint-limit protection for the real arm. A hinge on the *soft* limits, so

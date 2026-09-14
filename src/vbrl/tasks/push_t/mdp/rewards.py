@@ -176,60 +176,48 @@ def top_contact_share(
   return ((data.found > 0) & vertical).any(dim=-1).float()
 
 
-def fingertip_height_excess(
+def over_object_exclusion(
   env: ManagerBasedRlEnv,
   asset_cfg: SceneEntityCfg,
+  object_name: str,
   ceiling: float,
-  sensor_name: str | None = None,
+  radius: float,
 ) -> torch.Tensor:
-  """How far the lowest fingertip rides above ``ceiling``, in ceiling units.
+  """Forbid the fingertips the volume directly above the object.
 
-  Push-T is a planar problem and every published version enforces that in the
-  action space: IBC, Diffusion Policy and ManiSkill3 all constrain the pusher to
-  the xy-plane at a fixed z, so pressing down on the T is not discouraged, it is
-  impossible. VBRL gives the policy all six joints, and it found the strategy
-  those benchmarks exclude -- measured on a trained policy, the lowest fingertip
-  sits at a median of 47 mm above a 24 mm object, 65% of steps above 40 mm, and
-  contacts split at exactly that height: 29.2 mm median for a top-face press
-  against 24.4 mm for a side push.
+  Push-T is planar, and every published version enforces that in the action
+  space -- IBC, Diffusion Policy and ManiSkill3 all fix the pusher's z, so
+  descending onto the object is impossible rather than discouraged. With six
+  joints the policy finds that strategy: measured, 33% of its contacts are on the
+  top face, because arriving from above means never having to position on the
+  correct *side* of the T first.
 
-  This is the soft version of that constraint, and it pairs with the table-force
-  term: one stops the fingertip going too low, this stops it going too high, and
-  between them it is confined to a band around the object's own height, where a
-  side push is the only geometry available.
+  This is a no-fly cylinder rather than a height penalty, and the difference is
+  the direction of the gradient. A ceiling on absolute height pushes *down*, and
+  over the object down means into it -- run avv1us6e took top-face contact from
+  0.105 to 0.331 because the fingertip resting on a 24 mm object violated a
+  24 mm ceiling by construction and the cheapest compliance was to press. Here
+  the value grows with how far *inside* the footprint the fingertip is, so the
+  gradient points sideways and the only way out is to move aside.
 
-  Why this rather than another penalty on the contact normal: height is a
-  continuous, proactive choice the policy can always satisfy, while the contact
-  normal is an emergent outcome at the instant of touch. That is the difference
-  between `table_contact_force`, which cut peak table force 11 N -> 2.2 N at no
-  measured cost, and `vertical_contact_force`, which changed nothing at every
-  weight that left the task intact.
+  Descending cannot relieve it either: to be inside the footprint below the
+  object's top face is to be inside the object, which the contact model forbids.
+  So the exclusion has no downward escape, which is the property every previous
+  attempt lacked.
 
-  Normalised by the ceiling so it is dimensionless and scales with the object:
-  1.0 means the fingertip is one object-height above where it should be.
-
-  **Charged only while not touching the object**, and that gate is essential
-  rather than cosmetic. The ceiling is an absolute world height equal to the
-  object's top face, so a fingertip resting *on* the T is in violation by
-  construction and the cheapest way to reduce the penalty is to press down into
-  it. Ungated, run avv1us6e took top-face contact from the baseline's 0.105 to
-  0.331 -- the term rewarded exactly the behaviour it was built to remove, with
-  top contacts sitting at 29.6 mm, 5.6 mm above the ceiling and paying for it.
-  Once contact is made the geometry is already decided, so there is nothing left
-  for a height penalty to steer.
+  Returns 0 when below ``ceiling`` or outside ``radius``, rising to 1 directly
+  above the object's centre. Both bounds come from the object's own geometry.
   """
-  if ceiling <= 0.0:
-    raise ValueError("fingertip_height_excess needs ceiling > 0.")
+  if ceiling <= 0.0 or radius <= 0.0:
+    raise ValueError("over_object_exclusion needs ceiling > 0 and radius > 0.")
   asset: Entity = env.scene[asset_cfg.name]
-  lowest = asset.data.geom_pos_w[:, asset_cfg.geom_ids, 2].min(dim=-1).values
-  excess = ((lowest - ceiling) / ceiling).clamp_min(0.0)
-  if sensor_name is None:
-    return excess
-  sensor: ContactSensor = env.scene[sensor_name]
-  found = sensor.data.found
-  if found is None:
-    raise RuntimeError(f"Contact sensor {sensor_name!r} requires the found field.")
-  return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
+  obj: Entity = env.scene[object_name]
+  pos = asset.data.geom_pos_w[:, asset_cfg.geom_ids, :]
+  planar = torch.linalg.vector_norm(
+    pos[..., :2] - obj.data.root_link_pos_w[:, None, :2], dim=-1
+  )
+  depth = (1.0 - planar / radius).clamp_min(0.0)
+  return (depth * (pos[..., 2] > ceiling)).amax(dim=-1)
 
 
 def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
@@ -530,7 +518,7 @@ __all__ = [
   "at_goal_action_l1",
   "contact_force_barrier",
   "contact_force_hinge",
-  "fingertip_height_excess",
+  "over_object_exclusion",
   "keypoint_reward",
   "linear_orientation_reward",
   "maniskill_dense_reward",
