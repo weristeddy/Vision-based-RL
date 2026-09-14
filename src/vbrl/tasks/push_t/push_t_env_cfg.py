@@ -439,6 +439,22 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR},
     ),
+    # Peak force split by contact geometry, because the two are not comparable:
+    # a lateral push is bounded by the task (the T slides at ~0.7 N, so anything
+    # beyond that only accelerates it) while a press into the top face is
+    # bounded by nothing and is what scratches. `peak_object_force` above sums
+    # both and so cannot say whether 45 N was harmless impulse or leaning on the
+    # object.
+    "peak_top_face_force": MetricsTermCfg(
+      func=mdp.max_contact_force_on_face,
+      reduce="max",
+      params={"sensor_name": _CONTACT_SENSOR, "vertical": True},
+    ),
+    "peak_side_face_force": MetricsTermCfg(
+      func=mdp.max_contact_force_on_face,
+      reduce="max",
+      params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
+    ),
     # Fraction of the episode spent pressing a horizontal face of the T. The
     # drag-versus-push behaviour measure; 0.134 on run 8z5zwqj8's policy.
     "top_contact_share": MetricsTermCfg(

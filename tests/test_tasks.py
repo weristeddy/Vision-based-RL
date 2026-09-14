@@ -798,6 +798,50 @@ def test_push_t_forceful_top_contact_terminates_only_on_hard_vertical_press() ->
     forceful_top_contact(env, "ee_object_contact", force_threshold=0.0)
 
 
+def test_push_t_max_contact_force_splits_top_from_side() -> None:
+  """Peak force reported per contact geometry, because the two are not alike.
+
+  A lateral push is bounded by the task -- the T weighs 1.70 N and slides at
+  about 0.7 N -- while a press into the top face is bounded by nothing. Measured
+  on run zbbiq2ts's final policy the split is worth having: top-face presses are
+  26.5% of steps with a 40.6 N median episode peak and a 91.9 N max, against
+  3.45% of steps and 18.7 N for side pushes. `peak_object_force` alone reports
+  one number for both and so cannot say which it saw.
+  """
+  from vbrl.tasks.push_t.mdp import max_contact_force_on_face
+
+  sensor = SimpleNamespace(
+    data=SimpleNamespace(
+      found=torch.tensor([[1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]),
+      force=torch.tensor(
+        [
+          [[0.0, 0.0, 30.0], [4.0, 0.0, 0.0]],
+          [[9.0, 0.0, 0.0], [50.0, 0.0, 0.0]],
+          [[0.0, 0.0, 80.0], [0.0, 0.0, 0.0]],
+        ]
+      ),
+      normal=torch.tensor(
+        [
+          [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+          [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+          [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+        ]
+      ),
+    )
+  )
+  env = SimpleNamespace(scene={"ee_object_contact": sensor})
+
+  # Env 0 carries both at once and each side sees only its own.
+  assert max_contact_force_on_face(
+    env, "ee_object_contact", vertical=True
+  ).tolist() == [30.0, 0.0, 0.0]
+  assert max_contact_force_on_face(
+    env, "ee_object_contact", vertical=False
+  ).tolist() == [4.0, 9.0, 0.0]
+  # Env 1's second pair is a 50 N top-face force on a pair that is not in
+  # contact, and env 2 is not touching at all: neither may be reported.
+
+
 def test_push_t_side_contact_align_rewards_pushing_a_vertical_face() -> None:
   """The one positive shaping term: 1 on a side face, 0 on the top, 0 untouched.
 
@@ -1114,9 +1158,17 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 4
   assert cfg.scale_rewards_by_dt is False
+  # Forces are reported split by contact geometry as well as in total: a lateral
+  # push is bounded by the task, a press into the top face is bounded by nothing,
+  # and one summed number cannot tell them apart. On zbbiq2ts's final policy the
+  # split is 26.5% of steps on the top face (40.6 N median episode peak, 91.9 N
+  # max) against 3.45% on a side face (18.7 N) -- so the 44.9 N in that run's
+  # logs was the top-face number.
   assert set(cfg.metrics) == {
     "peak_table_force",
     "peak_object_force",
+    "peak_top_face_force",
+    "peak_side_face_force",
     "top_contact_share",
   }
   assert cfg.metrics["peak_table_force"].reduce == "max"

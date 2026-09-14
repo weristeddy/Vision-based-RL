@@ -339,6 +339,47 @@ def max_contact_force(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   return torch.nan_to_num(magnitude, nan=0.0).flatten(1).amax(dim=-1)
 
 
+def max_contact_force_on_face(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  vertical: bool,
+  verticality_threshold: float = 0.7,
+) -> torch.Tensor:
+  """Peak contact force in newtons, restricted to one contact geometry.
+
+  ``peak_object_force`` on its own is not a safety number, because the two
+  things it sums are not comparable. A *lateral* push is bounded by the task:
+  the T weighs 1.70 N and slides at about 0.7 N, so force beyond that only
+  accelerates it and cannot damage anything. A press into the horizontal top
+  face has no such bound -- nothing limits it but the arm -- and it is what
+  scratches the object and loads the table. Reporting one number for both makes
+  a run with 45 N of harmless lateral impulse look like a run leaning 45 N into
+  the T.
+
+  ``vertical`` selects which: True reports presses into a horizontal face at the
+  same 0.7 threshold ``top_contact_share`` uses, False reports pushes on a
+  vertical face. The pair is what makes a force figure actionable.
+
+  Unlike :func:`max_contact_force` this reads ``force`` rather than
+  ``force_history``, because the normal that classifies a contact is only
+  published at policy-step resolution. A spike that opens and closes inside one
+  step is therefore missed here and caught there, so the unrestricted metric
+  stays the conservative one.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  if data.found is None or data.force is None or data.normal is None:
+    raise RuntimeError(
+      f"Contact sensor {sensor_name!r} requires found, force, and normal."
+    )
+  is_vertical = data.normal[..., 2].abs() > verticality_threshold
+  selected = (data.found > 0) & (is_vertical if vertical else ~is_vertical)
+  magnitude = torch.nan_to_num(
+    torch.linalg.vector_norm(data.force, dim=-1), nan=0.0
+  )
+  return torch.where(selected, magnitude, torch.zeros_like(magnitude)).amax(dim=-1)
+
+
 def contact_force_barrier(
   env: ManagerBasedRlEnv,
   sensor_name: str,
@@ -586,6 +627,7 @@ __all__ = [
   "linear_orientation_reward",
   "maniskill_dense_reward",
   "max_contact_force",
+  "max_contact_force_on_face",
   "quadratic_orientation_reward",
   "side_contact_align",
   "top_contact_share",
