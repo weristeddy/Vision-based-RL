@@ -30,6 +30,7 @@ from .goal_marker import GOAL_ENTITY_NAME
 
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
+_OBJECT_TABLE_SENSOR = "object_table_contact"
 _ACTION_DELTA = 0.1
 # The fingertip height ceiling: the soft form of the planar constraint every
 # published Push-T imposes in its action space. Both numbers are the object's
@@ -49,26 +50,17 @@ _ACTION_DELTA = 0.1
 # of episode success. It penalised an emergent contact normal; this penalises a
 # height the policy chooses directly.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
-# -0.05, raised from the -0.02 every earlier run carried, and the reason it is
-# now safe to raise is that the ceiling has stopped being a pure restriction.
-#
-# At -0.02 it is close to inert: measured on run zbbiq2ts it costs 0.40 against
-# a task reward of 14.89, or 2.7%, and run avv1us6e held a fingertip median of
-# 46.3 mm against this 24 mm ceiling. At -0.1 it does bind (top-face contact
-# 0.054) and it took episode success to 0.008. So the old window was between a
-# term that did nothing and a term that broke the task, with nothing in between
-# worth having -- because descending had a cost and no payoff.
-#
-# `side_contact_align` changes that. A side contact needs the pad at about
-# 24.4 mm, against 29.6 mm for a top press, and the policy's operating height is
-# 46 mm -- which is why aligned side contact is only 0.86% of steps while
-# top-face contact is 18.8%. The bonus is not weak per step (0.05 against the
-# task's own 0.059 per step, so 85% of it) and it is not being collected; it is
-# simply out of reach at the height the arm works at. The ceiling is what puts
-# the gripper where the bonus becomes collectible, so the two now pull the same
-# way instead of the ceiling pulling alone. -0.05 lands near 6.7% of task
-# reward, between the measured inert and the measured destructive.
-EE_HEIGHT_WEIGHT = -0.05
+# -0.02, and the attempt to raise it is measured and reverted. At -0.1 the term
+# binds and takes episode success to 0.008; -0.05 was tried on the theory that
+# `side_contact_align` had given descending a payoff it never had before, and it
+# did not work: runs 1hjlufwr and n5sgh8g3 moved the lowest pad from 27.6 mm to
+# 26.2 mm -- 1.4 mm for double the weight, never reaching the ~24.4 mm where a
+# side contact happens -- left `top_contact_share` unchanged at 0.192/0.202
+# against 0.189, and cost 8-19% of overlap. It is not a useless term at -0.02
+# (it is what holds the arm at 27 mm rather than the 46 mm earlier generations
+# sat at) but it cannot reach the last 3 mm at any weight that leaves the task
+# intact.
+EE_HEIGHT_WEIGHT = -0.02
 # The one *positive* shaping term, and the replacement for the whole family of
 # top-contact penalties: `vertical_contact_force` at four weights, the
 # exponential force barrier, the height ceiling and the no-fly cylinder are all
@@ -95,6 +87,43 @@ SIDE_CONTACT_ALIGN_WEIGHT = 0.05
 TABLE_CONTACT_ONSET_N = 0.0
 TABLE_CONTACT_SCALE_N = 5.0
 TABLE_CONTACT_WEIGHT = -0.01
+# The downward load the gripper drives through the T into the table, and the
+# first penalty against dragging whose zero-set is the behaviour we want rather
+# than the absence of the task.
+#
+# Six attempts have now failed and they failed the same way: `vertical_contact_
+# force` at four weights, `contact_force_barrier`, the height ceiling at -0.05
+# and -0.1, the no-fly cylinder, and `forceful_top_contact`. Every one measured
+# something at the *gripper-object* contact, so "stop touching" always satisfied
+# them, and that is what the policy did -- run 4fmml3fl held 0.86 N of peak
+# object force for 160 iterations and finished at 0.000 success.
+#
+# This measures the *object-table* interface instead, through a netforce sensor.
+# Vertical equilibrium makes the reading exact: the table carries the object's
+# weight plus whatever the gripper adds, and a horizontal push adds nothing at
+# any magnitude. So pushing is free, pushing hard is free, and only pressing
+# costs -- which is also the mechanism that makes dragging possible at all
+# (sliding the T under a pad needs mu_g*N > mu_t*(mg + N), unreachable at N=0).
+#
+# 3.7 N = the T's own 1.697 N weight, measured as the resting net vertical load
+# and identical across all 32 test envs, plus 2.0 N of headroom for the
+# transients of a shove. Measured on zbbiq2ts's policy that leaves 85.7% of all
+# steps at exactly zero while charging a p50 top-face contact of 5.3 N of press.
+OBJECT_WEIGHT_N = 1.697
+OBJECT_PRESS_ONSET_N = OBJECT_WEIGHT_N + 2.0
+OBJECT_PRESS_SCALE_N = 5.0
+# Sized by rolling zbbiq2ts's policy through this exact term: -0.002 came to
+# 1.07% of its task reward, so -0.01 is 5.4%. That makes it the largest penalty
+# in the config -- `ee_height_ceiling` is next at 3.4% -- which is intended,
+# because it is the only one the policy can zero out without giving up the task.
+# It is still far below what broke the runs that collapsed: the exponential
+# barrier reached 26-53% and took 82% of episode success with it.
+#
+# Quadratic and uncapped. The measured worst case (135 N of press) costs 6.8 per
+# step against a 0.37 per-step task reward, which is meant to be unaffordable;
+# unlike `contact_force_barrier`'s exp() there is no value here large enough to
+# wreck the critic.
+OBJECT_PRESS_WEIGHT = -0.01
 # Total commanded travel (L1) and MJLab's own action-rate term. `action_rate_l2`
 # is upstream Lift-Cube's, at -0.01; it is kept here at a fifth of that because
 # for a Gaussian policy whose mean never changes consecutive actions still differ
@@ -396,6 +425,17 @@ def build_env_cfg(
         "scale": TABLE_CONTACT_SCALE_N,
       },
     ),
+    # Downward load through the T into the table. Zero for any lateral push at
+    # any force; see OBJECT_PRESS_ONSET_N.
+    "object_table_press": RewardTermCfg(
+      func=mdp.object_table_press,
+      weight=OBJECT_PRESS_WEIGHT,
+      params={
+        "sensor_name": _OBJECT_TABLE_SENSOR,
+        "onset": OBJECT_PRESS_ONSET_N,
+        "scale": OBJECT_PRESS_SCALE_N,
+      },
+    ),
     # Keep the fingertip in the object's own height band, so a side push is the
     # only geometry available; see EE_HEIGHT_CEILING_M.
     "ee_height_ceiling": RewardTermCfg(
@@ -454,6 +494,16 @@ def build_env_cfg(
       func=mdp.max_contact_force_on_face,
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
+    ),
+    # The same press in newtons, weight subtracted so 0.0 means "not pressing".
+    # 56 N median episode peak on zbbiq2ts's policy, against a 1.70 N object.
+    "peak_object_press": MetricsTermCfg(
+      func=mdp.peak_object_press,
+      reduce="max",
+      params={
+        "sensor_name": _OBJECT_TABLE_SENSOR,
+        "weight_n": OBJECT_WEIGHT_N,
+      },
     ),
     # Fraction of the episode spent pressing a horizontal face of the T. The
     # drag-versus-push behaviour measure; 0.134 on run 8z5zwqj8's policy.
@@ -550,6 +600,18 @@ def build_env_cfg(
       fields=("found", "force", "normal"),
       reduce="maxforce",
       num_slots=1,
+    ),
+    # The object-table interface, as one net wrench in the global frame. This is
+    # the sensor `object_table_press` reads; `netforce` rather than `maxforce`
+    # because the quantity that is physically exact is the *total* vertical load
+    # the table carries, not the largest of the several contact points the T's
+    # footprint makes.
+    ContactSensorCfg(
+      name=_OBJECT_TABLE_SENSOR,
+      primary=ContactMatch(mode="body", pattern="push_t", entity=object_name),
+      secondary=ContactMatch(mode="geom", pattern="table_top", entity="table"),
+      fields=("found", "force"),
+      reduce="netforce",
     ),
   )
   # The table term bounds peak force, so the one retained contact has to be the

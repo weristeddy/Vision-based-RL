@@ -323,6 +323,70 @@ def at_goal_action_l1(
   return action * command.get_at_goal().to(action.dtype)
 
 
+def object_table_press(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  onset: float,
+  scale: float,
+) -> torch.Tensor:
+  """Quadratic hinge on the downward load driven through the T into the table.
+
+  Every previous attempt at dragging penalised the *contact*: force magnitude,
+  contact-normal verticality, an exponential barrier, a termination. All of them
+  share one flaw -- their zero-set is "do not touch the object", so the cheapest
+  compliance is to abandon the task, and the runs did exactly that. This one
+  measures a different quantity, and its zero-set is "do not press down", which
+  leaves pushing completely free.
+
+  Read off an ``object -> table`` contact sensor with ``reduce="netforce"``, so
+  ``force`` is the *net* wrench at that interface in the global frame. Vertical
+  equilibrium makes this exact rather than heuristic: the table must carry the
+  object's weight plus whatever the gripper adds, and a horizontal push adds
+  nothing at all, no matter how hard. ``|Fz| - mg`` is therefore precisely the
+  downward press, and it is the physical quantity that matters twice over --
+  it is what scratches the object and the table, and it is what *enables*
+  dragging, since sliding the T on a pad instead of pushing it needs
+  ``mu_g * N > mu_t * (mg + N)``, which is unreachable without pressing.
+
+  Measured on run zbbiq2ts's final policy, the separation is clean:
+
+  * 52,289 no-contact steps: p50 0.00 N, p90 0.34 -- the signal is zero when
+    the gripper is off the object, with no tuning.
+  * 9,616 top-face contact steps: p50 5.26 N, p90 27.7, max 106.
+  * Per-episode peak press: 56 N median, 135 N max, against a 1.70 N object.
+
+  ``onset`` is an absolute threshold on ``|Fz|``, so it includes the object's
+  own weight; see ``OBJECT_PRESS_ONSET_N``. Quadratic like the table term, so a
+  graze is nearly free and leaning is not.
+  """
+  if scale <= 0.0:
+    raise ValueError("object_table_press needs scale > 0.")
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  if data.force is None:
+    raise RuntimeError(f"Contact sensor {sensor_name!r} requires the force field.")
+  vertical = torch.nan_to_num(data.force[..., 2], nan=0.0).sum(dim=-1).abs()
+  return ((vertical - onset) / scale).clamp_min(0.0).square()
+
+
+def peak_object_press(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  weight_n: float,
+) -> torch.Tensor:
+  """Downward press through the object in newtons, for logging.
+
+  The same quantity :func:`object_table_press` charges, reported unshaped and
+  with the object's own weight subtracted so 0.0 means "not pressing".
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  if data.force is None:
+    raise RuntimeError(f"Contact sensor {sensor_name!r} requires the force field.")
+  vertical = torch.nan_to_num(data.force[..., 2], nan=0.0).sum(dim=-1).abs()
+  return (vertical - weight_n).clamp_min(0.0)
+
+
 def max_contact_force(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   """Peak contact-force magnitude on one sensor, in newtons.
 
@@ -626,6 +690,8 @@ __all__ = [
   "keypoint_reward",
   "linear_orientation_reward",
   "maniskill_dense_reward",
+  "object_table_press",
+  "peak_object_press",
   "max_contact_force",
   "max_contact_force_on_face",
   "quadratic_orientation_reward",

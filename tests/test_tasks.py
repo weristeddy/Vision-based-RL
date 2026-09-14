@@ -798,6 +798,53 @@ def test_push_t_forceful_top_contact_terminates_only_on_hard_vertical_press() ->
     forceful_top_contact(env, "ee_object_contact", force_threshold=0.0)
 
 
+def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
+  """The property the whole term rests on: pushing is free, pressing is not.
+
+  A netforce sensor reports the net wrench at the object-table interface in the
+  global frame. Vertical equilibrium fixes ``Fz`` at the object's weight plus
+  whatever the gripper drives down, and a horizontal push contributes nothing at
+  any magnitude -- so the hinge's zero-set is "do not press", not "do not
+  touch". That is what separates this from the six penalties that preceded it,
+  every one of which the policy satisfied by abandoning contact.
+  """
+  from vbrl.tasks.push_t.mdp import object_table_press, peak_object_press
+
+  W = 1.697
+  sensor = SimpleNamespace(
+    data=SimpleNamespace(
+      # One netforce slot per primary. In order: resting; a 200 N lateral shove
+      # with no vertical component; a 2 N press; a 30 N press.
+      force=torch.tensor(
+        [
+          [[0.0, 0.0, -W]],
+          [[200.0, -150.0, -W]],
+          [[3.0, 0.0, -(W + 2.0)]],
+          [[8.0, 0.0, -(W + 30.0)]],
+        ]
+      ),
+    )
+  )
+  env = SimpleNamespace(scene={"object_table_contact": sensor})
+  out = object_table_press(env, "object_table_contact", onset=W + 2.0, scale=5.0)
+
+  # Resting and the 200 N lateral shove are both exactly free.
+  assert float(out[0]) == 0.0
+  assert float(out[1]) == 0.0
+  # The 2 N press sits exactly on the onset, so it is free too -- the headroom
+  # is there for the transients of a shove, not as a budget for leaning.
+  assert float(out[2]) == pytest.approx(0.0)
+  # 30 N of press is 28 N past the onset: quadratic, so it is not.
+  assert float(out[3]) == pytest.approx((28.0 / 5.0) ** 2)
+
+  # The metric reports the same thing unshaped, weight subtracted.
+  press = peak_object_press(env, "object_table_contact", weight_n=W)
+  assert press.tolist() == pytest.approx([0.0, 0.0, 2.0, 30.0])
+
+  with pytest.raises(ValueError, match="scale > 0"):
+    object_table_press(env, "object_table_contact", onset=W, scale=0.0)
+
+
 def test_push_t_max_contact_force_splits_top_from_side() -> None:
   """Peak force reported per contact geometry, because the two are not alike.
 
@@ -1144,6 +1191,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     ACTION_PATH_LENGTH_WEIGHT,
     ACTION_RATE_WEIGHT,
     AT_GOAL_ACTION_WEIGHT,
+    OBJECT_PRESS_ONSET_N,
+    OBJECT_PRESS_SCALE_N,
+    OBJECT_WEIGHT_N,
     SIDE_CONTACT_ALIGN_WEIGHT,
     TABLE_CONTACT_ONSET_N,
     EE_HEIGHT_CEILING_M,
@@ -1152,6 +1202,13 @@ def test_push_t_config_pins_the_trained_contract() -> None:
 
   cfg = _push_t()
   definition = get_robot("trossen_realistic")
+
+  sensors = {sensor.name: sensor for sensor in cfg.scene.sensors}
+  # `netforce`, not `maxforce`: the exact quantity is the *total* vertical load
+  # the table carries under the T's footprint, not the largest of its several
+  # contact points. With maxforce the weight-subtraction below is meaningless.
+  assert sensors["object_table_contact"].reduce == "netforce"
+  assert "force" in sensors["object_table_contact"].fields
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
   assert cfg.episode_length_s == 5.0
@@ -1169,6 +1226,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "peak_object_force",
     "peak_top_face_force",
     "peak_side_face_force",
+    "peak_object_press",
     "top_contact_share",
   }
   assert cfg.metrics["peak_table_force"].reduce == "max"
@@ -1207,6 +1265,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "action_rate_l2",
     "at_goal_action",
     "table_contact_force",
+    "object_table_press",
     "ee_height_ceiling",
     "joint_pos_limits",
     "joint_speed_hinge",
@@ -1241,14 +1300,12 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.geometry import HALF_HEIGHT
 
   assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
-  # -0.05, not the -0.02 every earlier run carried. At -0.02 it costs 2.7% of
-  # task reward and the fingertip sits at 46 mm against a 24 mm ceiling; at -0.1
-  # it binds and takes success to 0.008. The window between them is only worth
-  # having now that `side_contact_align` pays on arrival: a side contact needs
-  # the pad at ~24.4 mm, so the bonus is out of reach at 46 mm and descending
-  # finally has a payoff rather than only a cost.
-  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.05)
-  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.05)
+  # -0.02. Raising it to -0.05 was tried and reverted: it bought 1.4 mm of pad
+  # height (27.6 -> 26.2 mm, still short of the ~24.4 mm a side contact needs),
+  # left top-face contact at 0.192/0.202 against 0.189, and cost 8-19% of
+  # overlap across two seeds. -0.1 binds and takes success to 0.008.
+  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
+  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
   # Gated on contact: without this the ceiling pays the policy to press down.
   assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
@@ -1258,6 +1315,24 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   # and `side_contact_align` now covers the same failure from the other sign.
   assert "object_contact_force" not in cfg.rewards
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
+  # The downward load driven through the T into the table, and the only penalty
+  # against dragging whose zero-set is "push sideways" rather than "stop
+  # touching". Vertical equilibrium makes it exact: the table carries the
+  # object's weight plus whatever the gripper adds, and a horizontal push adds
+  # nothing at any magnitude. Measured on zbbiq2ts, 52,289 no-contact steps sit
+  # at p50 0.00 N / p90 0.34 while top-face contacts run p50 5.26 N and the
+  # per-episode peak press is 56 N median against a 1.70 N object.
+  press = cfg.rewards["object_table_press"].params
+  assert press["sensor_name"] == "object_table_contact"
+  # The onset is absolute on |Fz|, so it carries the object's own weight.
+  assert OBJECT_WEIGHT_N == pytest.approx(1.697)
+  assert press["onset"] == pytest.approx(3.697) == OBJECT_PRESS_ONSET_N
+  assert press["scale"] == pytest.approx(5.0) == OBJECT_PRESS_SCALE_N
+  # 5.4% of task reward on current behaviour, measured by rolling zbbiq2ts's
+  # policy through this term: the largest penalty in the config, and the only
+  # one the policy can take to exactly zero without giving up the task. The
+  # barrier that broke things reached 26-53%.
+  assert cfg.rewards["object_table_press"].weight == pytest.approx(-0.01)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
   assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
 
