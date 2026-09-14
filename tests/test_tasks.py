@@ -1089,7 +1089,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert object_contact["onset"] == pytest.approx(1.0) == OBJECT_CONTACT_ONSET_N
   assert object_contact["scale"] == pytest.approx(2.0)
   assert object_contact["cap"] == pytest.approx(10.0)
-  assert cfg.rewards["object_contact_force"].weight == pytest.approx(-0.01)
+  # Zeroed: in isolation it cost 82% of episode success for a 35.8 -> 29.7 N
+  # reduction in peak object force.
+  assert cfg.rewards["object_contact_force"].weight == pytest.approx(0.0)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
   assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
 

@@ -86,7 +86,13 @@ TABLE_CONTACT_WEIGHT = -0.01
 OBJECT_CONTACT_ONSET_N = 1.0
 OBJECT_CONTACT_SCALE_N = 2.0
 OBJECT_CONTACT_CAP = 10.0
-OBJECT_CONTACT_WEIGHT = -0.01
+# Zeroed: measured in isolation (run sgojsnr8, the only change against its
+# control) it cost 21% of overlap and 82% of episode success while cutting peak
+# object force only 35.8 -> 29.7 N. The penalty is per step, so the cheapest
+# response is fewer contacts rather than gentler ones -- contact rate fell 0.126
+# -> 0.102 while bout length was unchanged. Left in place at zero so the shape
+# can be re-tested once the height ceiling is characterised on its own.
+OBJECT_CONTACT_WEIGHT = 0.0
 # Total commanded travel (L1) and MJLab's own action-rate term. `action_rate_l2`
 # is upstream Lift-Cube's, at -0.01; it is kept here at a fifth of that because
 # for a Gaussian policy whose mean never changes consecutive actions still differ
