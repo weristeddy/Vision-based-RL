@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -76,20 +75,6 @@ FOOTPRINT_PARTS = tuple(
 assert _centre_of_mass(FOOTPRINT_PARTS) == (0.0, 0.0) or all(
   abs(v) < 1e-15 for v in _centre_of_mass(FOOTPRINT_PARTS)
 ), "FOOTPRINT_PARTS must be centred on the centre of mass."
-
-
-# The circumscribed radius of the footprint: the farthest any corner of the T
-# reaches from its centre of mass. Defines the no-fly cylinder the fingertips
-# are kept out of above the object, so that bound follows the shape.
-FOOTPRINT_RADIUS = max(
-  math.hypot(
-    part.center_xy[0] + sx * part.half_extents_xy[0],
-    part.center_xy[1] + sy * part.half_extents_xy[1],
-  )
-  for part in FOOTPRINT_PARTS
-  for sx in (-1.0, 1.0)
-  for sy in (-1.0, 1.0)
-)
 
 
 def _part_tensors(

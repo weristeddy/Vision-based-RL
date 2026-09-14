@@ -680,37 +680,36 @@ def test_push_t_action_path_length_is_l1_so_splitting_a_move_is_never_cheaper() 
   assert cost([0.5, -0.5, 0, 0, 0, 0]) == pytest.approx(1.0)
 
 
-def test_push_t_over_object_exclusion_has_no_downward_escape() -> None:
+def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> None:
   from mjlab.managers import SceneEntityCfg
 
-  from vbrl.tasks.push_t.mdp import over_object_exclusion
+  from vbrl.tasks.push_t.mdp import fingertip_height_excess
 
-  # The T sits at the origin; four fingertip placements, one per env.
-  positions = torch.tensor([
-    [[0.000, 0.0, 0.048]],   # directly over it, high  -> full penalty
-    [[0.000, 0.0, 0.020]],   # directly over it, below the top face -> zero
-    [[0.040, 0.0, 0.048]],   # half a radius out, high -> partial
-    [[0.200, 0.0, 0.048]],   # clear of the footprint  -> zero
-  ])
-  robot = SimpleNamespace(data=SimpleNamespace(geom_pos_w=positions))
-  obj = SimpleNamespace(
-    data=SimpleNamespace(root_link_pos_w=torch.zeros(4, 3))
+  # Both envs have the fingertip at 48 mm against a 24 mm ceiling; only the
+  # second is touching the T.
+  robot = SimpleNamespace(
+    data=SimpleNamespace(
+      geom_pos_w=torch.tensor([[[0.0, 0.0, 0.048]], [[0.0, 0.0, 0.048]]])
+    )
   )
-  env = SimpleNamespace(scene={"robot": robot, "object": obj})
+  sensor = SimpleNamespace(data=SimpleNamespace(found=torch.tensor([[0.0], [1.0]])))
+  env = SimpleNamespace(scene={"robot": robot, "ee_object_contact": sensor})
   cfg = SceneEntityCfg("robot")
   cfg.geom_ids = slice(None)
 
-  out = over_object_exclusion(env, cfg, "object", ceiling=0.024, radius=0.08)
-  assert out[0] == pytest.approx(1.0)
-  # Below the object's top face the penalty is zero -- but reaching there inside
-  # the footprint means being inside the T, which contact forbids. So the only
-  # real exit is lateral, which is what distinguishes this from a height ceiling.
-  assert out[1] == pytest.approx(0.0)
-  assert out[2] == pytest.approx(0.5)
-  assert out[3] == pytest.approx(0.0)
-  for bad in ({"ceiling": 0.0}, {"radius": 0.0}):
-    with pytest.raises(ValueError, match="ceiling > 0 and radius > 0"):
-      over_object_exclusion(env, cfg, "object", **{"ceiling": 0.024, "radius": 0.08, **bad})
+  assert torch.allclose(
+    fingertip_height_excess(env, cfg, 0.024), torch.tensor([1.0, 1.0])
+  )
+  # The gate is load-bearing: the ceiling equals the object's top face, so a
+  # fingertip resting on the T violates it by construction and the cheapest way
+  # to comply is to press down. Ungated, this took top-face contact from 0.105
+  # to 0.331.
+  assert torch.allclose(
+    fingertip_height_excess(env, cfg, 0.024, "ee_object_contact"),
+    torch.tensor([1.0, 0.0]),
+  )
+  with pytest.raises(ValueError, match="ceiling > 0"):
+    fingertip_height_excess(env, cfg, 0.0)
 
 
 def test_push_t_contact_force_barrier_is_exponential_and_never_overflows() -> None:
@@ -1082,7 +1081,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "at_goal_action",
     "table_contact_force",
     "object_contact_force",
-    "over_object_exclusion",
+    "ee_height_ceiling",
     "joint_pos_limits",
     "joint_speed_hinge",
   )
@@ -1104,14 +1103,14 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   # as a soft ceiling. Both numbers are the object's own height, so they track
   # the T rather than being free parameters. vertical_contact_force was removed:
   # at -0.05 it left top-face contact at 0.105 against a 0.107 baseline.
-  from vbrl.tasks.push_t.geometry import FOOTPRINT_RADIUS, HALF_HEIGHT
+  from vbrl.tasks.push_t.geometry import HALF_HEIGHT
 
   assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
-  assert cfg.rewards["over_object_exclusion"].weight == pytest.approx(-0.1)
-  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.1)
-  excl = cfg.rewards["over_object_exclusion"].params
-  assert excl["ceiling"] == EE_HEIGHT_CEILING_M
-  assert excl["radius"] == pytest.approx(FOOTPRINT_RADIUS)
+  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
+  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
+  # Gated on contact: without this the ceiling pays the policy to press down.
+  assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
+  assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
   assert "vertical_contact_force" not in cfg.rewards
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
   # Bounds the *magnitude* of contact with the T. vertical_contact_force cannot:

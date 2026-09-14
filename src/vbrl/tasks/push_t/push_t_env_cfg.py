@@ -24,7 +24,7 @@ from vbrl.asset_zoo.robots.definition import RobotDefinition
 from vbrl.tasks.utils import EE_GROUND_CONTACT_SENSOR, make_tabletop_env_cfg
 
 from . import mdp
-from .geometry import FOOTPRINT_RADIUS, HALF_HEIGHT, REST_HEIGHT
+from .geometry import HALF_HEIGHT, REST_HEIGHT
 from .goal_marker import GOAL_ENTITY_NAME
 
 
@@ -49,17 +49,15 @@ _ACTION_DELTA = 0.1
 # of episode success. It penalised an emergent contact normal; this penalises a
 # height the policy chooses directly.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
-# -0.1, not the -0.02 it was first tried at. At -0.02 the term cost 3.2% of a
-# 14.7 task reward and was simply bought out: run avv1us6e kept a fingertip
-# median of 46.3 mm against this 24 mm ceiling. Constraint terms are priced an
-# order of magnitude above regularisers in practice, and threshold formulations
-# like this one are reported to tolerate weights well above the task reward
-# without losing task completion. This is ~16% of task reward.
-#
-# A no-fly cylinder, so it fires only while the fingertip is actually over the T
-# rather than on every step the arm is high. During the dragging it measures ~1.0,
-# so at this weight dragging costs 0.1 per step against a task margin of 0.28.
-EE_HEIGHT_WEIGHT = -0.1
+# -0.02, the value every run that worked carried: avv1us6e, 3mw7oyvo and
+# 2458edlt reached 0.368 / 0.414 / 0.632 episode success with it. At this weight
+# the term is close to inert -- it costs about 3% of a 14+ task reward and run
+# avv1us6e kept a fingertip median of 46.3 mm against this 24 mm ceiling -- but
+# -0.1 is the only weight measured to bind (top-face contact 0.054) and it took
+# episode success to 0.008. The usable window, if there is one, lies between,
+# and finding it needs seed replicates rather than single probes: two runs of an
+# identical config scored 0.414 and 0.632.
+EE_HEIGHT_WEIGHT = -0.02
 # Table contact, targeted at zero. No onset: any contact is charged, because the
 # T stands 24 mm tall and the gripper has that much clearance to push a side face
 # without ever reaching the surface -- so "do not touch the table" is a small
@@ -381,16 +379,15 @@ def build_env_cfg(
     ),
     # Keep the fingertip in the object's own height band, so a side push is the
     # only geometry available; see EE_HEIGHT_CEILING_M.
-    "over_object_exclusion": RewardTermCfg(
-      func=mdp.over_object_exclusion,
+    "ee_height_ceiling": RewardTermCfg(
+      func=mdp.fingertip_height_excess,
       weight=EE_HEIGHT_WEIGHT,
       params={
         "asset_cfg": SceneEntityCfg(
           "robot", geom_names=robot.fingertip_geom_pattern
         ),
-        "object_name": object_name,
         "ceiling": EE_HEIGHT_CEILING_M,
-        "radius": FOOTPRINT_RADIUS,
+        "sensor_name": _CONTACT_SENSOR,
       },
     ),
     # Joint-limit protection for the real arm. A hinge on the *soft* limits, so
