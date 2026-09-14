@@ -680,6 +680,26 @@ def test_push_t_action_path_length_is_l1_so_splitting_a_move_is_never_cheaper() 
   assert cost([0.5, -0.5, 0, 0, 0, 0]) == pytest.approx(1.0)
 
 
+def test_push_t_contact_force_barrier_is_exponential_and_never_overflows() -> None:
+  from vbrl.tasks.push_t.mdp import contact_force_barrier
+
+  def sensor(*newtons: float):
+    force = torch.tensor([[[[n, 0.0, 0.0]]] for n in newtons])  # [B, 1, 1, 3]
+    return SimpleNamespace(data=SimpleNamespace(force=None, force_history=force))
+
+  env = SimpleNamespace(scene={"object": sensor(0.5, 1.0, 3.0, 78.0, 1e6)})
+  out = contact_force_barrier(env, "object", onset=1.0, scale=2.0, cap=10.0)
+  # Zero at and below the onset, exp(1)-1 at one scale above it.
+  assert torch.allclose(out[:3], torch.tensor([0.0, 0.0, math.e - 1.0]))
+  # Capped rather than unbounded: at 78 N the uncapped value is 5.2e16, which
+  # would be the critic's regression target. Even 1e6 N stays finite.
+  assert torch.allclose(out[3:], torch.tensor([10.0, 10.0]))
+  assert torch.isfinite(out).all()
+  for bad in ({"scale": 0.0}, {"cap": 0.0}, {"onset": -1.0}):
+    with pytest.raises(ValueError, match="onset >= 0, scale > 0, cap > 0"):
+      contact_force_barrier(env, "object", **{"onset": 1.0, "scale": 2.0, "cap": 10.0, **bad})
+
+
 def test_push_t_contact_force_hinge_is_zero_below_onset_then_quadratic() -> None:
   from vbrl.tasks.push_t.mdp import contact_force_hinge, max_contact_force
 
@@ -978,6 +998,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     ACTION_PATH_LENGTH_WEIGHT,
     ACTION_RATE_WEIGHT,
     AT_GOAL_ACTION_WEIGHT,
+    OBJECT_CONTACT_ONSET_N,
     TABLE_CONTACT_ONSET_N,
     VERTICAL_CONTACT_FORCE_WEIGHT,
   )
@@ -1026,6 +1047,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "action_rate_l2",
     "at_goal_action",
     "table_contact_force",
+    "object_contact_force",
     "vertical_contact_force",
     "joint_pos_limits",
     "joint_speed_hinge",
@@ -1041,8 +1063,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "action_acc_l2" not in cfg.rewards
   # Charged only where ManiSkill's reward has gone flat, so it cannot trade
   # against task performance -- which is why it is 25x the travel weight.
-  assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
-  assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
+  assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.2)
+  assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.2)
 
   # Top-face contact is the measured failure mode and this is the term that
   # targets it. Live from step 0 and small: ramping it in later, or setting it
@@ -1050,6 +1072,17 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(-0.05)
   assert VERTICAL_CONTACT_FORCE_WEIGHT == pytest.approx(-0.05)
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
+  # Bounds the *magnitude* of contact with the T. vertical_contact_force cannot:
+  # its tanh(F/10) is 0.964 at 20 N and 0.9999 at 49, so it is blind to the force
+  # range that matters. This hinge keeps growing instead of saturating, and the
+  # onset is what the task needs: a trained policy's productive contacts run
+  # p10 0.23 N, p50 4.45, p90 21.65, so 1 N is reachable and 4.45 costs 0.4% of
+  # the task margin.
+  object_contact = cfg.rewards["object_contact_force"].params
+  assert object_contact["onset"] == pytest.approx(1.0) == OBJECT_CONTACT_ONSET_N
+  assert object_contact["scale"] == pytest.approx(2.0)
+  assert object_contact["cap"] == pytest.approx(10.0)
+  assert cfg.rewards["object_contact_force"].weight == pytest.approx(-0.01)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
   assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
 

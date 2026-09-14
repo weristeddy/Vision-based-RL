@@ -122,6 +122,28 @@ class TrainConfig:
   orientation at any cap. The ratio reaches 4.3x at 1.5 cm and 6.4x at 1 cm,
   which is where "only rotation pays" is actually true.
   """
+  action_path_weight: float | None = None
+  """Weight of the L1 commanded-travel penalty, which is what bounds how far the
+  arm moves in total.
+
+  The registered -0.002 is decorative: measured on a solved state policy it costs
+  0.21 against a task reward of 14.0, or 1.5%, while that policy travels 1.75 m
+  of end-effector path per episode to push the T about 0.2 m and keeps the arm
+  moving at 5.5 mm per step through the 71% of steps where the object does not
+  move at all. Scaling that share, -0.01 costs about 7.7% and -0.02 about 15%.
+
+  Unlike the top-contact penalty this is not believed to remove a capability --
+  excess path is waste rather than function -- but that is an argument, not a
+  measurement, and the vertical sweep is a warning that 6% was enough to break
+  things there. Must be <= 0.
+  """
+  action_rate_weight: float | None = None
+  """Weight of MJLab's `action_rate_l2`, for oscillation rather than total path.
+
+  Registered at -0.002, a fifth of upstream Lift-Cube's -0.01, because the
+  quadratic form charges pure exploration noise as sigma^2 and so bites hardest
+  at initialization. Must be <= 0.
+  """
   vertical_contact_weight: float | None = None
   """Weight of the top-face contact penalty, which discourages pressing down on
   the object and dragging it instead of pushing a side face.
@@ -274,18 +296,24 @@ def _swap_orientation_reward(cfg: TrainConfig) -> None:
   }[cfg.orientation_reward]
 
 
-def _retune_contact_penalty(cfg: TrainConfig) -> None:
-  """Set the weight of the top-face contact penalty."""
-  if cfg.vertical_contact_weight is None:
-    return
-  if cfg.vertical_contact_weight > 0.0:
-    raise ValueError(
-      f"--vertical-contact-weight must be <= 0; got {cfg.vertical_contact_weight}."
-    )
-  term = (cfg.env.rewards or {}).get("vertical_contact_force")
-  if term is None:
-    raise ValueError("This task has no `vertical_contact_force` reward term.")
-  term.weight = cfg.vertical_contact_weight
+def _retune_penalty_weights(cfg: TrainConfig) -> None:
+  """Set the weights of the motion and contact penalties from the command line."""
+  # (reward term, the flag that sets it) -- the flag name is what a user types,
+  # so errors have to quote that rather than the term it happens to write to.
+  overrides = (
+    ("vertical_contact_force", "--vertical-contact-weight", cfg.vertical_contact_weight),
+    ("action_path_length", "--action-path-weight", cfg.action_path_weight),
+    ("action_rate_l2", "--action-rate-weight", cfg.action_rate_weight),
+  )
+  for name, flag, weight in overrides:
+    if weight is None:
+      continue
+    if weight > 0.0:
+      raise ValueError(f"{flag} must be <= 0; got {weight}.")
+    term = (cfg.env.rewards or {}).get(name)
+    if term is None:
+      raise ValueError(f"This task has no `{name}` reward term.")
+    term.weight = weight
 
 
 def _install_goal_curricula(cfg: TrainConfig) -> None:
@@ -538,7 +566,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   _retune_near_goal_mixture(cfg)
   _install_goal_curricula(cfg)
   _swap_orientation_reward(cfg)
-  _retune_contact_penalty(cfg)
+  _retune_penalty_weights(cfg)
 
   env = ManagerBasedRlEnv(
     cfg=cfg.env, device=device, render_mode="rgb_array" if cfg.video else None
@@ -586,9 +614,11 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   if cfg.min_action_std is not None:
     distribution = agent_cfg["actor"]["distribution_cfg"]
     # The RGB actors declare a range; the state actor does not, so a floor there
-    # has to be installed rather than edited. 1.0 is the upper bound the RGB
-    # tasks use and the state actor's own `init_std`, so it binds nothing.
-    low, high = distribution.get("std_range") or (None, 1.0)
+    # has to be installed rather than edited. Keep RSL-RL's own open upper bound
+    # in that case: substituting 1.0 -- the state actor's `init_std` -- put a
+    # ceiling exactly where std starts, and run u4uhvy5k then held std at 0.858
+    # for 500 iterations where the unbounded control decayed to 0.109.
+    low, high = distribution.get("std_range") or (None, 1e6)
     distribution["std_range"] = (cfg.min_action_std, high)
     print(f"[INFO] Action std range {low} -> {cfg.min_action_std} (upper bound {high}).")
 

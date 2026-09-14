@@ -63,6 +63,29 @@ VERTICAL_CONTACT_FORCE_WEIGHT = -0.05
 TABLE_CONTACT_ONSET_N = 0.0
 TABLE_CONTACT_SCALE_N = 5.0
 TABLE_CONTACT_WEIGHT = -0.01
+# Force into the T itself, which `vertical_contact_force` cannot bound: that term
+# scales contact by tanh(F/10), which is flat above roughly 20 N -- 0.964 at 20 N,
+# 0.998 at 35, 0.9999 at 49 -- so dropping a measured 49 N press to 20 N changes
+# it by 0.036. No weight on a saturating term can reduce a force it cannot see.
+#
+# This one is the quadratic hinge already used for the table, pointed at the
+# object sensor, so it keeps growing instead of saturating. It forbids nothing --
+# top-face contact stays available, just not at 50 N -- which is what separates
+# it from the direction penalty, where every weight tried traded task
+# performance away.
+#
+# The onset is 1 N because that is what the task needs. Measured over the
+# productive contacts of a trained policy -- the steps where the T actually
+# moves -- the force distribution is p10 0.23 N, p50 4.45, p90 21.65, p99 40.4,
+# max 77.8. So the T does slide at 0.23 N, matching mu 0.3 on a light object,
+# while the policy typically uses twenty times that and spikes to three hundred.
+# A quadratic hinge with a 10 N scale leaves the ordinary push nearly free and
+# charges only the tail: 4.45 N costs 0.0012 per step against a task margin of
+# 0.28, 21.65 N costs 0.043, 42 N costs 0.168.
+OBJECT_CONTACT_ONSET_N = 1.0
+OBJECT_CONTACT_SCALE_N = 2.0
+OBJECT_CONTACT_CAP = 10.0
+OBJECT_CONTACT_WEIGHT = -0.01
 # Total commanded travel (L1) and MJLab's own action-rate term. `action_rate_l2`
 # is upstream Lift-Cube's, at -0.01; it is kept here at a fifth of that because
 # for a Gaussian policy whose mean never changes consecutive actions still differ
@@ -79,7 +102,9 @@ ACTION_RATE_WEIGHT = -0.002
 # above, and affordable precisely because it applies nowhere else: at goal the
 # task pays a constant 1.0 per step, so 1.75 of L1 action costs 0.088 -- about
 # a tenth of what being at goal is worth -- and cannot make the goal unattractive.
-AT_GOAL_ACTION_WEIGHT = -0.05
+# Raised from -0.05, which already cut post-success end-effector drift 55%
+# (2.33 -> 1.05 mm per step) at no measured cost, so there is room to push it.
+AT_GOAL_ACTION_WEIGHT = -0.2
 JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
@@ -316,6 +341,18 @@ def build_env_cfg(
         "sensor_name": EE_GROUND_CONTACT_SENSOR,
         "onset": TABLE_CONTACT_ONSET_N,
         "scale": TABLE_CONTACT_SCALE_N,
+      },
+    ),
+    # Magnitude of contact with the T, which the direction term below saturates
+    # out of reach; see OBJECT_CONTACT_ONSET_N.
+    "object_contact_force": RewardTermCfg(
+      func=mdp.contact_force_barrier,
+      weight=OBJECT_CONTACT_WEIGHT,
+      params={
+        "sensor_name": _CONTACT_SENSOR,
+        "onset": OBJECT_CONTACT_ONSET_N,
+        "scale": OBJECT_CONTACT_SCALE_N,
+        "cap": OBJECT_CONTACT_CAP,
       },
     ),
     # Top-down contact on the T. Unchanged: |normal_z| * tanh(F/10) is already

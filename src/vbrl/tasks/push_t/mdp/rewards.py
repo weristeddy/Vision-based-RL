@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import torch
@@ -231,6 +232,40 @@ def max_contact_force(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   return torch.nan_to_num(magnitude, nan=0.0).flatten(1).amax(dim=-1)
 
 
+def contact_force_barrier(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  onset: float,
+  scale: float,
+  cap: float,
+) -> torch.Tensor:
+  """Exponential barrier on contact force: exactly zero below ``onset``.
+
+  ``expm1((F - onset) / scale)``, for "stay under onset newtons, and the cost of
+  exceeding it climbs fast". Measured on a trained policy's *productive* contacts
+  -- the steps where the T actually moves -- force runs p10 0.23 N, p50 4.45,
+  p90 21.65, max 77.8, while the T slides at 0.23 N. So the task needs about 1 N
+  and the policy uses twenty times that.
+
+  **Capped, and that is not optional.** Left unbounded this returns 5.2e16 at the
+  77.8 N the policy already produces. PPO regresses a value function on returns
+  containing that, so the critic loss explodes and one contact step dominates
+  every advantage in the batch -- the run dies immediately rather than degrading.
+  The exponent is clamped rather than the output so the large exp is never
+  evaluated at all, which keeps the gradient finite instead of merely the value.
+
+  The cap does reintroduce a flat region, which is the flaw that made
+  ``vertical_contact_force`` blind. The difference is where it starts: tanh(F/10)
+  goes flat at 20 N, inside normal operation, while this goes flat a few newtons
+  above the target, where the only remaining question is how much too much.
+  """
+  if onset < 0.0 or scale <= 0.0 or cap <= 0.0:
+    raise ValueError("contact_force_barrier needs onset >= 0, scale > 0, cap > 0.")
+  excess = (max_contact_force(env, sensor_name) - onset).clamp_min(0.0)
+  limit = math.log1p(cap)
+  return torch.expm1((excess / scale).clamp_max(limit))
+
+
 def contact_force_hinge(
   env: ManagerBasedRlEnv,
   sensor_name: str,
@@ -437,6 +472,7 @@ __all__ = [
   "KEYPOINTS_XY",
   "action_path_length_l1",
   "at_goal_action_l1",
+  "contact_force_barrier",
   "contact_force_hinge",
   "keypoint_reward",
   "linear_orientation_reward",
