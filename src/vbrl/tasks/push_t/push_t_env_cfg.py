@@ -109,9 +109,16 @@ ACTION_RATE_WEIGHT = -0.002
 # above, and affordable precisely because it applies nowhere else: at goal the
 # task pays a constant 1.0 per step, so 1.75 of L1 action costs 0.088 -- about
 # a tenth of what being at goal is worth -- and cannot make the goal unattractive.
-# Raised from -0.05, which already cut post-success end-effector drift 55%
-# (2.33 -> 1.05 mm per step) at no measured cost, so there is room to push it.
-AT_GOAL_ACTION_WEIGHT = -0.2
+# -0.05 is the value with a measurement behind it: it cut post-success drift 55%
+# (2.33 -> 1.05 mm per step). It was briefly -0.2 on the theory that the flat
+# task reward made it free. That was wrong in the way that matters -- the
+# gradient is flat at goal, so the term cannot distort behaviour *there*, but it
+# lowers the value of the goal state and gamma carries that backwards into every
+# state leading to it. Measured on the best policy under the current rewards,
+# -0.2 costs 0.166 per step at goal, 17% of the at-goal reward and the largest
+# single penalty in the config; the margin for being at goal fell from 0.72 to
+# 0.56 per step.
+AT_GOAL_ACTION_WEIGHT = -0.05
 JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first

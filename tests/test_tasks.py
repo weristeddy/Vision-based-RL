@@ -1064,8 +1064,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "action_acc_l2" not in cfg.rewards
   # Charged only where ManiSkill's reward has gone flat, so it cannot trade
   # against task performance -- which is why it is 25x the travel weight.
-  assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.2)
-  assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.2)
+  assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
+  assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
 
   # The planar constraint every published Push-T enforces in its action space,
   # as a soft ceiling. Both numbers are the object's own height, so they track
