@@ -74,6 +74,12 @@ TABLE_CONTACT_WEIGHT = -0.01
 # sharpest sigma^2 penalty of the three, and it duplicates the rate term.
 ACTION_PATH_LENGTH_WEIGHT = -0.002
 ACTION_RATE_WEIGHT = -0.002
+# Motion charged only once the object is at its goal, where ManiSkill's reward
+# has gone flat and the task offers no gradient at all. 25x the travel weight
+# above, and affordable precisely because it applies nowhere else: at goal the
+# task pays a constant 1.0 per step, so 1.75 of L1 action costs 0.088 -- about
+# a tenth of what being at goal is worth -- and cannot make the goal unattractive.
+AT_GOAL_ACTION_WEIGHT = -0.05
 JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
@@ -295,6 +301,12 @@ def build_env_cfg(
     "action_rate_l2": RewardTermCfg(
       func=mdp.action_rate_l2,
       weight=ACTION_RATE_WEIGHT,
+    ),
+    # Settle once the T is placed; see AT_GOAL_ACTION_WEIGHT.
+    "at_goal_action": RewardTermCfg(
+      func=mdp.at_goal_action_l1,
+      weight=AT_GOAL_ACTION_WEIGHT,
+      params={"command_name": _COMMAND},
     ),
     # Table contact, charged from the first newton -- the goal is zero.
     "table_contact_force": RewardTermCfg(

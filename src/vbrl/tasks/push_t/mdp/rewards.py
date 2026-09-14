@@ -191,6 +191,30 @@ def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
   return torch.sum(torch.abs(env.action_manager.action), dim=1)
 
 
+def at_goal_action_l1(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+) -> torch.Tensor:
+  """L1 of the action, charged only while the object is already at its goal.
+
+  ManiSkill's dense reward replaces itself with the sparse maximum once overlap
+  crosses the threshold -- position, orientation and the tcp term all go -- so
+  from that moment the task gives the arm no gradient whatsoever. Nothing
+  rewards holding still, staying near the object, or backing off, and relative
+  joint-position control integrates the action, so even a zero-mean policy
+  random-walks rather than holding a pose. Measured on the trained VisualSlow
+  policy: after success the end-effector still travels 6.65 mm per step, 33 cm/s
+  at the 50 Hz control rate, while the object moves 0.48 mm.
+
+  Charging motion in that region alone is free in a way no other penalty here
+  is: the task reward is *constant* there, so this cannot trade against task
+  performance the way a penalty applied during the push does.
+  """
+  command = push_t_command(env, command_name)
+  action = torch.sum(torch.abs(env.action_manager.action), dim=1)
+  return action * command.get_at_goal().to(action.dtype)
+
+
 def max_contact_force(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   """Peak contact-force magnitude on one sensor, in newtons.
 
@@ -412,6 +436,7 @@ def _place(
 __all__ = [
   "KEYPOINTS_XY",
   "action_path_length_l1",
+  "at_goal_action_l1",
   "contact_force_hinge",
   "keypoint_reward",
   "linear_orientation_reward",

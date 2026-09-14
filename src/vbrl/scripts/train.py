@@ -74,8 +74,15 @@ class TrainConfig:
   """Override the lower bound of the policy's action-std range.
 
   `std_range` lives inside `actor.distribution_cfg`, a plain dict, so Tyro does
-  not expose it. The registered floor is 0.15; ManiSkill's PPO has none, and
-  every run so far sat pinned at exactly the floor.
+  not expose it. The RGB actors declare `(0.15, 1.0)` and every vision run so far
+  sat pinned at exactly 0.15, so the floor binds. The state actor declares no
+  range at all and settles around 0.11 on its own; passing this there installs a
+  floor rather than lowering one, which is how the two can be compared at a
+  matched action std.
+
+  Note this shapes *training* only. Rollouts use `get_inference_policy`, which is
+  the deterministic mean -- measured identical across repeated calls -- so this
+  cannot change execution-time jitter, only what the policy learns under noise.
   """
   goal_yaw_pin_iterations: int | None = None
   """Iterations the goal yaw stays pinned before the range starts widening."""
@@ -578,7 +585,10 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
 
   if cfg.min_action_std is not None:
     distribution = agent_cfg["actor"]["distribution_cfg"]
-    low, high = distribution["std_range"]
+    # The RGB actors declare a range; the state actor does not, so a floor there
+    # has to be installed rather than edited. 1.0 is the upper bound the RGB
+    # tasks use and the state actor's own `init_std`, so it binds nothing.
+    low, high = distribution.get("std_range") or (None, 1.0)
     distribution["std_range"] = (cfg.min_action_std, high)
     print(f"[INFO] Action std range {low} -> {cfg.min_action_std} (upper bound {high}).")
 

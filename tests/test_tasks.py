@@ -703,6 +703,25 @@ def test_push_t_contact_force_hinge_is_zero_below_onset_then_quadratic() -> None
     contact_force_hinge(env, "table", onset=5.0, scale=0.0)
 
 
+def test_push_t_at_goal_action_penalty_is_zero_until_the_object_is_placed() -> None:
+  from vbrl.tasks.push_t.mdp import at_goal_action_l1
+  from vbrl.tasks.push_t.mdp.commands import PushTCommand
+
+  command = object.__new__(PushTCommand)
+  command.get_at_goal = lambda: torch.tensor([True, False, True])
+  env = SimpleNamespace(
+    action_manager=SimpleNamespace(
+      action=torch.tensor([[1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 0.0]])
+    ),
+    command_manager=SimpleNamespace(get_term=lambda name: command),
+  )
+  # Full L1 while at goal, exactly zero otherwise -- the task reward is flat in
+  # the first case and carries the gradient in the second.
+  assert torch.allclose(
+    at_goal_action_l1(env, "push_t_goal"), torch.tensor([2.0, 0.0, 0.0])
+  )
+
+
 def test_push_t_vertical_contact_force_penalizes_forceful_top_contact() -> None:
   from vbrl.tasks.push_t.mdp import vertical_contact_force
 
@@ -958,6 +977,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.push_t_env_cfg import (
     ACTION_PATH_LENGTH_WEIGHT,
     ACTION_RATE_WEIGHT,
+    AT_GOAL_ACTION_WEIGHT,
     TABLE_CONTACT_ONSET_N,
     VERTICAL_CONTACT_FORCE_WEIGHT,
   )
@@ -1004,6 +1024,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "maniskill_dense",
     "action_path_length",
     "action_rate_l2",
+    "at_goal_action",
     "table_contact_force",
     "vertical_contact_force",
     "joint_pos_limits",
@@ -1018,6 +1039,10 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
   # action_acc_l2 is not an upstream term and duplicates the rate penalty.
   assert "action_acc_l2" not in cfg.rewards
+  # Charged only where ManiSkill's reward has gone flat, so it cannot trade
+  # against task performance -- which is why it is 25x the travel weight.
+  assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
+  assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
 
   # Top-face contact is the measured failure mode and this is the term that
   # targets it. Live from step 0 and small: ramping it in later, or setting it
