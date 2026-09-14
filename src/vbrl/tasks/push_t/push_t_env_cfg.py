@@ -58,6 +58,18 @@ EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
 # and finding it needs seed replicates rather than single probes: two runs of an
 # identical config scored 0.414 and 0.632.
 EE_HEIGHT_WEIGHT = -0.02
+# The one *positive* shaping term, and the replacement for the whole family of
+# top-contact penalties: `vertical_contact_force` at four weights, the
+# exponential force barrier, the height ceiling and the no-fly cylinder are all
+# gone. See `mdp.side_contact_align` for why the sign is the argument.
+#
+# 0.05 is a starting size, not a measured one. The entire penalty family costs
+# about 3% of task reward, so this puts the bonus on the same scale -- large
+# enough to choose between two contact geometries, too small to outrank placing
+# the T. Read `Episode_Reward/side_contact_align` against
+# `Episode_Reward/maniskill_dense` at iteration ~50 and adjust once if it is not
+# near 5%.
+SIDE_CONTACT_ALIGN_WEIGHT = 0.05
 # Table contact, targeted at zero. No onset: any contact is charged, because the
 # T stands 24 mm tall and the gripper has that much clearance to push a side face
 # without ever reaching the surface -- so "do not touch the table" is a small
@@ -72,35 +84,6 @@ EE_HEIGHT_WEIGHT = -0.02
 TABLE_CONTACT_ONSET_N = 0.0
 TABLE_CONTACT_SCALE_N = 5.0
 TABLE_CONTACT_WEIGHT = -0.01
-# Force into the T itself, which `vertical_contact_force` cannot bound: that term
-# scales contact by tanh(F/10), which is flat above roughly 20 N -- 0.964 at 20 N,
-# 0.998 at 35, 0.9999 at 49 -- so dropping a measured 49 N press to 20 N changes
-# it by 0.036. No weight on a saturating term can reduce a force it cannot see.
-#
-# This one is the quadratic hinge already used for the table, pointed at the
-# object sensor, so it keeps growing instead of saturating. It forbids nothing --
-# top-face contact stays available, just not at 50 N -- which is what separates
-# it from the direction penalty, where every weight tried traded task
-# performance away.
-#
-# The onset is 1 N because that is what the task needs. Measured over the
-# productive contacts of a trained policy -- the steps where the T actually
-# moves -- the force distribution is p10 0.23 N, p50 4.45, p90 21.65, p99 40.4,
-# max 77.8. So the T does slide at 0.23 N, matching mu 0.3 on a light object,
-# while the policy typically uses twenty times that and spikes to three hundred.
-# A quadratic hinge with a 10 N scale leaves the ordinary push nearly free and
-# charges only the tail: 4.45 N costs 0.0012 per step against a task margin of
-# 0.28, 21.65 N costs 0.043, 42 N costs 0.168.
-OBJECT_CONTACT_ONSET_N = 1.0
-OBJECT_CONTACT_SCALE_N = 2.0
-OBJECT_CONTACT_CAP = 10.0
-# Zeroed: measured in isolation (run sgojsnr8, the only change against its
-# control) it cost 21% of overlap and 82% of episode success while cutting peak
-# object force only 35.8 -> 29.7 N. The penalty is per step, so the cheapest
-# response is fewer contacts rather than gentler ones -- contact rate fell 0.126
-# -> 0.102 while bout length was unchanged. Left in place at zero so the shape
-# can be re-tested once the height ceiling is characterised on its own.
-OBJECT_CONTACT_WEIGHT = 0.0
 # Total commanded travel (L1) and MJLab's own action-rate term. `action_rate_l2`
 # is upstream Lift-Cube's, at -0.01; it is kept here at a fifth of that because
 # for a Gaussian policy whose mean never changes consecutive actions still differ
@@ -127,16 +110,36 @@ ACTION_RATE_WEIGHT = -0.002
 # single penalty in the config; the margin for being at goal fell from 0.72 to
 # 0.56 per step.
 AT_GOAL_ACTION_WEIGHT = -0.05
-# Top-face contact above this force ends the episode. Not a penalty: every
-# penalty tried against dragging was either bought out by the task reward or
-# broke the task, because a price is payable. This is not.
+# `forceful_top_contact` used to be wired in here and is deliberately not any
+# more. It is retained in `mdp.terminations` because the measurement is worth
+# keeping reachable, but no task installs it.
 #
-# 5 N is set from the measured force distribution of productive contacts --
-# p10 0.23 N, p50 4.45, p90 21.65 -- so brushing the top while manoeuvring stays
-# legal and leaning on the T to drag it does not. Contact on a vertical face is
-# untouched at any force, so the escape route is to push from the side rather
-# than to stop touching, which is what the force barrier got wrong.
-TOP_CONTACT_FORCE_LIMIT_N = 5.0
+# It was the last untried mechanism against dragging, on the argument that a
+# penalty is a price the task reward can pay while a termination is not. That
+# argument was right and the mechanism still failed, for a reason force cannot
+# fix. Run 4fmml3fl at 5 N against its control 2458edlt: identical to iteration
+# 25, then at iteration 50 the control's peak object force jumps 3.6 -> 20.1 N
+# and its task reward 4.78 -> 6.04, which is a policy discovering that touching
+# the T pays. The first contacts it discovers are hard top-face presses, so
+# under a 5 N rule every one of those discoveries is an episode ending. The
+# terminated run stayed at 0.86 N of peak object force for iterations 40-200 --
+# not touching the object at all -- and sigma decayed against that flat reward
+# from 0.44 to 0.097, which PPO cannot undo. It reached at iteration 425 what
+# the control had at 75, and finished at 0.000 success against 0.626.
+#
+# Note the firing rate through the dead phase was only 3.2%: the collapse was
+# not the termination firing, it was the policy having already learned to avoid
+# it. The pressure also moved rather than disappearing -- with the top face
+# closed, peak *table* force finished at 32.4 N against the control's 5.1.
+#
+# No threshold separates the two cases. Dragging runs 17-78 N (p50 17.4) and
+# learning to push peaks at ~20 N, so they are the same forces; above the
+# converged plateau of 39.8 N the term stops binding at all. What does separate
+# them is time, not force -- discovery is at iteration 50, dragging is converged
+# behaviour -- so this would need constraint annealing, and this task carries no
+# curriculum. `side_contact_align` is the mechanism instead, and it cannot fail
+# this way: it never removes reward from contact, so its worst case is being
+# ignored.
 JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
@@ -258,7 +261,7 @@ def build_env_cfg(
   object_name: str,
   rgb: bool = False,
   play: bool = False,
-  success_threshold: float = 0.98,
+  success_threshold: float = 0.90,
   goal_yaw_stages: Sequence[Mapping[str, float]] | None = None,
   quadratic_orientation: bool = False,
   visual_goal: bool = False,
@@ -348,6 +351,13 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
+    # The one positive shaping term: push a side face, not the top face.
+    # See SIDE_CONTACT_ALIGN_WEIGHT and mdp.side_contact_align.
+    "side_contact_align": RewardTermCfg(
+      func=mdp.side_contact_align,
+      weight=SIDE_CONTACT_ALIGN_WEIGHT,
+      params={"sensor_name": _CONTACT_SENSOR},
+    ),
     # Total commanded travel: an L1 path penalty, so splitting one motion into
     # many is never cheaper and a correction cycle costs double.
     "action_path_length": RewardTermCfg(
@@ -373,18 +383,6 @@ def build_env_cfg(
         "sensor_name": EE_GROUND_CONTACT_SENSOR,
         "onset": TABLE_CONTACT_ONSET_N,
         "scale": TABLE_CONTACT_SCALE_N,
-      },
-    ),
-    # Magnitude of contact with the T, which the direction term below saturates
-    # out of reach; see OBJECT_CONTACT_ONSET_N.
-    "object_contact_force": RewardTermCfg(
-      func=mdp.contact_force_barrier,
-      weight=OBJECT_CONTACT_WEIGHT,
-      params={
-        "sensor_name": _CONTACT_SENSOR,
-        "onset": OBJECT_CONTACT_ONSET_N,
-        "scale": OBJECT_CONTACT_SCALE_N,
-        "cap": OBJECT_CONTACT_CAP,
       },
     ),
     # Keep the fingertip in the object's own height band, so a side push is the
@@ -448,13 +446,6 @@ def build_env_cfg(
       params={"object_name": object_name},
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
-    forceful_top_contact=TerminationTermCfg(
-      func=mdp.forceful_top_contact,
-      params={
-        "sensor_name": _CONTACT_SENSOR,
-        "force_threshold": TOP_CONTACT_FORCE_LIMIT_N,
-      },
-    ),
   )
   cfg.curriculum = {}
   if separation_curriculum:

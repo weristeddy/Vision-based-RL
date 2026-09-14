@@ -213,13 +213,15 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
 
 
 def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
-  """Which variants schedule the goal yaw, and which use ManiSkill's threshold.
+  """Which variants schedule the goal yaw, and that every one uses 0.90.
 
-  The two are no longer the same set. `SlowGoal`, `Balanced`, `SlowFree` and
-  `VisualSlow` schedule the goal; `Uniform` and `UniformQuad` deliberately do
-  not, but share the 0.90
-  threshold because they are meant to be compared against `SlowGoal`. Every
-  other generation keeps the 0.98 threshold its results were measured against.
+  `SlowGoal`, `Balanced`, `SlowFree` and `VisualSlow` schedule the goal; every
+  other variant deliberately does not. The success threshold is no longer part
+  of that split: it is ManiSkill3's 0.90 everywhere. It used to be 0.98 outside
+  the curriculum generations, which measured the threshold rather than the
+  policy -- 0.98 needs 2 mm *and* 2.5 degrees, below what a 0.1 rad joint
+  increment resolves, and identical rollouts score 0.004 at 0.98 against 0.250
+  at 0.90. Results measured at 0.98 are not comparable across this change.
   """
   from mjlab.tasks.registry import load_env_cfg
 
@@ -246,20 +248,7 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
       )
     )
     assert scheduled is arm, task_id
-    lenient = arm or any(
-      m in task_id
-      for m in (
-        "-Uniform-",
-        "-UniformQuad-",
-        "-VisualGoal-",
-        "-VisualFree-",
-        "-VisualGrow-",
-        "-FreeStart-",
-        "-NearGoal-",
-        "-GrowStart-",
-      )
-    )
-    assert command.success_threshold == (0.90 if lenient else 0.98), task_id
+    assert command.success_threshold == pytest.approx(0.90), task_id
     # The registered range is always the full circle; the curriculum narrows it
     # at runtime and hands it back, so evaluation is never made easier.
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id

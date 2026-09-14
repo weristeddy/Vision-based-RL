@@ -144,25 +144,6 @@ class TrainConfig:
   quadratic form charges pure exploration noise as sigma^2 and so bites hardest
   at initialization. Must be <= 0.
   """
-  vertical_contact_weight: float | None = None
-  """Weight of the top-face contact penalty, which discourages pressing down on
-  the object and dragging it instead of pushing a side face.
-
-  A flag rather than a variant because the workable range is narrow. Measured on
-  `Episode_Reward` totals, which is the only scale the shares below are in:
-
-  * At the registered -0.05 a solved state policy pays 0.164 against a task
-    reward of 14.0 -- 1.2% -- and still puts ~80% of its contacts on the top
-    face. Too weak to change the behaviour it exists to change.
-  * Scaling that share, -0.25 costs about 5.9% and -0.75 about 17.6%.
-  * Both weights collapsed a run to never touching the object, but those were at
-    1024 environments where exploration died before transport was learned and the
-    policy earned only 6.8; the collapse set in once the penalty reached ~3% of
-    that. At 4096 environments the same policy solves the task and earns 14.0, so
-    there is roughly twice the headroom -- not more.
-
-  Must be <= 0.
-  """
   orientation_reward: (
     Literal["maniskill", "quadratic", "linear", "keypoint"] | None
   ) = None
@@ -301,7 +282,6 @@ def _retune_penalty_weights(cfg: TrainConfig) -> None:
   # (reward term, the flag that sets it) -- the flag name is what a user types,
   # so errors have to quote that rather than the term it happens to write to.
   overrides = (
-    ("vertical_contact_force", "--vertical-contact-weight", cfg.vertical_contact_weight),
     ("action_path_length", "--action-path-weight", cfg.action_path_weight),
     ("action_rate_l2", "--action-rate-weight", cfg.action_rate_weight),
   )

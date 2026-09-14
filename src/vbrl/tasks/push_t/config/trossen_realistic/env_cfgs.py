@@ -29,7 +29,7 @@ def _env_cfg(
   scene: str,
   play: bool,
   camera: CameraView = "external",
-  success_threshold: float = 0.98,
+  success_threshold: float = 0.90,
   goal_yaw_stages=None,
   quadratic_orientation: bool = False,
   visual_goal: bool = False,
@@ -90,7 +90,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   scene: str = "real_texture",
   play: bool = False,
   camera: CameraView = "external",
-  success_threshold: float = 0.98,
+  success_threshold: float = 0.90,
   goal_yaw_stages=None,
   quadratic_orientation: bool = False,
   visual_goal: bool = False,
@@ -108,10 +108,14 @@ def trossen_realistic_push_t_rgb_env_cfg(
   near-overhead ``external``) were deleted along with the task IDs that named
   them, because a pose that is no longer in the MJCF cannot be replayed.
 
-  ``success_threshold`` is 0.98 for the retained generations. The curriculum
-  generation uses ManiSkill3's 0.90, which also restores the sparse at-goal
-  reward bonus: at 0.98 that bonus needs 2 mm and 2.5 degrees and so effectively
-  never fires.
+  ``success_threshold`` is ManiSkill3's 0.90 everywhere. It used to be 0.98 for
+  every generation except the curriculum one, and that was measuring the
+  threshold rather than the policy: 0.98 demands 2 mm *and* 2.5 degrees, which
+  is below what a 0.1 rad joint increment can resolve, so the sparse at-goal
+  bonus effectively never fired and success read near zero for policies that
+  were placing the T. Rolled out on one trained checkpoint, the same episodes
+  score 0.004 at 0.98 and 0.250 at 0.90. Retained results measured at 0.98 are
+  not comparable to anything logged after this change.
   """
   return _env_cfg(
     rgb=True,

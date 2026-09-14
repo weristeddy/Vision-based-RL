@@ -155,6 +155,56 @@ def vertical_contact_force(
   )
 
 
+def side_contact_align(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+) -> torch.Tensor:
+  """1.0 while the gripper presses a vertical face of the T, 0.0 otherwise.
+
+  The continuous complement of ``top_contact_share``, and the one shaping term
+  here that is *positive*. That sign is the whole point. Six penalties on
+  top-face contact were measured -- ``vertical_contact_force`` at four weights,
+  an exponential force barrier, a height ceiling, a no-fly cylinder -- and every
+  one was either inert or cost 73-93% of success, because across all eight state
+  runs success correlates *positively* with ``top_contact_share``: dragging is
+  not a habit sitting on top of a working policy, it is the only contact
+  strategy the policy ever found. Removing it without supplying a replacement
+  removes the policy.
+
+  A penalty also cannot be localised. Every term lands in one scalar return, so
+  gamma propagates a contact penalty backwards into the value of *approaching*,
+  which is exactly the "afraid to touch the T, one short tap and let go"
+  behaviour the force-barrier run produced. A bonus has the opposite sign
+  everywhere: it raises the value of the good mode and leaves the value of
+  contact alone, so it cannot make the task harder to learn.
+
+  The form is the contact-normal alignment term the pushing literature converges
+  on (Lloyd & Lepora, "Sim-to-Real ... Tactile Pushing", 2023, which reports it
+  critical for training; Dengler et al., "Goal-Directed Object Pushing", 2024):
+  reward pushing along the object's surface normal. The sensor normal points
+  from the gripper into the T, so a side face gives ``n_z ~ 0`` and scores 1,
+  the top face gives ``|n_z| ~ 1`` and scores 0, and not touching scores 0 --
+  the same three cases ``top_contact_share`` thresholds at 0.7, without the
+  threshold.
+
+  Unforced by design: it carries no force factor and no progress gate. A force
+  factor reintroduces the magnitude coupling that made ``vertical_contact_force``
+  unreadable, and a gate makes the term zero exactly where a fresh policy needs
+  it. The exploit it leaves open is resting against a side face without pushing;
+  the guard is that this task only ends on ``time_out``, so farming the bonus
+  forfeits the at-goal reward for the whole episode.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  if data.found is None or data.normal is None:
+    raise RuntimeError(f"Contact sensor {sensor_name!r} requires found and normal.")
+  alignment = 1.0 - data.normal[..., 2].abs().clamp(0.0, 1.0)
+  return torch.amax(
+    torch.where(data.found > 0, alignment, torch.zeros_like(alignment)),
+    dim=-1,
+  )
+
+
 def top_contact_share(
   env: ManagerBasedRlEnv,
   sensor_name: str,
@@ -164,9 +214,10 @@ def top_contact_share(
 
   The behaviour measure for the drag-versus-push failure: a policy that scrapes
   the top of the T sits near 1.0 whenever it is touching, a clean side push near
-  0.0, and not touching is also 0.0. Logged as a metric rather than shaped --
-  ``vertical_contact_force`` already carries the gradient, and its weight moves
-  over training, which makes the reward channel unreadable as behaviour.
+  0.0, and not touching is also 0.0. Logged as a metric rather than shaped: the
+  shaped channel is ``side_contact_align``, its continuous complement, and a
+  weighted reward term whose weight is itself under review is unreadable as
+  behaviour. This one has no weight, so it means the same thing in every run.
   """
   sensor: ContactSensor = env.scene[sensor_name]
   data = sensor.data
@@ -536,6 +587,7 @@ __all__ = [
   "maniskill_dense_reward",
   "max_contact_force",
   "quadratic_orientation_reward",
+  "side_contact_align",
   "top_contact_share",
   "vertical_contact_force",
 ]

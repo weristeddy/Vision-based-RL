@@ -1,7 +1,7 @@
 """Behavioural contracts for the Push-T and Push-Cube MDPs.
 
 These pin what the retained checkpoints were trained against: the ManiSkill
-dense-reward formula, the 0.98 overlap success threshold, coupled object/table
+dense-reward formula, the 0.90 overlap success threshold, coupled object/table
 friction, the Gaussian joint reset, and the 3200-step curriculum boundary.
 """
 
@@ -127,11 +127,11 @@ def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:
   assert 0.0 < first[3] < 0.9
 
 
-def test_push_t_success_threshold_is_98_percent_and_latches_metrics() -> None:
+def test_push_t_success_threshold_latches_metrics() -> None:
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
 
   command = object.__new__(PushTCommand)
-  command.cfg = SimpleNamespace(success_threshold=0.98)
+  command.cfg = SimpleNamespace(success_threshold=0.90)
   command.target_pos = torch.tensor([[0.40, 0.0, 0.02], [0.40, 0.0, 0.02]])
   command.target_yaw = torch.zeros(2)
   command.object = SimpleNamespace(
@@ -153,7 +153,7 @@ def test_push_t_success_threshold_is_98_percent_and_latches_metrics() -> None:
       "episode_success",
     )
   }
-  overlaps = iter((torch.tensor([0.98, 0.979]), torch.tensor([0.0, 1.0])))
+  overlaps = iter((torch.tensor([0.90, 0.899]), torch.tensor([0.0, 1.0])))
   command.get_overlap = lambda: next(overlaps)
 
   first = PushTCommand.get_at_goal(command)
@@ -798,6 +798,52 @@ def test_push_t_forceful_top_contact_terminates_only_on_hard_vertical_press() ->
     forceful_top_contact(env, "ee_object_contact", force_threshold=0.0)
 
 
+def test_push_t_side_contact_align_rewards_pushing_a_vertical_face() -> None:
+  """The one positive shaping term: 1 on a side face, 0 on the top, 0 untouched.
+
+  Sign is the whole argument. Six penalties on top-face contact were measured
+  and every one was inert or cost 73-93% of success, because success correlates
+  *positively* with `top_contact_share`: dragging was the only contact strategy
+  the policy had, so removing it removed the policy. A bonus raises the value of
+  the good mode instead of devaluing contact, and gamma then carries that
+  forwards rather than poisoning every state that approaches the T.
+  """
+  from vbrl.tasks.push_t.mdp import side_contact_align, top_contact_share
+
+  sensor = SimpleNamespace(
+    data=SimpleNamespace(
+      found=torch.tensor([[1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 0.0]]),
+      # Pure side face; pure top face; a 53-degree bevel; and a top-face normal
+      # that is not touching at all.
+      normal=torch.tensor(
+        [
+          [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+          [[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
+          [[0.0, 0.6, 0.8], [0.0, 0.0, 1.0]],
+          [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+        ]
+      ),
+    )
+  )
+  env = SimpleNamespace(scene={"ee_object_contact": sensor})
+  out = side_contact_align(env, "ee_object_contact")
+
+  # Sign-independent: the normal points gripper -> object, so pressing down and
+  # lifting up are the same geometry and both score zero.
+  assert torch.allclose(out, torch.tensor([1.0, 0.0, 1.0 - 0.8, 0.0]))
+  # Bounded, so no contact can ever outrank placing the T.
+  assert float(out.min()) >= 0.0 and float(out.max()) <= 1.0
+  # A found=0 pair is ignored rather than scored: env 0's second pair carries a
+  # top-face normal and still leaves the side push at a full 1.0.
+  assert float(out[0]) == pytest.approx(1.0)
+
+  # The metric is this term's own threshold at 0.7, so the two never disagree
+  # about which mode is which -- that is what makes the logged behaviour channel
+  # readable against the shaped one.
+  share = top_contact_share(env, "ee_object_contact")
+  assert share.tolist() == [0.0, 1.0, 1.0, 0.0]
+
+
 def test_push_t_vertical_contact_force_penalizes_forceful_top_contact() -> None:
   from vbrl.tasks.push_t.mdp import vertical_contact_force
 
@@ -1054,7 +1100,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     ACTION_PATH_LENGTH_WEIGHT,
     ACTION_RATE_WEIGHT,
     AT_GOAL_ACTION_WEIGHT,
-    OBJECT_CONTACT_ONSET_N,
+    SIDE_CONTACT_ALIGN_WEIGHT,
     TABLE_CONTACT_ONSET_N,
     EE_HEIGHT_CEILING_M,
     EE_HEIGHT_WEIGHT,
@@ -1091,7 +1137,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   } == dict(definition.closed_gripper_joint_pos)
 
   command = cfg.commands["push_t_goal"]
-  assert command.success_threshold == pytest.approx(0.98)
+  # ManiSkill3's value, and now the only one. 0.98 demanded 2 mm *and* 2.5
+  # degrees -- below what a 0.1 rad joint increment resolves -- so it measured
+  # the threshold rather than the policy: identical rollouts score 0.004 at 0.98
+  # and 0.250 at 0.90.
+  assert command.success_threshold == pytest.approx(0.90)
   assert command.min_xy_separation == pytest.approx(0.15)
   assert command.resampling_time_range == (1.0e9, 1.0e9)
   assert command.mask_resolution == 64
@@ -1100,16 +1150,25 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   # separately. Weights are sized against the measured ~0.28/step task margin.
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
+    "side_contact_align",
     "action_path_length",
     "action_rate_l2",
     "at_goal_action",
     "table_contact_force",
-    "object_contact_force",
     "ee_height_ceiling",
     "joint_pos_limits",
     "joint_speed_hinge",
   )
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
+  # The only *positive* shaping term, and the replacement for the six penalties
+  # tried against top-face dragging -- all of which were either inert or cost
+  # 73-93% of success, because success correlates positively with
+  # `top_contact_share`: dragging was the only contact strategy the policy had.
+  # A bonus raises the value of the good mode instead of devaluing contact, so
+  # it cannot make the task harder to learn.
+  assert cfg.rewards["side_contact_align"].weight == pytest.approx(0.05)
+  assert SIDE_CONTACT_ALIGN_WEIGHT == pytest.approx(0.05)
+  assert cfg.rewards["side_contact_align"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
   assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
   # A fifth of upstream Lift-Cube's -0.01: the quadratic form taxes exploration
@@ -1136,20 +1195,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
   assert "vertical_contact_force" not in cfg.rewards
+  # Removed rather than kept at zero: it was measured in isolation (sgojsnr8) at
+  # 21% of overlap and 82% of episode success for a 35.8 -> 29.7 N reduction,
+  # and `side_contact_align` now covers the same failure from the other sign.
+  assert "object_contact_force" not in cfg.rewards
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
-  # Bounds the *magnitude* of contact with the T. vertical_contact_force cannot:
-  # its tanh(F/10) is 0.964 at 20 N and 0.9999 at 49, so it is blind to the force
-  # range that matters. This hinge keeps growing instead of saturating, and the
-  # onset is what the task needs: a trained policy's productive contacts run
-  # p10 0.23 N, p50 4.45, p90 21.65, so 1 N is reachable and 4.45 costs 0.4% of
-  # the task margin.
-  object_contact = cfg.rewards["object_contact_force"].params
-  assert object_contact["onset"] == pytest.approx(1.0) == OBJECT_CONTACT_ONSET_N
-  assert object_contact["scale"] == pytest.approx(2.0)
-  assert object_contact["cap"] == pytest.approx(10.0)
-  # Zeroed: in isolation it cost 82% of episode success for a 35.8 -> 29.7 N
-  # reduction in peak object force.
-  assert cfg.rewards["object_contact_force"].weight == pytest.approx(0.0)
   assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
   assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
 
@@ -1175,15 +1225,16 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "object_off_table",
     "invalid_object_state",
     "nan_detection",
-    "forceful_top_contact",
   )
-  # A termination, not a penalty: a price can be bought out by the task reward
-  # and every penalty tried against dragging was. Side contact is untouched at
-  # any force, so the escape is to push properly rather than to stop touching.
-  top = cfg.terminations["forceful_top_contact"]
-  assert top.time_out is False
-  assert top.params["force_threshold"] == pytest.approx(5.0)
-  assert top.params["sensor_name"] == "ee_object_contact"
+  # `forceful_top_contact` is implemented but deliberately not installed. It was
+  # the last untried mechanism against dragging and it failed at 5 N in a way no
+  # threshold fixes: it truncates the episodes where a policy first discovers
+  # that touching the T pays. Run 4fmml3fl held 0.86 N of peak object force for
+  # iterations 40-200 -- no contact at all -- while sigma decayed 0.44 -> 0.097,
+  # and finished at 0.000 success against its control's 0.626. Dragging (17-78 N)
+  # and learning to push (~20 N peak at iteration 50) are the same force range,
+  # so the separating variable is time, not force.
+  assert "forceful_top_contact" not in cfg.terminations
   assert cfg.terminations["time_out"].time_out is True
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
