@@ -49,7 +49,16 @@ _ACTION_DELTA = 0.1
 # of episode success. It penalised an emergent contact normal; this penalises a
 # height the policy chooses directly.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
-EE_HEIGHT_WEIGHT = -0.02
+# -0.1, not the -0.02 it was first tried at. At -0.02 the term cost 3.2% of a
+# 14.7 task reward and was simply bought out: run avv1us6e kept a fingertip
+# median of 46.3 mm against this 24 mm ceiling. Constraint terms are priced an
+# order of magnitude above regularisers in practice, and threshold formulations
+# like this one are reported to tolerate weights well above the task reward
+# without losing task completion. This is ~16% of task reward.
+#
+# Only safe to raise because the term is now gated on contact. Ungated, more
+# pressure to get under the ceiling meant more pressure to press into the T.
+EE_HEIGHT_WEIGHT = -0.1
 # Table contact, targeted at zero. No onset: any contact is charged, because the
 # T stands 24 mm tall and the gripper has that much clearance to push a side face
 # without ever reaching the surface -- so "do not touch the table" is a small
@@ -379,6 +388,7 @@ def build_env_cfg(
           "robot", geom_names=robot.fingertip_geom_pattern
         ),
         "ceiling": EE_HEIGHT_CEILING_M,
+        "sensor_name": _CONTACT_SENSOR,
       },
     ),
     # Joint-limit protection for the real arm. A hinge on the *soft* limits, so

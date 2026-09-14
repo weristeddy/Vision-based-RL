@@ -18,8 +18,24 @@ if TYPE_CHECKING:
 
 # ManiSkill3's vision-based sim-to-real setup.
 ROBOT_JOINT_POSITION_STD_RAD = 0.02
-OBJECT_TABLE_FRICTION_MEAN = 0.3
-OBJECT_TABLE_FRICTION_STD = 0.025
+# The object/table sliding coefficient, retuned to the real rig rather than
+# inherited. ManiSkill3's 0.30 matched one PVC-on-wood measurement (0.296), but
+# the standard reference for plastic on wood is 0.40 sliding (0.50 static) and
+# printed PLA measures 0.38-0.57 -- and the real table here is a bare wood plate,
+# the rougher end of that range, not laminate. 0.30 made the sim slipperier than
+# the hardware it is meant to transfer to.
+#
+# The spread matters as much as the centre: +/-0.025 is a 0.24-0.40 band, which
+# cannot cover an unmeasured wood surface. 0.08 spans roughly 0.16-0.64 at three
+# sigma, covering the published range for plastic on wood in both directions.
+#
+# Side effect worth naming, since it is not the reason for the change: dragging
+# the T from its top face needs mu_table*mg/(mu_grip - mu_table), so raising the
+# table from 0.31 to 0.40 takes that from 0.85 N to 1.28 N. Real but small --
+# the fingertip pads run to mu 1.5, and that ratio, not the table, is what makes
+# dragging cheap.
+OBJECT_TABLE_FRICTION_MEAN = 0.4
+OBJECT_TABLE_FRICTION_STD = 0.08
 
 OBJECT_COLLISION_GEOMS = r"push_t_(crossbar|stem)_collision"
 TABLE_COLLISION_GEOM = ("table_top",)

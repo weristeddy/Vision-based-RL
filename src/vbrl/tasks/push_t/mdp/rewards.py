@@ -180,6 +180,7 @@ def fingertip_height_excess(
   env: ManagerBasedRlEnv,
   asset_cfg: SceneEntityCfg,
   ceiling: float,
+  sensor_name: str | None = None,
 ) -> torch.Tensor:
   """How far the lowest fingertip rides above ``ceiling``, in ceiling units.
 
@@ -206,12 +207,29 @@ def fingertip_height_excess(
 
   Normalised by the ceiling so it is dimensionless and scales with the object:
   1.0 means the fingertip is one object-height above where it should be.
+
+  **Charged only while not touching the object**, and that gate is essential
+  rather than cosmetic. The ceiling is an absolute world height equal to the
+  object's top face, so a fingertip resting *on* the T is in violation by
+  construction and the cheapest way to reduce the penalty is to press down into
+  it. Ungated, run avv1us6e took top-face contact from the baseline's 0.105 to
+  0.331 -- the term rewarded exactly the behaviour it was built to remove, with
+  top contacts sitting at 29.6 mm, 5.6 mm above the ceiling and paying for it.
+  Once contact is made the geometry is already decided, so there is nothing left
+  for a height penalty to steer.
   """
   if ceiling <= 0.0:
     raise ValueError("fingertip_height_excess needs ceiling > 0.")
   asset: Entity = env.scene[asset_cfg.name]
   lowest = asset.data.geom_pos_w[:, asset_cfg.geom_ids, 2].min(dim=-1).values
-  return ((lowest - ceiling) / ceiling).clamp_min(0.0)
+  excess = ((lowest - ceiling) / ceiling).clamp_min(0.0)
+  if sensor_name is None:
+    return excess
+  sensor: ContactSensor = env.scene[sensor_name]
+  found = sensor.data.found
+  if found is None:
+    raise RuntimeError(f"Contact sensor {sensor_name!r} requires the found field.")
+  return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
 
 
 def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:

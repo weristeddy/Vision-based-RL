@@ -680,6 +680,38 @@ def test_push_t_action_path_length_is_l1_so_splitting_a_move_is_never_cheaper() 
   assert cost([0.5, -0.5, 0, 0, 0, 0]) == pytest.approx(1.0)
 
 
+def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> None:
+  from mjlab.managers import SceneEntityCfg
+
+  from vbrl.tasks.push_t.mdp import fingertip_height_excess
+
+  # Both envs have the fingertip at 48 mm against a 24 mm ceiling; only the
+  # second is touching the T.
+  robot = SimpleNamespace(
+    data=SimpleNamespace(
+      geom_pos_w=torch.tensor([[[0.0, 0.0, 0.048]], [[0.0, 0.0, 0.048]]])
+    )
+  )
+  sensor = SimpleNamespace(data=SimpleNamespace(found=torch.tensor([[0.0], [1.0]])))
+  env = SimpleNamespace(scene={"robot": robot, "ee_object_contact": sensor})
+  cfg = SceneEntityCfg("robot")
+  cfg.geom_ids = slice(None)
+
+  assert torch.allclose(
+    fingertip_height_excess(env, cfg, 0.024), torch.tensor([1.0, 1.0])
+  )
+  # The gate is load-bearing: the ceiling equals the object's top face, so a
+  # fingertip resting on the T violates it by construction and the cheapest way
+  # to comply is to press down. Ungated, this took top-face contact from 0.105
+  # to 0.331.
+  assert torch.allclose(
+    fingertip_height_excess(env, cfg, 0.024, "ee_object_contact"),
+    torch.tensor([1.0, 0.0]),
+  )
+  with pytest.raises(ValueError, match="ceiling > 0"):
+    fingertip_height_excess(env, cfg, 0.0)
+
+
 def test_push_t_contact_force_barrier_is_exponential_and_never_overflows() -> None:
   from vbrl.tasks.push_t.mdp import contact_force_barrier
 
@@ -1074,8 +1106,10 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.geometry import HALF_HEIGHT
 
   assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
-  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
-  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
+  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.1)
+  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.1)
+  # Gated on contact: without this the ceiling pays the policy to press down.
+  assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
   assert "vertical_contact_force" not in cfg.rewards
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
