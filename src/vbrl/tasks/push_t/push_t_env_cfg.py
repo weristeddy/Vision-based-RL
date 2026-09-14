@@ -127,6 +127,16 @@ ACTION_RATE_WEIGHT = -0.002
 # single penalty in the config; the margin for being at goal fell from 0.72 to
 # 0.56 per step.
 AT_GOAL_ACTION_WEIGHT = -0.05
+# Top-face contact above this force ends the episode. Not a penalty: every
+# penalty tried against dragging was either bought out by the task reward or
+# broke the task, because a price is payable. This is not.
+#
+# 5 N is set from the measured force distribution of productive contacts --
+# p10 0.23 N, p50 4.45, p90 21.65 -- so brushing the top while manoeuvring stays
+# legal and leaning on the T to drag it does not. Contact on a vertical face is
+# untouched at any force, so the escape route is to push from the side rather
+# than to stop touching, which is what the force barrier got wrong.
+TOP_CONTACT_FORCE_LIMIT_N = 5.0
 JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Goal-yaw schedule, in environment steps. A 3000-iteration run at
 # num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
@@ -438,6 +448,13 @@ def build_env_cfg(
       params={"object_name": object_name},
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
+    forceful_top_contact=TerminationTermCfg(
+      func=mdp.forceful_top_contact,
+      params={
+        "sensor_name": _CONTACT_SENSOR,
+        "force_threshold": TOP_CONTACT_FORCE_LIMIT_N,
+      },
+    ),
   )
   cfg.curriculum = {}
   if separation_curriculum:

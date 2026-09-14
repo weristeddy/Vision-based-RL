@@ -774,6 +774,30 @@ def test_push_t_at_goal_action_penalty_is_zero_until_the_object_is_placed() -> N
   )
 
 
+def test_push_t_forceful_top_contact_terminates_only_on_hard_vertical_press() -> None:
+  from vbrl.tasks.push_t.mdp import forceful_top_contact
+
+  # four envs: hard side push, hard top press, light top touch, no contact
+  sensor = SimpleNamespace(
+    data=SimpleNamespace(
+      found=torch.tensor([[1.0], [1.0], [1.0], [0.0]]),
+      force=torch.tensor(
+        [[[40.0, 0.0, 0.0]], [[40.0, 0.0, 0.0]], [[2.0, 0.0, 0.0]], [[40.0, 0.0, 0.0]]]
+      ),
+      normal=torch.tensor(
+        [[[1.0, 0.0, 0.0]], [[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]]
+      ),
+    )
+  )
+  env = SimpleNamespace(scene={"ee_object_contact": sensor})
+  out = forceful_top_contact(env, "ee_object_contact", force_threshold=5.0)
+  # Only the hard *vertical* press ends the episode. A 40 N side push is legal,
+  # which is what leaves the policy somewhere to go.
+  assert out.tolist() == [False, True, False, False]
+  with pytest.raises(ValueError, match="force_threshold > 0"):
+    forceful_top_contact(env, "ee_object_contact", force_threshold=0.0)
+
+
 def test_push_t_vertical_contact_force_penalizes_forceful_top_contact() -> None:
   from vbrl.tasks.push_t.mdp import vertical_contact_force
 
@@ -1151,7 +1175,15 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "object_off_table",
     "invalid_object_state",
     "nan_detection",
+    "forceful_top_contact",
   )
+  # A termination, not a penalty: a price can be bought out by the task reward
+  # and every penalty tried against dragging was. Side contact is untouched at
+  # any force, so the escape is to push properly rather than to stop touching.
+  top = cfg.terminations["forceful_top_contact"]
+  assert top.time_out is False
+  assert top.params["force_threshold"] == pytest.approx(5.0)
+  assert top.params["sensor_name"] == "ee_object_contact"
   assert cfg.terminations["time_out"].time_out is True
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
