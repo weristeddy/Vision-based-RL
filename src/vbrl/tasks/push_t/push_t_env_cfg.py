@@ -31,24 +31,25 @@ from .goal_marker import GOAL_ENTITY_NAME
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _ACTION_DELTA = 0.1
-# Top-face contact on the T: the measured failure mode. A trained policy made
-# 78.6% of its contacts with |normal_z| > 0.7 (median 0.998) -- pressing down and
-# dragging -- so this term, not the motion penalties, is the one that matters.
+# The fingertip height ceiling: the soft form of the planar constraint every
+# published Push-T imposes in its action space. Both numbers are the object's
+# own height rather than free parameters -- the fingertip should be no higher
+# than the thing it is pushing -- so they follow the T if its geometry changes.
 #
-# Constant and live from step 0, deliberately. Ramping it in later was measured
-# to be destructive: runs hwsm5odb and ortxgaqx left it at zero for 200
-# iterations, by which point *all* of the policy's contact was top contact, and
-# the penalty then arrived against a behaviour with no alternative in its
-# repertoire. It had never made a side push, so the only reachable response to
-# "contact is expensive" was to stop touching the T: contact force decayed
-# 32 N -> 4 N -> 0 and overlap went to 0.000. Present from the start it shapes
-# which contact develops instead of punishing the only one that exists.
+# Measured on a trained policy: the lowest fingertip sits at a median of 47 mm
+# above a 24 mm object and 65% of steps are above 40 mm, so there is roughly
+# 20 mm of pure headroom before this can cost the task anything. Linear rather
+# than quadratic: a constant gradient keeps pulling the arm down from any height,
+# where a quadratic is weakest exactly at the ceiling and explodes at the reset
+# pose, which starts 243 mm up.
 #
-# -0.05 rather than the -0.25/-0.75 that collapsed those runs. The value of
-# contact to this policy is small -- it is barely solving the task -- so there is
-# very little margin to tax: a penalty worth ~8% of the task term was already
-# enough to make not touching optimal. At -0.05 a top press costs roughly 0.7%.
-VERTICAL_CONTACT_FORCE_WEIGHT = -0.05
+# `vertical_contact_force` used to sit here and was removed: at -0.05 it left
+# top-face contact at 0.105 against the no-penalty baseline's 0.107 -- no effect
+# at all -- and every weight that did move it (-0.10, -0.15, -0.25) cost 73-93%
+# of episode success. It penalised an emergent contact normal; this penalises a
+# height the policy chooses directly.
+EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
+EE_HEIGHT_WEIGHT = -0.02
 # Table contact, targeted at zero. No onset: any contact is charged, because the
 # T stands 24 mm tall and the gripper has that much clearance to push a side face
 # without ever reaching the surface -- so "do not touch the table" is a small
@@ -355,12 +356,17 @@ def build_env_cfg(
         "cap": OBJECT_CONTACT_CAP,
       },
     ),
-    # Top-down contact on the T. Unchanged: |normal_z| * tanh(F/10) is already
-    # ~1 for a press and ~0 for a clean side push.
-    "vertical_contact_force": RewardTermCfg(
-      func=mdp.vertical_contact_force,
-      weight=VERTICAL_CONTACT_FORCE_WEIGHT,
-      params={"sensor_name": _CONTACT_SENSOR, "force_scale": 10.0},
+    # Keep the fingertip in the object's own height band, so a side push is the
+    # only geometry available; see EE_HEIGHT_CEILING_M.
+    "ee_height_ceiling": RewardTermCfg(
+      func=mdp.fingertip_height_excess,
+      weight=EE_HEIGHT_WEIGHT,
+      params={
+        "asset_cfg": SceneEntityCfg(
+          "robot", geom_names=robot.fingertip_geom_pattern
+        ),
+        "ceiling": EE_HEIGHT_CEILING_M,
+      },
     ),
     # Joint-limit protection for the real arm. A hinge on the *soft* limits, so
     # it is exactly zero anywhere inside them.

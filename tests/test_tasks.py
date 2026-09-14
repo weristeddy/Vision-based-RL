@@ -1000,7 +1000,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     AT_GOAL_ACTION_WEIGHT,
     OBJECT_CONTACT_ONSET_N,
     TABLE_CONTACT_ONSET_N,
-    VERTICAL_CONTACT_FORCE_WEIGHT,
+    EE_HEIGHT_CEILING_M,
+    EE_HEIGHT_WEIGHT,
   )
 
   cfg = _push_t()
@@ -1048,7 +1049,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "at_goal_action",
     "table_contact_force",
     "object_contact_force",
-    "vertical_contact_force",
+    "ee_height_ceiling",
     "joint_pos_limits",
     "joint_speed_hinge",
   )
@@ -1066,11 +1067,17 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.2)
   assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.2)
 
-  # Top-face contact is the measured failure mode and this is the term that
-  # targets it. Live from step 0 and small: ramping it in later, or setting it
-  # 5-15x higher, was measured to end in a policy that never touches the T.
-  assert cfg.rewards["vertical_contact_force"].weight == pytest.approx(-0.05)
-  assert VERTICAL_CONTACT_FORCE_WEIGHT == pytest.approx(-0.05)
+  # The planar constraint every published Push-T enforces in its action space,
+  # as a soft ceiling. Both numbers are the object's own height, so they track
+  # the T rather than being free parameters. vertical_contact_force was removed:
+  # at -0.05 it left top-face contact at 0.105 against a 0.107 baseline.
+  from vbrl.tasks.push_t.geometry import HALF_HEIGHT
+
+  assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
+  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
+  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
+  assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
+  assert "vertical_contact_force" not in cfg.rewards
   assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
   # Bounds the *magnitude* of contact with the T. vertical_contact_force cannot:
   # its tanh(F/10) is 0.964 at 20 N and 0.9999 at 49, so it is blind to the force

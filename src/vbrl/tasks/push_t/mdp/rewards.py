@@ -176,6 +176,44 @@ def top_contact_share(
   return ((data.found > 0) & vertical).any(dim=-1).float()
 
 
+def fingertip_height_excess(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg,
+  ceiling: float,
+) -> torch.Tensor:
+  """How far the lowest fingertip rides above ``ceiling``, in ceiling units.
+
+  Push-T is a planar problem and every published version enforces that in the
+  action space: IBC, Diffusion Policy and ManiSkill3 all constrain the pusher to
+  the xy-plane at a fixed z, so pressing down on the T is not discouraged, it is
+  impossible. VBRL gives the policy all six joints, and it found the strategy
+  those benchmarks exclude -- measured on a trained policy, the lowest fingertip
+  sits at a median of 47 mm above a 24 mm object, 65% of steps above 40 mm, and
+  contacts split at exactly that height: 29.2 mm median for a top-face press
+  against 24.4 mm for a side push.
+
+  This is the soft version of that constraint, and it pairs with the table-force
+  term: one stops the fingertip going too low, this stops it going too high, and
+  between them it is confined to a band around the object's own height, where a
+  side push is the only geometry available.
+
+  Why this rather than another penalty on the contact normal: height is a
+  continuous, proactive choice the policy can always satisfy, while the contact
+  normal is an emergent outcome at the instant of touch. That is the difference
+  between `table_contact_force`, which cut peak table force 11 N -> 2.2 N at no
+  measured cost, and `vertical_contact_force`, which changed nothing at every
+  weight that left the task intact.
+
+  Normalised by the ceiling so it is dimensionless and scales with the object:
+  1.0 means the fingertip is one object-height above where it should be.
+  """
+  if ceiling <= 0.0:
+    raise ValueError("fingertip_height_excess needs ceiling > 0.")
+  asset: Entity = env.scene[asset_cfg.name]
+  lowest = asset.data.geom_pos_w[:, asset_cfg.geom_ids, 2].min(dim=-1).values
+  return ((lowest - ceiling) / ceiling).clamp_min(0.0)
+
+
 def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
   """Penalize total commanded travel: the L1 norm of the raw policy action.
 
@@ -474,6 +512,7 @@ __all__ = [
   "at_goal_action_l1",
   "contact_force_barrier",
   "contact_force_hinge",
+  "fingertip_height_excess",
   "keypoint_reward",
   "linear_orientation_reward",
   "maniskill_dense_reward",
