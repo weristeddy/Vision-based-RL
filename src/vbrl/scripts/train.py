@@ -144,6 +144,20 @@ class TrainConfig:
   quadratic form charges pure exploration noise as sigma^2 and so bites hardest
   at initialization. Must be <= 0.
   """
+  object_press_weight: float | None = None
+  """Weight of the downward-press penalty, the one lever on contact safety.
+
+  Registered at -0.01, which is 5.4% of task reward on the behaviour it is meant
+  to correct. Measured on the state task (run ljbdz7pf against zbbiq2ts): it
+  cuts top-face contact 0.189 -> 0.067, peak object force 44.9 -> 23.0 N and
+  peak press ~56 -> 25.6 N, and costs 22% of final overlap because it is live
+  from iteration 0 and the first contacts a fresh policy makes are all presses.
+
+  A flag because that trade has to be re-made per task: a 6,000-iteration vision
+  run amortises the delay over 40x the budget a 500-iteration state run has, but
+  vision has far less performance headroom to spend. Pass 0.0 to disable it
+  entirely and get the unpenalised baseline. Must be <= 0.
+  """
   orientation_reward: (
     Literal["maniskill", "quadratic", "linear", "keypoint"] | None
   ) = None
@@ -284,6 +298,7 @@ def _retune_penalty_weights(cfg: TrainConfig) -> None:
   overrides = (
     ("action_path_length", "--action-path-weight", cfg.action_path_weight),
     ("action_rate_l2", "--action-rate-weight", cfg.action_rate_weight),
+    ("object_table_press", "--object-press-weight", cfg.object_press_weight),
   )
   for name, flag, weight in overrides:
     if weight is None:
