@@ -1189,8 +1189,14 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.geometry import HALF_HEIGHT
 
   assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
-  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
-  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
+  # -0.05, not the -0.02 every earlier run carried. At -0.02 it costs 2.7% of
+  # task reward and the fingertip sits at 46 mm against a 24 mm ceiling; at -0.1
+  # it binds and takes success to 0.008. The window between them is only worth
+  # having now that `side_contact_align` pays on arrival: a side contact needs
+  # the pad at ~24.4 mm, so the bonus is out of reach at 46 mm and descending
+  # finally has a payoff rather than only a cost.
+  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.05)
+  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.05)
   # Gated on contact: without this the ceiling pays the policy to press down.
   assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M

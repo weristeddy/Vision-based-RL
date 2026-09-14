@@ -49,15 +49,26 @@ _ACTION_DELTA = 0.1
 # of episode success. It penalised an emergent contact normal; this penalises a
 # height the policy chooses directly.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
-# -0.02, the value every run that worked carried: avv1us6e, 3mw7oyvo and
-# 2458edlt reached 0.368 / 0.414 / 0.632 episode success with it. At this weight
-# the term is close to inert -- it costs about 3% of a 14+ task reward and run
-# avv1us6e kept a fingertip median of 46.3 mm against this 24 mm ceiling -- but
-# -0.1 is the only weight measured to bind (top-face contact 0.054) and it took
-# episode success to 0.008. The usable window, if there is one, lies between,
-# and finding it needs seed replicates rather than single probes: two runs of an
-# identical config scored 0.414 and 0.632.
-EE_HEIGHT_WEIGHT = -0.02
+# -0.05, raised from the -0.02 every earlier run carried, and the reason it is
+# now safe to raise is that the ceiling has stopped being a pure restriction.
+#
+# At -0.02 it is close to inert: measured on run zbbiq2ts it costs 0.40 against
+# a task reward of 14.89, or 2.7%, and run avv1us6e held a fingertip median of
+# 46.3 mm against this 24 mm ceiling. At -0.1 it does bind (top-face contact
+# 0.054) and it took episode success to 0.008. So the old window was between a
+# term that did nothing and a term that broke the task, with nothing in between
+# worth having -- because descending had a cost and no payoff.
+#
+# `side_contact_align` changes that. A side contact needs the pad at about
+# 24.4 mm, against 29.6 mm for a top press, and the policy's operating height is
+# 46 mm -- which is why aligned side contact is only 0.86% of steps while
+# top-face contact is 18.8%. The bonus is not weak per step (0.05 against the
+# task's own 0.059 per step, so 85% of it) and it is not being collected; it is
+# simply out of reach at the height the arm works at. The ceiling is what puts
+# the gripper where the bonus becomes collectible, so the two now pull the same
+# way instead of the ceiling pulling alone. -0.05 lands near 6.7% of task
+# reward, between the measured inert and the measured destructive.
+EE_HEIGHT_WEIGHT = -0.05
 # The one *positive* shaping term, and the replacement for the whole family of
 # top-contact penalties: `vertical_contact_force` at four weights, the
 # exponential force barrier, the height ceiling and the no-fly cylinder are all
