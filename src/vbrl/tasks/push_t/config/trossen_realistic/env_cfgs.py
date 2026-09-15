@@ -36,6 +36,9 @@ def _env_cfg(
   free_start: bool = False,
   near_goal_probability: float = 0.0,
   separation_curriculum: bool = False,
+  goal_in_observation: bool = True,
+  fixed_target: tuple[float, float, float] | None = None,
+  action_delta: float | None = None,
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_realistic()
   cfg = build_env_cfg(
@@ -50,6 +53,9 @@ def _env_cfg(
     free_start=free_start,
     near_goal_probability=near_goal_probability,
     separation_curriculum=separation_curriculum,
+    goal_in_observation=goal_in_observation,
+    fixed_target=fixed_target,
+    **({} if action_delta is None else {"action_delta": action_delta}),
   )
   camera_view: CameraView | None = camera if rgb else None
   if rgb:
@@ -97,6 +103,9 @@ def trossen_realistic_push_t_rgb_env_cfg(
   free_start: bool = False,
   near_goal_probability: float = 0.0,
   separation_curriculum: bool = False,
+  goal_in_observation: bool = True,
+  fixed_target: tuple[float, float, float] | None = None,
+  action_delta: float | None = None,
 ) -> ManagerBasedRlEnvCfg:
   """One RGB Push-T environment.
 
@@ -129,6 +138,9 @@ def trossen_realistic_push_t_rgb_env_cfg(
     free_start=free_start,
     near_goal_probability=near_goal_probability,
     separation_curriculum=separation_curriculum,
+    goal_in_observation=goal_in_observation,
+    fixed_target=fixed_target,
+    **({} if action_delta is None else {"action_delta": action_delta}),
   )
 
 

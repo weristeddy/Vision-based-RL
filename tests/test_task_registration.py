@@ -133,6 +133,13 @@ EXPECTED_TASK_IDS = frozenset(
     ),
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
+    # The goal withheld from the actor: no `target_pose`, so the policy has only
+    # the marker drawn on the table. One architecture each, because these are a
+    # controlled pair against VisualSlow rather than a sweep -- `PixelGoalFixed`
+    # additionally pins the goal to the pose measured on the rig, separating
+    # finding the target from reaching it.
+    "Mjlab-PushT-PixelGoal-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-PixelGoalFixed-DinoV2ViTS14-Afa6-TrossenRealistic",
     # The sim2real contract: D405 optics, realistic robot materials, and the
     # camera housing out of the wrist view.
     *(
@@ -143,11 +150,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_218_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_220_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 218
+  assert len(EXPECTED_TASK_IDS) == 220
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -209,7 +216,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
   # Only Push-T looks through it. Lift-Cube is a wrist-camera task, so its 36
   # visual IDs declare `cam` alone -- which is why this is not simply
   # 'every visual task'.
-  assert seen_external == 180
+  assert seen_external == 182
 
 
 def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
@@ -245,6 +252,10 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
         "-Balanced-",
         "-SlowFree-",
         "-VisualSlow-",
+        # PixelGoal and PixelGoalFixed are VisualSlow with the goal withheld
+        # from the actor, so they carry the same schedule.
+        "-PixelGoal-",
+        "-PixelGoalFixed-",
       )
     )
     assert scheduled is arm, task_id
@@ -254,7 +265,7 @@ def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 60
+  assert seen == 62
   # Starts fixed, ends at the full circle -- strictly harder than ManiSkill3,
   # whose goal pose stays fixed for the whole of training.
   for stages in (GOAL_YAW_CURRICULUM_STAGES, GOAL_YAW_SLOW_STAGES):

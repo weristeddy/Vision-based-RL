@@ -68,7 +68,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 218
+  assert len(task_ids) == 220
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     visual = agent.actor.cnn_cfg is not None
@@ -534,7 +534,10 @@ def test_push_t_object_origin_sits_on_its_centre_of_mass() -> None:
   assert max(abs(float(v)) for v in body.ipos) < 1.0e-9
   # Uniform density, as ManiSkill does it: one total mass over the geometry.
   # Equalising the two boxes instead would move the centre of mass to 7.5 mm.
-  assert float(body.mass[0]) == pytest.approx(0.1728, abs=1.0e-4)
+  # 50.7 g, weighed on the printed object, against the 172.8 g the MJCF used
+  # to carry. 335 kg/m3 over the 151.2 cm3 footprint, about 27% infill for
+  # PLA -- consistent with a uniform-infill print at 120 x 120 x 24 mm.
+  assert float(body.mass[0]) == pytest.approx(0.0507, abs=1.0e-4)
 
   # The footprint agrees with the geoms, so neither file can be re-centred
   # without the other.
@@ -810,7 +813,7 @@ def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
   """
   from vbrl.tasks.push_t.mdp import object_table_press, peak_object_press
 
-  W = 1.697
+  W = 0.497
   sensor = SimpleNamespace(
     data=SimpleNamespace(
       # One netforce slot per primary. In order: resting; a 200 N lateral shove
@@ -848,7 +851,7 @@ def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
 def test_push_t_max_contact_force_splits_top_from_side() -> None:
   """Peak force reported per contact geometry, because the two are not alike.
 
-  A lateral push is bounded by the task -- the T weighs 1.70 N and slides at
+  A lateral push is bounded by the task -- the T weighs 0.497 N and slides at
   about 0.7 N -- while a press into the top face is bounded by nothing. Measured
   on run zbbiq2ts's final policy the split is worth having: top-face presses are
   26.5% of steps with a 40.6 N median episode peak and a 91.9 N max, against
@@ -1321,12 +1324,14 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   # object's weight plus whatever the gripper adds, and a horizontal push adds
   # nothing at any magnitude. Measured on zbbiq2ts, 52,289 no-contact steps sit
   # at p50 0.00 N / p90 0.34 while top-face contacts run p50 5.26 N and the
-  # per-episode peak press is 56 N median against a 1.70 N object.
+  # per-episode peak press was 56 N median at the old 1.70 N mass.
   press = cfg.rewards["object_table_press"].params
   assert press["sensor_name"] == "object_table_contact"
   # The onset is absolute on |Fz|, so it carries the object's own weight.
-  assert OBJECT_WEIGHT_N == pytest.approx(1.697)
-  assert press["onset"] == pytest.approx(3.697) == OBJECT_PRESS_ONSET_N
+  # 50.7 g measured on the printed object, against 172.8 g in the MJCF before;
+  # slide distance goes as 1/m^2, so the old mass travelled 11.6x less.
+  assert OBJECT_WEIGHT_N == pytest.approx(0.497)
+  assert press["onset"] == pytest.approx(1.497) == OBJECT_PRESS_ONSET_N
   assert press["scale"] == pytest.approx(5.0) == OBJECT_PRESS_SCALE_N
   # 5.4% of task reward on current behaviour, measured by rolling zbbiq2ts's
   # policy through this term: the largest penalty in the config, and the only

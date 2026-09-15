@@ -58,11 +58,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     device=arguments.device,
     ref=ref,
   )
-  runner.export_policy_to_onnx(str(destination.parent), destination.name)
-  attach_metadata_to_onnx(
-    str(destination),
-    get_base_metadata(env.unwrapped, f"{arguments.task_id}:{Path(path).name}"),
+  import mjlab.rl.exporter_utils as exporter_utils
+  from mjlab.envs.mdp.actions import (
+    JointPositionAction,
+    RelativeJointPositionAction,
+    RelativeJointPositionActionCfg,
   )
+
+  runner.export_policy_to_onnx(str(destination.parent), destination.name)
+  # `get_base_metadata` asserts an absolute JointPositionAction but reads only
+  # `_scale`, which both terms carry; Push-T's is relative. Re-check on an mjlab
+  # bump -- if upstream widens the assert this goes away.
+  exporter_utils.JointPositionAction = (
+    JointPositionAction,
+    RelativeJointPositionAction,
+  )
+  metadata = get_base_metadata(env.unwrapped, f"{arguments.task_id}:{Path(path).name}")
+  exporter_utils.JointPositionAction = JointPositionAction
+  action_term = next(iter(env.unwrapped.cfg.actions.values()))
+  metadata["action_type"] = (
+    "relative"
+    if isinstance(action_term, RelativeJointPositionActionCfg)
+    else "absolute"
+  )
+  # The action term clips its *processed* delta, and that bound is as much a
+  # part of the contract as the scale: without it a deployment sends whatever
+  # the policy asks for, which on Push-T reached 0.31 rad against the 0.1 the
+  # simulator would ever apply.
+  term = env.unwrapped.action_manager.get_term("joint_pos")
+  clip = getattr(term, "_clip", None)
+  if clip is not None:
+    metadata["action_clip_low"] = clip[0, :, 0].cpu().tolist()
+    metadata["action_clip_high"] = clip[0, :, 1].cpu().tolist()
+  attach_metadata_to_onnx(str(destination), metadata)
   print(f"Wrote {destination} ({destination.stat().st_size / 1e6:.0f} MB)")
   return 0
 

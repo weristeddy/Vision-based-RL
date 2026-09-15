@@ -165,6 +165,13 @@ def table_spec(preset: ScenePreset) -> mujoco.MjSpec:
     type=mujoco.mjtGeom.mjGEOM_BOX,
     size=TABLE_HALF_EXTENTS,
     pos=TABLE_CENTER,
+    # A stiff tabletop. MuJoCo mixes solref/solimp across a contact pair, so the
+    # object's own stiffening does almost nothing while this side keeps the
+    # defaults -- measured, the T still sank 13.3 mm of its 24 mm height. The
+    # time constant is 0.01 = 2x the 0.005 timestep, MuJoCo's own stability
+    # floor, and the impedance width is 0.2 mm rather than 1 mm.
+    solref=(0.01, 1.0),
+    solimp=(0.95, 0.99, 0.0002, 0.5, 2.0),
     **body_kwargs,
   )
   if bank is not None:

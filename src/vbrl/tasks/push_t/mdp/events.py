@@ -22,20 +22,36 @@ ROBOT_JOINT_POSITION_STD_RAD = 0.02
 # inherited. ManiSkill3's 0.30 matched one PVC-on-wood measurement (0.296), but
 # the standard reference for plastic on wood is 0.40 sliding (0.50 static) and
 # printed PLA measures 0.38-0.57 -- and the real table here is a bare wood plate,
-# the rougher end of that range, not laminate. 0.30 made the sim slipperier than
-# the hardware it is meant to transfer to.
+# the rougher end of that range. The rig's table is unsanded pine -- not
+# laminate, not planed -- so it is rough and, more importantly, rough
+# *unevenly*: the coefficient varies from spot to spot across the board.
 #
-# The spread matters as much as the centre: +/-0.025 is a 0.24-0.40 band, which
-# cannot cover an unmeasured wood surface. 0.08 spans roughly 0.16-0.64 at three
-# sigma, covering the published range for plastic on wood in both directions.
+# 0.55 is set from the literature rather than from this table, which has not
+# been measured:
+#
+#   * generic plastic on wood is quoted at mu_s 0.50 / mu_k 0.40, the most
+#     widely repeated pair, and MuJoCo's geom_friction is a single sliding
+#     coefficient with no static/kinetic split;
+#   * PLA itself sits above generic plastic -- reciprocating tests put neat PLA
+#     at 0.65-0.70, and PLA wear studies span 0.37-0.75;
+#   * print orientation moves it too, transverse higher than longitudinal;
+#   * and an unsanded surface pushes it up again from any planed reference.
+#
+# So the centre belongs above the 0.40 the MJCF carried, which is also what the
+# hardware says: the real T is visibly harder to slide than the simulated one.
+# 0.12 puts two sigma at 0.31-0.79, spanning the whole published range, and
+# three sigma at 0.19-0.91 for the tails.
+#
+# Still a reference value, not a measurement. A tilt test at five or six spots
+# (mu = tan(theta), centre on the median, three sigma over the spread) would
+# replace both numbers with the board's own.
 #
 # Side effect worth naming, since it is not the reason for the change: dragging
 # the T from its top face needs mu_table*mg/(mu_grip - mu_table), so raising the
-# table from 0.31 to 0.40 takes that from 0.85 N to 1.28 N. Real but small --
-# the fingertip pads run to mu 1.5, and that ratio, not the table, is what makes
-# dragging cheap.
-OBJECT_TABLE_FRICTION_MEAN = 0.4
-OBJECT_TABLE_FRICTION_STD = 0.08
+# table from 0.40 to 0.55 moves that threshold with it. The fingertip pads run
+# to mu 1.5, and that ratio, not the table, is what makes dragging cheap.
+OBJECT_TABLE_FRICTION_MEAN = 0.55
+OBJECT_TABLE_FRICTION_STD = 0.12
 
 OBJECT_COLLISION_GEOMS = r"push_t_(crossbar|stem)_collision"
 TABLE_COLLISION_GEOM = ("table_top",)

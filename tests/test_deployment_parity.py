@@ -37,9 +37,17 @@ class _Session:
   """Enough of an ONNX Runtime session for PolicySpec to read the contract."""
 
   def __init__(self, env) -> None:
+    from mjlab.envs.mdp.actions import RelativeJointPositionActionCfg
     from mjlab.rl.exporter_utils import get_base_metadata
 
     metadata = get_base_metadata(env.unwrapped, "parity-test")
+    term = next(iter(env.unwrapped.cfg.actions.values()))
+    metadata["action_type"] = (
+      "relative"
+      if isinstance(term, RelativeJointPositionActionCfg)
+      else "absolute"
+    )
+    self._action_dim = env.unwrapped.action_manager.total_action_dim
     self._meta = _Meta(
       {
         key: (
@@ -54,6 +62,9 @@ class _Session:
 
   def get_inputs(self):
     return [type("Input", (), {"name": "camera"})()]
+
+  def get_outputs(self):
+    return [type("Output", (), {"shape": [1, self._action_dim]})()]
 
 
 @pytest.fixture(scope="module")
@@ -165,3 +176,80 @@ def test_a_goal_outside_the_training_range_is_refused(tmp_path) -> None:
   )
   with pytest.raises(ValueError, match="outside the range the policy trained on"):
     config.validate()
+
+
+def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
+  """Relative and absolute mappings agree only at the home pose.
+
+  Push-T uses `RelativeJointPositionAction` -- `target = current + scale *
+  action` -- while Lift-Cube's is absolute against the default pose. Applying
+  the absolute one to a relatively-trained policy is silent: the arm stays
+  within one action scale of home for the whole episode and reads as a policy
+  that does nothing, rather than as an error.
+  """
+  from dataclasses import replace
+
+  import numpy as np
+
+  from vbrl.deployment.policy import ARM_JOINTS, Policy, PolicyMetadata
+
+  default = np.linspace(0.1, 0.7, len(ARM_JOINTS))
+  metadata = PolicyMetadata(
+    joint_names=ARM_JOINTS,
+    default_joint_pos=default,
+    action_offset=default.copy(),
+    action_scale=np.full(len(ARM_JOINTS), 0.1),
+    observation_terms=("joint_pos",),
+    action_dim=6,
+    action_clip=None,
+    relative=True,
+    needs_camera=False,
+    source_run="test",
+  )
+  policy = Policy.__new__(Policy)
+  policy.metadata = metadata
+  policy._response_gain = 1.0
+  action = np.array([1.0, -1.0, 0.5, 0.0, 0.25, -0.5])
+
+  # At the home pose the two mappings coincide, which is exactly why the bug
+  # survives a bench test and only shows up once the arm has moved.
+  policy._position = default.copy()
+  assert np.allclose(policy.joint_targets(action)[:6], default[:6] + 0.1 * action)
+
+  # Away from home they do not, and the relative one must track the arm.
+  moved = default + 0.4
+  policy._position = moved
+  targets = policy.joint_targets(action)
+  assert np.allclose(targets[:6], moved[:6] + 0.1 * action)
+  assert not np.allclose(targets[:6], default[:6] + 0.1 * action)
+
+  # Push-T drives six joints; the seventh holds its default, which is how the
+  # gripper stays closed without a channel of its own.
+  assert targets.shape == (len(ARM_JOINTS),)
+  assert targets[6] == pytest.approx(default[6])
+  assert policy.has_gripper is False
+
+  # `response_gain` scales the delta at every magnitude, which a rate clamp
+  # cannot: sim realizes 0.267 of what it commands, so on hardware a clamp
+  # throttles transport while leaving fine corrections 3.7x too responsive.
+  policy._response_gain = 0.267
+  scaled = policy.joint_targets(action)
+  assert np.allclose(scaled[:6], moved[:6] + 0.267 * 0.1 * action)
+  assert scaled[6] == pytest.approx(default[6])
+
+  # The action term's clip is part of the contract, not a safety extra. Without
+  # it a deployment sends whatever the policy asks for: on Push-T the commanded
+  # gap reached 0.31 rad against the 0.1 the simulator ever applies, which is
+  # the whole of "the robot moves way too fast".
+  policy._response_gain = 1.0
+  policy.metadata = replace(
+    metadata, action_clip=(np.full(6, -0.05), np.full(6, 0.05))
+  )
+  policy._position = default.copy()
+  clipped = policy.joint_targets(action)
+  assert np.allclose(
+    clipped[:6], default[:6] + np.clip(0.1 * action, -0.05, 0.05)
+  )
+  # 1.0 and -1.0 scale to +-0.1 and must come back at the bound.
+  assert clipped[0] == pytest.approx(default[0] + 0.05)
+  assert clipped[1] == pytest.approx(default[1] - 0.05)

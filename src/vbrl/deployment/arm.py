@@ -66,13 +66,16 @@ class TrossenArm:
     if self._last_sent is None:
       self._last_sent, _ = self.read()
 
-    max_change = np.full_like(target, self._motion.max_joint_step)
-    max_change[-1] = self._motion.max_gripper_step
-    sent = np.clip(
-      self._last_sent + np.clip(target - self._last_sent, -max_change, max_change),
-      self._low,
-      self._high,
-    )
+    if self._motion.max_joint_step is None:
+      sent = np.clip(target, self._low, self._high)
+    else:
+      max_change = np.full_like(target, self._motion.max_joint_step)
+      max_change[-1] = self._motion.max_gripper_step
+      sent = np.clip(
+        self._last_sent + np.clip(target - self._last_sent, -max_change, max_change),
+        self._low,
+        self._high,
+      )
     # Zero goal time means "this is the setpoint": the servo loop runs far
     # faster than the policy and interpolates for free. A goal time near the
     # control period makes the arm jitter instead, because every command

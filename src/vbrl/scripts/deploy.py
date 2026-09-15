@@ -50,6 +50,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     "range. With no terminal on stdin this turns itself off anyway.",
   )
   parser.add_argument(
+    "--log",
+    help="Write a per-step trace to this .npz: action, joint_pos, joint_vel, "
+    "the commanded target, what the rate clamp actually sent, and every 10th "
+    "camera frame.",
+  )
+  parser.add_argument(
     "--home",
     action="store_true",
     help="move to the home pose and hold it, needing no camera; Ctrl-C parks",
@@ -71,6 +77,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     dry_run=arguments.dry_run,
     max_steps=arguments.max_steps,
     keyboard_goal=arguments.keyboard_goal,
+    log=arguments.log,
   )
 
 

@@ -186,3 +186,62 @@ def test_the_wrist_camera_sits_where_the_arm_puts_it() -> None:
   assert position[2] > 0.1, "and above it"
   assert look_direction(pose)[2] < 0.0, "the wrist camera looks down at the table"
   np.testing.assert_allclose(np.linalg.det(pose[:3, :3]), 1.0, atol=1e-9)
+
+
+def test_goal_pose_offset_places_the_origin_not_the_tag_midpoint() -> None:
+  """The one scalar that turns two tag centres into the marker's origin.
+
+  This is where the geometry is easy to get wrong by a sign: the tags sit in the
+  notches *past* the crossbar's inner edge, so their midpoint lands on the far
+  side of the origin and the correction runs back toward the crossbar. Getting
+  it backwards put the goal 21.4 mm out under a synthetic round-trip -- four
+  times the task's whole position budget, and invisible in the yaw, which stays
+  correct either way.
+  """
+  from vbrl.deployment.goal_pose import (
+    CROSSBAR_INNER_EDGE_M,
+    DEFAULT_MARGIN_M,
+    TAG_BLACK_M,
+  )
+
+  # A tag butted against the crossbar's inner edge has its centre a margin plus
+  # a half black square past it, so the midpoint of the pair sits there too.
+  midpoint_y = CROSSBAR_INNER_EDGE_M + DEFAULT_MARGIN_M + TAG_BLACK_M / 2.0
+  assert midpoint_y == pytest.approx(0.0118)
+
+  offset_y = -(CROSSBAR_INNER_EDGE_M + DEFAULT_MARGIN_M + TAG_BLACK_M / 2.0)
+  assert offset_y == pytest.approx(-0.0118)
+  # Applying it must land on the marker's origin, y = 0.
+  assert midpoint_y + offset_y == pytest.approx(0.0, abs=1e-12)
+
+  # -(4.8 mm + m): the printed size never enters, only the margin on the side
+  # butted against the crossbar, so a reprint changes exactly this one number.
+  for margin in (0.00443, 0.005, 0.006, 0.007, 0.008):
+    expected = -(0.0048 + margin)
+    actual = -(CROSSBAR_INNER_EDGE_M + margin + TAG_BLACK_M / 2.0)
+    assert actual == pytest.approx(expected, abs=1e-9)
+
+
+def test_goal_pose_reads_the_calibrated_external_camera_from_the_mjcf() -> None:
+  """The MJCF is the single source for the camera pose, in OpenCV convention.
+
+  `recalibrate` writes its solve into the `<camera>` element, so reading it back
+  here cannot drift from the calibration the policy's own renders were matched
+  against. The pose must come back as OpenCV -- looking down +z -- rather than
+  MuJoCo's -z, or every ray casts away from the table.
+  """
+  import numpy as np
+
+  from vbrl.asset_zoo.robots import make_wxai_realistic
+  from vbrl.deployment.goal_pose import external_camera_pose
+
+  pose = external_camera_pose(make_wxai_realistic().xml_path)
+  assert pose.shape == (4, 4)
+  # A rigid transform: orthonormal rotation, unit determinant.
+  rotation = pose[:3, :3]
+  assert np.allclose(rotation @ rotation.T, np.eye(3), atol=1e-6)
+  assert float(np.linalg.det(rotation)) == pytest.approx(1.0, abs=1e-6)
+  # The camera stands off to +x and above the base, and looks back down at the
+  # table: its OpenCV +z must carry it downward.
+  assert pose[0, 3] > 0.5 and pose[2, 3] > 0.3
+  assert float(rotation @ np.array([0.0, 0.0, 1.0]) @ np.array([0, 0, 1])) < -0.3

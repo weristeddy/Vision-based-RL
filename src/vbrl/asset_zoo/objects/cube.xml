@@ -1,7 +1,12 @@
 <mujoco model="cube">
   <default>
     <default class="collision">
-      <geom contype="1" conaffinity="1" />
+      <geom
+        contype="1"
+        conaffinity="1"
+        solref="0.01 1"
+        solimp="0.95 0.99 0.0002 0.5 2"
+      />
     </default>
     <default class="visual">
       <geom contype="0" conaffinity="0" mass="0" />

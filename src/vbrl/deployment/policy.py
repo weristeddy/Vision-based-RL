@@ -7,7 +7,8 @@ import numpy as np
 
 from vbrl.deployment.kinematics import Kinematics
 
-TERMS = ("joint_pos", "joint_vel", "actions", "goal_position")
+TERMS = ("joint_pos", "joint_vel", "actions", "goal_position", "target_pose")
+TARGET_Z = 0.0070
 
 # The gripper's two carriage joints mirror one another and the arm reports one,
 # so the hardware's seventh value is the left carriage.
@@ -41,6 +42,11 @@ class PolicyMetadata:
   """``target = action_offset + action_scale * action``, over the 7 actuated joints."""
   observation_terms: tuple[str, ...]
   """The order the observation vector is concatenated in."""
+  action_dim: int
+  action_clip: Any
+  """``(low, high)`` on the processed delta, or ``None`` if unbounded."""
+  relative: bool
+  """``target = current + scale * action`` rather than ``offset + scale * action``."""
   needs_camera: bool
   source_run: str
   """The training run the weights came from, for the startup banner."""
@@ -64,6 +70,16 @@ class PolicyMetadata:
       action_offset=np.array([default[index[name]] for name in ARM_JOINTS]),
       action_scale=np.array([float(v) for v in meta["action_scale"].split(",")]),
       observation_terms=tuple(meta["observation_names"].split(",")),
+      action_dim=int(onnx_session.get_outputs()[0].shape[-1]),
+      action_clip=(
+        (
+          np.array([float(v) for v in meta["action_clip_low"].split(",")]),
+          np.array([float(v) for v in meta["action_clip_high"].split(",")]),
+        )
+        if "action_clip_low" in meta
+        else None
+      ),
+      relative=meta.get("action_type", "absolute") == "relative",
       needs_camera=any(i.name == "camera" for i in onnx_session.get_inputs()),
       source_run=meta.get("run_path", "unknown"),
     )
@@ -88,14 +104,17 @@ class Policy:
     *,
     goal: tuple[float, float, float],
     smoothing: float = 1.0,
+    response_gain: float = 1.0,
   ) -> None:
     self.metadata = PolicyMetadata.from_onnx(onnx_session)
     self._onnx = onnx_session
     self._kinematics = Kinematics()
     self._goal = np.asarray(goal, dtype=np.float64)
     self._smoothing = smoothing
-    self._last_action = np.zeros(len(self.metadata.action_scale))
+    self._response_gain = response_gain
+    self._last_action = np.zeros(self.metadata.action_dim)
     self._goal_position = np.full(3, np.inf)
+    self._position = self.metadata.action_offset
 
     unsupported = set(self.metadata.observation_terms) - set(TERMS)
     if unsupported:
@@ -128,16 +147,23 @@ class Policy:
 
   def observe(self, *, joint_pos: Any, joint_vel: Any, image: Any) -> dict[str, Any]:
     """One step's observation, in the term order the metadata gives."""
-    position = self._mirror_gripper(joint_pos)
-    ee_position, ee_quaternion = self._kinematics.ee_pose(position)
-    self._goal_position = _rotate_by_inverse(ee_quaternion, self._goal - ee_position)
-
+    position = self._position = self._mirror_gripper(joint_pos)
     terms = {
       "joint_pos": position - self.metadata.default_joint_pos,
       "joint_vel": self._mirror_gripper(joint_vel),
       "actions": self._last_action,
-      "goal_position": self._goal_position,
     }
+    if "goal_position" in self.metadata.observation_terms:
+      ee_position, ee_quaternion = self._kinematics.ee_pose(position)
+      self._goal_position = _rotate_by_inverse(
+        ee_quaternion, self._goal - ee_position
+      )
+      terms["goal_position"] = self._goal_position
+    if "target_pose" in self.metadata.observation_terms:
+      x, y, yaw = self._goal
+      terms["target_pose"] = np.array(
+        [x, y, TARGET_Z, np.sin(yaw), np.cos(yaw)]
+      )
     observation = {
       "obs": np.concatenate(
         [terms[name] for name in self.metadata.observation_terms]
@@ -158,9 +184,29 @@ class Policy:
     )
     return self._last_action
 
+  @property
+  def has_gripper(self) -> bool:
+    return self.metadata.action_dim == len(ARM_JOINTS)
+
   def joint_targets(self, action: Any) -> Any:
-    """``offset + scale * action``, the mapping the action term applies in sim."""
-    return self.metadata.action_offset + self.metadata.action_scale * action
+    """The mapping the action term applies in sim, relative or absolute.
+
+    Unactuated joints hold their default, which is how Push-T keeps the gripper
+    closed: it drives `joint_0..5` only, and its default carries the closed
+    carriage. Getting the mapping wrong is silent rather than loud -- an
+    absolute mapping on a relatively-trained policy pins the arm within one
+    action scale of its home pose and looks like a policy that does nothing.
+    """
+    n = self.metadata.action_dim
+    base = self._position if self.metadata.relative else self.metadata.action_offset
+    targets = self.metadata.action_offset.copy()
+    gain = self._response_gain if self.metadata.relative else 1.0
+    delta = gain * self.metadata.action_scale[:n] * action
+    if self.metadata.action_clip is not None:
+      low, high = self.metadata.action_clip
+      delta = np.clip(delta, low[:n], high[:n])
+    targets[:n] = base[:n] + delta
+    return targets
 
   def warm_up(
     self, *, joint_pos: Any, joint_vel: Any, image: Any, runs: int = 5
@@ -189,7 +235,10 @@ def load_policy(config: Any) -> Policy:
     config.onnx_file, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
   )
   return Policy(
-    onnx_session, goal=config.goal, smoothing=config.motion.action_smoothing
+    onnx_session,
+    goal=config.goal,
+    smoothing=config.motion.action_smoothing,
+    response_gain=config.motion.response_gain,
   )
 
 

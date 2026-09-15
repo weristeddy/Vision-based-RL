@@ -170,6 +170,15 @@ def _parser() -> argparse.ArgumentParser:
     type=int,
     help="Exit cleanly after this many policy steps (for smoke tests).",
   )
+  parser.add_argument(
+    "--goal",
+    type=float,
+    nargs=3,
+    metavar=("X", "Y", "YAW"),
+    help="Pin the Push-T goal to one pose in the base frame, yaw in radians. "
+    "The object still randomizes and the separation floor still applies, so "
+    "this is the deployment goal against a fresh start every episode.",
+  )
   return parser
 
 
@@ -211,6 +220,48 @@ def _validate(
   return ref
 
 
+def _pin_goal(
+  parser: argparse.ArgumentParser, env: Any, goal: Sequence[float]
+) -> None:
+  """Overwrite the goal after every resample, leaving the object untouched.
+
+  Not degenerate target ranges: the goal is drawn on a ring around the object
+  and rejected if it leaves the rectangle, so collapsing the rectangle to a
+  point simply never converges. Wrapping the resample keeps the object's own
+  distribution and the separation floor exactly as trained, and just replaces
+  the goal the draw produced.
+  """
+  import torch
+  from mjlab.utils.lab_api.math import quat_from_euler_xyz
+
+  from vbrl.tasks.push_t.geometry import HALF_HEIGHT
+
+  command = (env.unwrapped.command_manager._terms or {}).get("push_t_goal")
+  if command is None:
+    parser.error("--goal needs a Push-T task; this one has no push_t_goal command.")
+  x, y, yaw = goal
+  origins = env.unwrapped.scene.env_origins
+  resample = command._resample_command
+
+  def pinned(env_ids: Any) -> None:
+    resample(env_ids)
+    offset = origins.new_tensor([x, y, HALF_HEIGHT])
+    command.target_pos[env_ids] = origins[env_ids] + offset
+    command.target_yaw[env_ids] = yaw
+    marker = command._goal_marker
+    if marker is not None:
+      pos = command.target_pos[env_ids].clone()
+      pos[:, 2] = origins[env_ids, 2]
+      zeros = torch.zeros(len(env_ids), device=command.device)
+      marker.write_mocap_pose_to_sim(
+        torch.cat((pos, quat_from_euler_xyz(zeros, zeros, command.target_yaw[env_ids])), dim=-1),
+        env_ids=env_ids,
+      )
+
+  command._resample_command = pinned
+  print(f"[INFO] Goal pinned to x={x:.5f} y={y:.5f} yaw={yaw:.5f} rad")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
   parser = _parser()
   args = parser.parse_args(argv)
@@ -231,6 +282,8 @@ def main(argv: Sequence[str] | None = None) -> int:
       # differently.
       fixed_lighting=args.record is not None,
     )
+    if args.goal is not None:
+      _pin_goal(parser, env, args.goal)
     try:
       wrapped, _, policy, _ = make_policy(
         env,

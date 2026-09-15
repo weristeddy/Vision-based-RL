@@ -169,7 +169,11 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert tuple(state.observations["critic"].terms) == PUSH_T_STATE
   assert "camera" not in state.observations
   assert tuple(rgb.observations["actor"].terms) == PUSH_T_RGB_ACTOR
-  assert tuple(rgb.observations["critic"].terms) == PUSH_T_STATE
+  # The RGB critic additionally sees the goal numerically. That is free -- it is
+  # never exported and never runs on hardware -- and it is what lets the actor
+  # be denied them in the PixelGoal variants without crippling the value
+  # function.
+  assert tuple(rgb.observations["critic"].terms) == PUSH_T_STATE + ("target_pose",)
   assert tuple(rgb.observations["camera"].terms) == ("external_cam_rgb",)
   assert state.actions == rgb.actions
   assert state.commands == rgb.commands

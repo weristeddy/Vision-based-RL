@@ -32,6 +32,22 @@ _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
 _ACTION_DELTA = 0.1
+# A smaller per-step delta, for training a policy that is already slow enough to
+# deploy raw. Scale and clip move together: the task is built with the two equal,
+# so `|action| <= 1` spans exactly the full displacement.
+#
+# Scaling rather than clipping alone. A clip past the scale is a dead zone in
+# the gradient -- beyond it the action changes nothing, so nothing teaches the
+# policy to stay inside, and its output drifts: this one reaches |a| = 4.25 in
+# sim and 5.16 on hardware against the +-1 the network should be using. Halving
+# the clip alone would leave the usable range at |a| <= 0.5 and the rest dead.
+#
+# It reaches hardware on its own. `vbrl-export-onnx` writes both scale and clip
+# into the ONNX metadata and `deployment.policy` applies them, so a policy
+# trained here deploys at this speed from raw output with no clamp in the
+# manifest -- which is the point, because every manifest clamp tried by hand
+# distorted either the transport or the fine corrections and none did neither.
+_SLOW_ACTION_DELTA = 0.05
 # The fingertip height ceiling: the soft form of the planar constraint every
 # published Push-T imposes in its action space. Both numbers are the object's
 # own height rather than free parameters -- the fingertip should be no higher
@@ -105,12 +121,18 @@ TABLE_CONTACT_WEIGHT = -0.01
 # costs -- which is also the mechanism that makes dragging possible at all
 # (sliding the T under a pad needs mu_g*N > mu_t*(mg + N), unreachable at N=0).
 #
-# 3.7 N = the T's own 1.697 N weight, measured as the resting net vertical load
-# and identical across all 32 test envs, plus 2.0 N of headroom for the
-# transients of a shove. Measured on zbbiq2ts's policy that leaves 85.7% of all
-# steps at exactly zero while charging a p50 top-face contact of 5.3 N of press.
-OBJECT_WEIGHT_N = 1.697
-OBJECT_PRESS_ONSET_N = OBJECT_WEIGHT_N + 2.0
+# The T's own weight plus headroom for the transients of a shove. The weight is
+# 0.497 N: the printed object was weighed at 50.7 g, against the 172.8 g the
+# MJCF carried before. Sliding distance goes as 1/m^2 for a given push impulse,
+# so the old mass made the simulated T travel 11.6x less than the real one for
+# the same push -- which is what a policy trained on it then overshoots by.
+#
+# The headroom is 1.0 N rather than the 2.0 it was at the heavier mass: it is
+# there for shove transients, not as a budget, and 2.0 N on a 0.497 N object is
+# four times its own weight. Re-measure the press distribution after the first
+# run at this mass; the numbers quoted elsewhere here are from the old one.
+OBJECT_WEIGHT_N = 0.497
+OBJECT_PRESS_ONSET_N = OBJECT_WEIGHT_N + 1.0
 OBJECT_PRESS_SCALE_N = 5.0
 # Sized by rolling zbbiq2ts's policy through this exact term: -0.002 came to
 # 1.07% of its task reward, so -0.01 is 5.4%. That makes it the largest penalty
@@ -265,6 +287,7 @@ def _command(
   goal_marker_name: str | None = None,
   free_start: bool = False,
   near_goal_probability: float = 0.0,
+  fixed_target: tuple[float, float, float] | None = None,
 ) -> mdp.PushTCommandCfg:
   object_x = FREE_START_X if free_start else (0.2, 0.4)
   target_x = FREE_START_X if free_start else (0.3, 0.5)
@@ -292,6 +315,7 @@ def _command(
     near_goal_probability=near_goal_probability,
     near_goal_separation_range=NEAR_GOAL_SEPARATION_RANGE,
     near_goal_yaw_range=NEAR_GOAL_YAW_RANGE,
+    fixed_target=fixed_target,
   )
 
 
@@ -308,6 +332,9 @@ def build_env_cfg(
   free_start: bool = False,
   near_goal_probability: float = 0.0,
   separation_curriculum: bool = False,
+  goal_in_observation: bool = True,
+  fixed_target: tuple[float, float, float] | None = None,
+  action_delta: float = _ACTION_DELTA,
 ) -> ManagerBasedRlEnvCfg:
   """Build the ManiSkill3-inspired Push-T MDP.
 
@@ -357,14 +384,14 @@ def build_env_cfg(
   cfg.observations["critic"].nan_policy = "sanitize"
 
   delta_clip = {
-    name: (-_ACTION_DELTA, _ACTION_DELTA)
+    name: (-action_delta, action_delta)
     for name in robot.arm_actuator_names
   }
   cfg.actions = {
     "joint_pos": RelativeJointPositionActionCfg(
       entity_name="robot",
       actuator_names=robot.arm_actuator_names,
-      scale=_ACTION_DELTA,
+      scale=action_delta,
       clip=delta_clip,
       preserve_order=True,
     )
@@ -379,6 +406,7 @@ def build_env_cfg(
       goal_marker_name=GOAL_ENTITY_NAME if visual_goal else None,
       free_start=free_start,
       near_goal_probability=near_goal_probability,
+      fixed_target=fixed_target,
     )
   }
   cfg.rewards = {
@@ -496,7 +524,7 @@ def build_env_cfg(
       params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
     ),
     # The same press in newtons, weight subtracted so 0.0 means "not pressing".
-    # 56 N median episode peak on zbbiq2ts's policy, against a 1.70 N object.
+    # 56 N median episode peak on zbbiq2ts's policy, at the old 1.70 N mass.
     "peak_object_press": MetricsTermCfg(
       func=mdp.peak_object_press,
       reduce="max",
@@ -644,7 +672,7 @@ def build_env_cfg(
     actor = cfg.observations["actor"]
     for name in _PRIVILEGED_ACTOR_TERMS:
       actor.terms.pop(name)
-    actor.terms["target_pose"] = ObservationTermCfg(
+    target_pose_term = ObservationTermCfg(
       func=mdp.target_pose,
       params={
         "command_name": _COMMAND,
@@ -652,6 +680,15 @@ def build_env_cfg(
       },
       clip=(-2.0, 2.0),
     )
+    # The critic keeps it either way. Withholding the goal from the *actor* is
+    # the experiment -- it then has only the marker drawn on the table, which is
+    # what a real deployment can supply without measuring anything. Withholding
+    # it from the critic as well would only make the value function worse at
+    # judging states it can already see, and asymmetric actor-critic is already
+    # how `ee_to_object` and the rest are handled here.
+    cfg.observations["critic"].terms["target_pose"] = target_pose_term
+    if goal_in_observation:
+      actor.terms["target_pose"] = target_pose_term
 
   if play:
     cfg.observations["actor"].enable_corruption = False

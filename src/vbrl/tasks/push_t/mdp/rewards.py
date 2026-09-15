@@ -353,7 +353,7 @@ def object_table_press(
   * 52,289 no-contact steps: p50 0.00 N, p90 0.34 -- the signal is zero when
     the gripper is off the object, with no tuning.
   * 9,616 top-face contact steps: p50 5.26 N, p90 27.7, max 106.
-  * Per-episode peak press: 56 N median, 135 N max, against a 1.70 N object.
+  * Per-episode peak press: 56 N median, 135 N max, at the old 1.70 N mass.
 
   ``onset`` is an absolute threshold on ``|Fz|``, so it includes the object's
   own weight; see ``OBJECT_PRESS_ONSET_N``. Quadratic like the table term, so a
@@ -413,7 +413,7 @@ def max_contact_force_on_face(
 
   ``peak_object_force`` on its own is not a safety number, because the two
   things it sums are not comparable. A *lateral* push is bounded by the task:
-  the T weighs 1.70 N and slides at about 0.7 N, so force beyond that only
+  the T weighs 0.497 N and slides at about 0.2 N, so force beyond that only
   accelerates it and cannot damage anything. A press into the horizontal top
   face has no such bound -- nothing limits it but the arm -- and it is what
   scratches the object and loads the table. Reporting one number for both makes

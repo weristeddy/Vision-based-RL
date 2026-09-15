@@ -185,6 +185,12 @@ class PushTCommand(LiftingCommand):
       )
 
     origins = self._env.scene.env_origins[env_ids]
+    if self.cfg.fixed_target is not None:
+      # Overwrite the ring draw rather than narrowing its ranges: the goal is
+      # sampled on a circle around the object and rejected outside the
+      # rectangle, so a rectangle collapsed to a point never converges.
+      target_pos[:, 0] = self.cfg.fixed_target[0]
+      target_pos[:, 1] = self.cfg.fixed_target[1]
     self.target_pos[env_ids] = target_pos + origins
     object_yaw = sample_uniform(
       object_range.yaw[0],
@@ -198,6 +204,8 @@ class PushTCommand(LiftingCommand):
       (n,),
       device=self.device,
     )
+    if self.cfg.fixed_target is not None:
+      target_yaw = torch.full_like(target_yaw, self.cfg.fixed_target[2])
     levels = self.cfg.target_yaw_levels
     if levels is not None and levels > 0:
       # Round onto `levels` evenly spaced angles spanning the full circle. The
@@ -282,6 +290,19 @@ class PushTCommand(LiftingCommand):
 class PushTCommandCfg(LiftingCommandCfg):
   """Configuration for the planar Push-T pose command."""
 
+  fixed_target: tuple[float, float, float] | None = None
+  """Pin every episode's goal to one ``(x, y, yaw)`` in the robot base frame.
+
+  For a policy that reads the goal only from the drawn marker, a fixed target
+  is the easier half of the problem: the marker is always in the same place, so
+  the policy may key on position rather than on the shape it sees. Paired
+  against the sampled goal it says how much of the difficulty is finding the
+  target versus reaching it.
+
+  ``min_xy_separation`` is not enforced against it -- that floor is applied by
+  redrawing the *goal* until it clears the object, which cannot converge once
+  the goal is a single point, so the object keeps its own distribution instead.
+  """
   min_xy_separation: float = 0.15
   max_xy_separation: float | None = None
   """Upper bound on object-goal separation, applied to every episode.

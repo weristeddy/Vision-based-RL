@@ -161,6 +161,40 @@ _VISUAL_GOAL_FREE_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
 # still flat at chance -- and it is the piece the drawn-goal generation has
 # never been given.
 _VISUAL_SLOW = {**_VISUAL_GOAL, "goal_yaw_stages": GOAL_YAW_SLOW_STAGES}
+# `PixelGoal` is `VisualSlow` with the goal withheld from the *actor*: no
+# `target_pose`, so the only way to know where the T should end up is the marker
+# drawn on the table. Everything else is identical, which makes the pair a
+# controlled measurement of what those five numbers were worth.
+#
+# It is what a real deployment can actually supply. Feeding `target_pose` means
+# measuring the printed marker's pose by hand every time it moves, and the
+# numbers and the picture must then agree -- two sources for one fact, and the
+# policy has no way to tell which is wrong when they disagree.
+#
+# The critic keeps `target_pose` either way; see build_env_cfg.
+_PIXEL_GOAL = {
+  **_VISUAL_SLOW,
+  "goal_in_observation": False,
+  # Trained at half the per-step delta cap so the raw policy output is already
+  # slow enough for the arm. The cap travels in the ONNX metadata, so deployment
+  # applies it without a clamp in the manifest -- which matters because every
+  # clamp value tried by hand distorted either transport or the fine
+  # corrections, and no single one did neither.
+  "action_delta": 0.05,
+}
+# `PixelGoalFixed` pins the goal to the pose measured on the rig
+# (artifacts/deployment/apriltags/goal4_1280x720.png, reprojection-checked),
+# which is the yaw-0 end where this policy family is strongest: 0.648 episode
+# success against 0.305 at 90 degrees. Against `PixelGoal` it separates finding
+# the target from reaching it -- a fixed marker can be keyed on position alone,
+# so the gap between the two is how much of the task is perception.
+_PIXEL_GOAL_FIXED = {**_PIXEL_GOAL, "fixed_target": (0.38442, 0.01567, 0.0124)}
+_PIXEL_GOAL_ENV = trossen_realistic_push_t_rgb_env_cfg(**_PIXEL_GOAL)
+_PIXEL_GOAL_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_PIXEL_GOAL, play=True)
+_PIXEL_GOAL_FIXED_ENV = trossen_realistic_push_t_rgb_env_cfg(**_PIXEL_GOAL_FIXED)
+_PIXEL_GOAL_FIXED_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
+  **_PIXEL_GOAL_FIXED, play=True
+)
 _VISUAL_SLOW_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW)
 _VISUAL_SLOW_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW, play=True)
 _VISUAL_GROW = {**_VISUAL_GOAL_FREE, "separation_curriculum": True}
@@ -385,6 +419,42 @@ def _visual_slow(task_id: str, architecture: str) -> None:
       camera="external_cam",
       success_tag="success_90",
       extra_tags=("goal_yaw_curriculum", "visual_goal"),
+    ),
+  )
+
+
+def _pixel_goal(task_id: str, architecture: str) -> None:
+  """Register one drawn-goal policy with no goal numbers in the actor."""
+  register_mjlab_task(
+    task_id,
+    _PIXEL_GOAL_ENV,
+    _PIXEL_GOAL_PLAY_ENV,
+    trossen_realistic_push_t_rgb_ppo_runner_cfg(
+      task_id,
+      ARCHITECTURES[architecture],
+      scene="real_texture",
+      camera="external_cam",
+      success_tag="success_90",
+      extra_tags=("goal_yaw_curriculum", "visual_goal", "pixel_goal"),
+    ),
+  )
+
+
+def _pixel_goal_fixed(task_id: str, architecture: str) -> None:
+  """The same, with the goal pinned to the rig's measured marker pose."""
+  register_mjlab_task(
+    task_id,
+    _PIXEL_GOAL_FIXED_ENV,
+    _PIXEL_GOAL_FIXED_PLAY_ENV,
+    trossen_realistic_push_t_rgb_ppo_runner_cfg(
+      task_id,
+      ARCHITECTURES[architecture],
+      scene="real_texture",
+      camera="external_cam",
+      success_tag="success_90",
+      extra_tags=(
+        "goal_yaw_curriculum", "visual_goal", "pixel_goal", "fixed_goal",
+      ),
     ),
   )
 
@@ -1156,6 +1226,13 @@ _visual_grow(
 
 
 # --- VisualSlow: VisualGoal on SlowGoal's goal-yaw schedule ------------------
+_pixel_goal(
+  "Mjlab-PushT-PixelGoal-DinoV2ViTS14-Afa6-TrossenRealistic", "DinoV2ViTS14-Afa6"
+)
+_pixel_goal_fixed(
+  "Mjlab-PushT-PixelGoalFixed-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "DinoV2ViTS14-Afa6",
+)
 _visual_slow(
   "Mjlab-PushT-VisualSlow-NatureCnn-Flatten-TrossenRealistic",
   "NatureCnn-Flatten",
