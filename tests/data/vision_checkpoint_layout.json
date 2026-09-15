@@ -5609,6 +5609,30 @@
       "backbone.convnet.layer3.weight:(1024, 512, 1, 1)",
       "backbone.convnet.layer4.bias:(2048,)",
       "backbone.convnet.layer4.weight:(2048, 1024, 1, 1)"
+    ],
+    "Mjlab-StackCubes-Ext-NatureCnn-SpatialSoftmax-TrossenRealistic": [
+      "adapter.output_norm.bias:(256,)",
+      "adapter.output_norm.weight:(256,)",
+      "adapter.proj.bias:(128,)",
+      "adapter.proj.weight:(128, 64, 1, 1)",
+      "backbone.trunk.0.bias:(32,)",
+      "backbone.trunk.0.weight:(32, 3, 8, 8)",
+      "backbone.trunk.2.bias:(64,)",
+      "backbone.trunk.2.weight:(64, 32, 4, 4)",
+      "backbone.trunk.4.bias:(64,)",
+      "backbone.trunk.4.weight:(64, 64, 3, 3)"
+    ],
+    "Mjlab-StackCubes-Wrist-NatureCnn-SpatialSoftmax-TrossenRealistic": [
+      "adapter.output_norm.bias:(256,)",
+      "adapter.output_norm.weight:(256,)",
+      "adapter.proj.bias:(128,)",
+      "adapter.proj.weight:(128, 64, 1, 1)",
+      "backbone.trunk.0.bias:(32,)",
+      "backbone.trunk.0.weight:(32, 3, 8, 8)",
+      "backbone.trunk.2.bias:(64,)",
+      "backbone.trunk.2.weight:(64, 32, 4, 4)",
+      "backbone.trunk.4.bias:(64,)",
+      "backbone.trunk.4.weight:(64, 64, 3, 3)"
     ]
   }
 }

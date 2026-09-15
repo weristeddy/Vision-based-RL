@@ -133,6 +133,12 @@ EXPECTED_TASK_IDS = frozenset(
     ),
     "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
+    # Stack-Cubes: the state baseline, and the same environment through one
+    # camera each. Deliberately three IDs and one architecture until the task
+    # is shown to learn; the encoder sweep crosses ARCHITECTURES afterwards.
+    "Mjlab-StackCubes-State-TrossenRealistic",
+    "Mjlab-StackCubes-Ext-NatureCnn-SpatialSoftmax-TrossenRealistic",
+    "Mjlab-StackCubes-Wrist-NatureCnn-SpatialSoftmax-TrossenRealistic",
     # The goal withheld from the actor: no `target_pose`, so the policy has only
     # the marker drawn on the table. One architecture each, because these are a
     # controlled pair against VisualSlow rather than a sweep -- `PixelGoalFixed`
@@ -150,11 +156,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_220_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_223_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 220
+  assert len(EXPECTED_TASK_IDS) == 223
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -213,10 +219,10 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     assert external <= {"external_cam"}, f"{task_id} has {external}"
     seen_external += bool(external)
 
-  # Only Push-T looks through it. Lift-Cube is a wrist-camera task, so its 36
-  # visual IDs declare `cam` alone -- which is why this is not simply
-  # 'every visual task'.
-  assert seen_external == 182
+  # Push-T looks through it, and one of the two Stack-Cubes camera variants.
+  # Lift-Cube is a wrist-camera task, so its 36 visual IDs declare `cam` alone
+  # -- which is why this is not simply 'every visual task'.
+  assert seen_external == 183
 
 
 def test_only_the_scheduled_arms_widen_the_goal_yaw() -> None:
@@ -315,6 +321,7 @@ def test_registration_is_task_local_and_static() -> None:
     root / "lift_cube/config/trossen",
     root / "push_cube/config/trossen",
     root / "push_t/config/trossen_realistic",
+    root / "stack_cubes/config/trossen_realistic",
   ):
     assert (package / "__init__.py").is_file()
     assert (package / "env_cfgs.py").is_file()

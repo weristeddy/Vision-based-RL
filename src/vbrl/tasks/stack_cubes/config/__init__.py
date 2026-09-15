@@ -1,0 +1,1 @@
+"""Stack-Cubes robot configurations."""

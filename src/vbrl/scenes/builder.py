@@ -7,7 +7,7 @@ when it was built.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -322,10 +322,31 @@ def _camera_events(camera_model: str) -> dict[str, EventTermCfg]:
   }
 
 
+def _bank_events(
+  key: str, entity: str, bank: MaterialBank, geoms
+) -> dict[str, EventTermCfg]:
+  events: dict[str, EventTermCfg] = {}
+  if bank.pattern is not None:
+    events[f"{key}_material"] = _appearance_event(entity, bank, geoms)
+  if bank.tint:
+    events[f"{key}_material_tint"] = _tint_event(entity, bank)
+  return events
+
+
+def _object_keys(object_names: tuple[str, ...]):
+  """Pair each manipulated object with the event key prefix it owns.
+
+  The first object keeps the bare ``object`` prefix, so a single-object task --
+  every task but Stack-Cubes -- derives exactly the event names it always had.
+  """
+  for index, name in enumerate(object_names):
+    yield ("object" if index == 0 else f"object_{name}"), name
+
+
 def _events(
   preset: ScenePreset,
   *,
-  object_name: str,
+  object_names: tuple[str, ...],
   object_materials: tuple[str, ...],
   object_dressed: bool,
   camera_model: str | None,
@@ -346,21 +367,21 @@ def _events(
     # A randomized material bank replaces flat colour randomization.
     if preset.colour_dr and preset.table is None:
       events["table_color"] = _colour_event("table", (0.15, 0.85))
-    if preset.colour_dr and not object_dressed:
-      events["object_color"] = _colour_event(
-        object_name, (0.0, 1.0), materials=object_materials, shared_random=True
+    if preset.table is not None:
+      events.update(
+        _bank_events("table", "table", preset.table, (TABLE_VISUAL_GEOM_NAME,))
       )
-    for entity, bank, geoms in (
-      ("table", preset.table, (TABLE_VISUAL_GEOM_NAME,)),
-      (object_name, preset.obj if object_dressed else None, None),
-    ):
-      if bank is None:
-        continue
-      key = "table" if entity == "table" else "object"
-      if bank.pattern is not None:
-        events[f"{key}_material"] = _appearance_event(entity, bank, geoms)
-      if bank.tint:
-        events[f"{key}_material_tint"] = _tint_event(entity, bank)
+    # One independent draw per manipulated object: four cubes dressed by a
+    # single event would share one colour, which is exactly what a multi-cube
+    # task must not do.
+    for key, name in _object_keys(object_names):
+      if preset.colour_dr and not object_dressed:
+        events[f"{key}_color"] = _colour_event(
+          name, (0.0, 1.0), materials=object_materials, shared_random=True
+        )
+      if object_dressed:
+        assert preset.obj is not None
+        events.update(_bank_events(key, name, preset.obj, None))
 
   ranges = _MATCHED_RANGES if matched else _LIGHT_RANGES[preset.wide_lighting]
   operation = "add" if matched else "abs"
@@ -398,7 +419,7 @@ def _apply(
   cfg: ManagerBasedRlEnvCfg,
   preset: ScenePreset,
   *,
-  object_name: str,
+  object_names: tuple[str, ...],
   object_source: SpecSource,
   camera_model: str | None,
   eval_dr: EvaluationDr,
@@ -410,15 +431,24 @@ def _apply(
   )
 
   cfg.scene.entities["table"] = EntityCfg(spec_fn=partial(table_spec, preset))
-  cfg.scene.entities[object_name] = EntityCfg(
-    spec_fn=partial(object_spec, preset, object_source)
-  )
+  for name in object_names:
+    cfg.scene.entities[name] = EntityCfg(
+      spec_fn=partial(object_spec, preset, object_source)
+    )
   for name in SCENE_EVENTS:
     cfg.events.pop(name, None)
+  # SCENE_EVENTS covers the first object's bare `object_*` keys; the extras a
+  # multi-object task installs are named after the entity and are cleared here,
+  # so a replacement cannot inherit one cube's appearance from the preset it
+  # replaces. Derived from the full name list, not a slice of it: `_object_keys`
+  # gives its own first entry the bare prefix.
+  for key, _ in _object_keys(object_names):
+    for suffix in ("_color", "_material", "_material_tint"):
+      cfg.events.pop(f"{key}{suffix}", None)
   cfg.events.update(
     _events(
       preset,
-      object_name=object_name,
+      object_names=object_names,
       object_materials=object_materials,
       object_dressed=object_dressed,
       camera_model=camera_model,
@@ -451,16 +481,23 @@ def apply_scene(
   camera_view: CameraView | None = None,
   object_xml: Path,
   object_name: str,
+  extra_object_names: Sequence[str] = (),
   eval_dr: EvaluationDr = "fixed",
 ) -> ManagerBasedRlEnvCfg:
-  """Compose one scene around a freshly built task configuration."""
+  """Compose one scene around a freshly built task configuration.
+
+  ``extra_object_names`` installs further entities from the same ``object_xml``
+  and gives each its own independent appearance draw. It exists for Stack-Cubes,
+  which manipulates four identical cubes; left empty -- every other task -- this
+  builds exactly the single-object scene it always did.
+  """
   preset = get_preset(scene, eval_dr=eval_dr)
   # The terrain the tabletop base installs is the env-origin grid, not scenery,
   # so a scene must not clear it: see tasks.utils.lay_out_envs_on_a_grid.
   return _apply(
     cfg,
     preset,
-    object_name=object_name,
+    object_names=(object_name, *extra_object_names),
     object_source=partial(_load_mjcf, str(object_xml)),
     # None means the task has no camera, so it gets no visual randomization.
     camera_model=(
@@ -475,17 +512,21 @@ def apply_scene(
 _NON_OBJECT_ENTITIES = frozenset({"robot", "table", "goal_marker"})
 
 
-def _sole_object(entities) -> str:
+def _task_objects(entities) -> tuple[str, ...]:
+  """The manipulated objects, in the order the task installed them.
+
+  Stack-Cubes has four; every other task has one. They all come from the same
+  MJCF, so a replacement re-dresses them from whichever one is first -- which
+  is what ``apply_scene`` did to build them in the first place.
+  """
   names = tuple(
     name
     for name, entity in entities.items()
     if name not in _NON_OBJECT_ENTITIES and entity.spec_fn is not None
   )
-  if len(names) != 1:
-    raise ValueError(
-      f"Scene replacement requires exactly one task object; found {names}."
-    )
-  return names[0]
+  if not names:
+    raise ValueError("Scene replacement requires at least one task object.")
+  return names
 
 
 def _camera_model_from(cfg: ManagerBasedRlEnvCfg) -> str | None:
@@ -504,13 +545,13 @@ def replace_scene(
 ) -> ManagerBasedRlEnvCfg:
   """Replace only the visual scene of an already-registered configuration."""
   preset = get_preset(scene, eval_dr=eval_dr, require_ood=True)
-  object_name = _sole_object(cfg.scene.entities)
-  source = cfg.scene.entities[object_name].spec_fn
+  object_names = _task_objects(cfg.scene.entities)
+  source = cfg.scene.entities[object_names[0]].spec_fn
   assert source is not None
   return _apply(
     cfg,
     preset,
-    object_name=object_name,
+    object_names=object_names,
     object_source=source,
     camera_model=_camera_model_from(cfg),
     eval_dr=eval_dr,

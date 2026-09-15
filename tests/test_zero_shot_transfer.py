@@ -46,11 +46,18 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 # workstation and a cluster node: both robots, both state tasks, a frozen
 # pretrained encoder (which takes the cached-feature path) and a trainable
 # scratch encoder (which does not).
+# Stack-Cubes is here in full rather than by representative: it is the only
+# task with four manipulated entities, a finer simulation substep, and three
+# interval events that teleport bodies mid-episode, and none of that is
+# exercised anywhere else in the suite.
 TASK_IDS = (
   "Mjlab-PushCube-State-Trossen",
   "Mjlab-PushT-State-TrossenRealistic",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
   "Mjlab-PushT-SlowGoal-NatureCnn-SpatialSoftmax-TrossenRealistic",
+  "Mjlab-StackCubes-State-TrossenRealistic",
+  "Mjlab-StackCubes-Ext-NatureCnn-SpatialSoftmax-TrossenRealistic",
+  "Mjlab-StackCubes-Wrist-NatureCnn-SpatialSoftmax-TrossenRealistic",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
 STATE_TASK_ID = "Mjlab-PushCube-State-Trossen"
