@@ -130,6 +130,10 @@ GRIPPER_PAD_FACE_OFFSET = 0.003
 GRIPPER_GRIP_M = (CUBE_SIZE - GRIPPER_PAD_FACE_OFFSET) / 2
 GRIPPER_CLOSED_M = GRIPPER_GRIP_M + 0.002
 GRIPPER_OPEN_M = 0.022
+# The carriage joint's own upper limit, and the far end of the squeeze. It is
+# what `closure` is measured against, so the reward for closing the hand spans
+# the whole travel rather than the last 3.5 mm of it.
+GRIPPER_TRAVEL_M = 0.044
 # One contact sensor per cube, named after it. The primary set is the six
 # fingertip pad geoms, so the sensor reports which pads are touching that cube
 # and how hard -- which is what turns "the hand is near a cube" into "the hand
@@ -141,9 +145,14 @@ class TowerState(NamedTuple):
   """One step of tower bookkeeping, shared by rewards, observations and events."""
 
   position: torch.Tensor  # (B, N, 3) cube positions in the env frame
+  ee: torch.Tensor  # (B, 3) end-effector site in the env frame
   reach: torch.Tensor  # (B, N) end-effector to cube distance
   held: torch.Tensor  # (B, N) inside a closed gripper
   still: torch.Tensor  # (B, N) not moving
+  speed: torch.Tensor  # (B, N) linear speed, m/s
+  spin: torch.Tensor  # (B, N) angular speed, rad/s
+  opening: torch.Tensor  # (B,) gripper opening, 0 shut to 1 wide
+  closure: torch.Tensor  # (B,) how far the hand has squeezed, 0 wide to 1 shut
   at_level: torch.Tensor  # (B, N) seated on its level, grasp and motion aside
   level: torch.Tensor  # (B, N) which level its height puts it on
   stacked: torch.Tensor  # (B, N) part of the contiguous tower
@@ -272,9 +281,16 @@ def tower_state(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> TowerState
 
   return TowerState(
     position=position,
+    ee=ee,
     reach=reach,
     held=held,
     still=still,
+    speed=speed,
+    spin=spin,
+    opening=(carriage / GRIPPER_OPEN_M).clamp(0.0, 1.0),
+    closure=(
+      (GRIPPER_TRAVEL_M - carriage) / (GRIPPER_TRAVEL_M - GRIPPER_GRIP_M)
+    ).clamp(0.0, 1.0),
     at_level=at_level,
     level=level,
     stacked=stacked,
@@ -385,6 +401,7 @@ __all__ = [
   "GRIPPER_GRIP_M",
   "GRIPPER_PAD_FACE_OFFSET",
   "GRIPPER_OPEN_M",
+  "GRIPPER_TRAVEL_M",
   "MAX_CUBES",
   "MIN_CUBE_SEPARATION",
   "REACH_MAX",

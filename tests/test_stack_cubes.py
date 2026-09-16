@@ -53,8 +53,11 @@ def _cube(position: torch.Tensor, yaw: torch.Tensor, moving: bool = False):
 
 
 # The pad order a real ContactSensor reports for the Trossen fingertips.
-_PADS = [f"{side}_finger_pad_{index}_collision" for side in ("right", "left")
-         for index in range(3)]
+_PADS = [
+  f"{side}_finger_pad_{index}_collision"
+  for side in ("right", "left")
+  for index in range(3)
+]
 
 
 def _grasp_sensor(count: int, pinched: bool):
@@ -101,9 +104,7 @@ def _env(
   scene["robot"] = SimpleNamespace(
     data=SimpleNamespace(
       site_pos_w=torch.tensor([ee], dtype=torch.float32).expand(count, 1, 3),
-      joint_pos=torch.tensor(
-        [[*arm, carriage]], dtype=torch.float32
-      ).expand(count, 7),
+      joint_pos=torch.tensor([[*arm, carriage]], dtype=torch.float32).expand(count, 7),
     )
   )
   scene.env_origins = torch.zeros(count, 3)
@@ -214,9 +215,7 @@ def test_a_tipped_cube_does_not_claim_its_level() -> None:
 def test_yaw_never_decides_whether_a_cube_is_stacked() -> None:
   """Cube orientation about z is free; the task encodes no order at all."""
   yaws = torch.tensor([[0.0, 1.1, -2.4, 0.7]])
-  env, asset_cfg = _env(
-    [[_level(0), _level(1), _level(2), _level(3)]], yaws=yaws
-  )
+  env, asset_cfg = _env([[_level(0), _level(1), _level(2), _level(3)]], yaws=yaws)
   assert T.tower_state(env, asset_cfg).height.tolist() == [4]
 
 
@@ -304,12 +303,8 @@ def test_breaking_the_tower_removes_the_home_bonus() -> None:
   from vbrl.tasks.stack_cubes.stack_cubes_env_cfg import OBSERVATION_JOINT_POS
 
   home = tuple(OBSERVATION_JOINT_POS[f"joint_{index}"] for index in range(6))
-  complete, asset_cfg = _env(
-    [[_level(0), _level(1), _level(2), _level(3)]], arm=home
-  )
-  broken, _ = _env(
-    [[_level(0), _level(1), _level(2), _loose(3)]], arm=home
-  )
+  complete, asset_cfg = _env([[_level(0), _level(1), _level(2), _level(3)]], arm=home)
+  broken, _ = _env([[_level(0), _level(1), _level(2), _loose(3)]], arm=home)
   assert float(_reward(complete, asset_cfg, arm=home)) > 0.9
   assert float(_reward(broken, asset_cfg, arm=home)) < 0.9
 
@@ -465,9 +460,7 @@ def test_a_mid_episode_redraw_keeps_cubes_out_of_the_gripper() -> None:
   hand = torch.tensor([0.42, 0.12, 0.05]).expand(count, 3)
   positions = _drawn_scenarios(count, ee=hand)
   on_table = positions[..., 2] < T.CUBE_HALF + 1e-4
-  distance = torch.linalg.vector_norm(
-    positions[..., :2] - hand[:, None, :2], dim=-1
-  )
+  distance = torch.linalg.vector_norm(positions[..., :2] - hand[:, None, :2], dim=-1)
   assert float(distance[on_table].min()) >= T.GRIPPER_KEEPOUT
 
   # Lift the same hand clear of the table and it stops blocking ground.
@@ -475,9 +468,7 @@ def test_a_mid_episode_redraw_keeps_cubes_out_of_the_gripper() -> None:
   high = torch.tensor([0.42, 0.12, 0.30]).expand(count, 3)
   positions = _drawn_scenarios(count, ee=high)
   on_table = positions[..., 2] < T.CUBE_HALF + 1e-4
-  distance = torch.linalg.vector_norm(
-    positions[..., :2] - high[:, None, :2], dim=-1
-  )
+  distance = torch.linalg.vector_norm(positions[..., :2] - high[:, None, :2], dim=-1)
   assert float(distance[on_table].min()) < T.GRIPPER_KEEPOUT
 
 
@@ -720,9 +711,7 @@ def test_the_mid_episode_disturbance_runs_on_a_native_interval_event() -> None:
   # The reset pool is an episode reset only: mid-episode nothing redraws the
   # whole scene, so a tower the policy built is never replaced wholesale.
   redraws = [
-    name
-    for name, event in cfg.events.items()
-    if event.func is mdp.reset_stack_scenario
+    name for name, event in cfg.events.items() if event.func is mdp.reset_stack_scenario
   ]
   assert redraws == ["stack_scenario"]
   assert cfg.events["stack_scenario"].mode == "reset"
@@ -746,9 +735,9 @@ def _disturb(event, positions, *, ee, arm=(0.0,) * 6, **kwargs):
   scene["robot"] = SimpleNamespace(
     data=SimpleNamespace(
       site_pos_w=torch.tensor([ee], dtype=torch.float32).expand(count, 1, 3),
-      joint_pos=torch.tensor(
-        [[*arm, T.GRIPPER_OPEN_M]], dtype=torch.float32
-      ).expand(count, 7),
+      joint_pos=torch.tensor([[*arm, T.GRIPPER_OPEN_M]], dtype=torch.float32).expand(
+        count, 7
+      ),
     )
   )
   for sensor in T.CONTACT_SENSORS:
@@ -773,14 +762,10 @@ def test_a_collapse_takes_the_top_off_and_leaves_the_rest_standing() -> None:
 
   torch.manual_seed(11)
   before = [[_level(0), _level(1), _level(2), _level(3)]] * 512
-  after = _disturb(
-    collapse_tower, before, ee=[0.05, 0.0, 0.4], max_falling=3
-  )
+  after = _disturb(collapse_tower, before, ee=[0.05, 0.0, 0.4], max_falling=3)
 
   in_column = (
-    torch.linalg.vector_norm(
-      after[..., :2] - after.new_tensor(T.STACK_XY), dim=-1
-    )
+    torch.linalg.vector_norm(after[..., :2] - after.new_tensor(T.STACK_XY), dim=-1)
     < T.STACK_XY_TOL
   )
   fallen = (~in_column).sum(dim=1)
@@ -792,9 +777,9 @@ def test_a_collapse_takes_the_top_off_and_leaves_the_rest_standing() -> None:
     kept = T.MAX_CUBES - int(fallen[env])
     standing = after[env][in_column[env]]
     heights = sorted(float(z) for z in standing[:, 2])
-    assert heights == pytest.approx(
-      [T.level_height(index) for index in range(kept)]
-    ), env
+    assert heights == pytest.approx([T.level_height(index) for index in range(kept)]), (
+      env
+    )
   # And the cubes that fell are lying flat on the table, clear of the column.
   assert after[..., 2][~in_column].tolist() == pytest.approx(
     [T.CUBE_HALF] * int((~in_column).sum())
@@ -886,9 +871,7 @@ def test_the_place_target_is_exactly_where_a_cube_claims_its_level() -> None:
 
     # Where the reward says the next cube belongs...
     target = stack_point(state.height)
-    assert target[0].tolist() == pytest.approx(
-      [*T.STACK_XY, T.level_height(built)]
-    )
+    assert target[0].tolist() == pytest.approx([*T.STACK_XY, T.level_height(built)])
 
     # ...put it exactly there, hands off.
     placed = list(rows)
@@ -1090,7 +1073,9 @@ def test_a_diverged_world_is_terminated_before_it_becomes_nan() -> None:
   assert diverged(normal, asset_cfg).tolist() == [False]
 
   # A cube launched above anything the tower can reach.
-  high, _ = _env([[_level(0), [0.34, 0.0, MAX_CUBE_HEIGHT + 0.1], _loose(2), _loose(3)]])
+  high, _ = _env(
+    [[_level(0), [0.34, 0.0, MAX_CUBE_HEIGHT + 0.1], _loose(2), _loose(3)]]
+  )
   assert diverged(high, asset_cfg).tolist() == [True]
 
   # A cube moving faster than physics here can produce.
@@ -1222,29 +1207,29 @@ def test_a_gripper_stalled_on_a_cube_counts_as_closed() -> None:
   # A hand stalled on a cube reads as closed; an open hand does not.
   rows = [[_level(0), _loose(1), _loose(2), _loose(3)]]
   env, asset_cfg = _env(rows, ee=_loose(1), held=1)
-  env.scene["robot"].data.joint_pos = torch.tensor(
-    [[0.0] * 6 + [T.GRIPPER_GRIP_M]]
-  )
+  env.scene["robot"].data.joint_pos = torch.tensor([[0.0] * 6 + [T.GRIPPER_GRIP_M]])
   assert bool(T.tower_state(env, asset_cfg).held[0, 1]) is True
 
   env.scene["robot"].data.joint_pos = torch.tensor([[0.0] * 6 + [T.GRIPPER_OPEN_M]])
   assert bool(T.tower_state(env, asset_cfg).held[0, 1]) is False
 
 
-def test_closing_the_hand_on_a_cube_pays_immediately() -> None:
-  """Reaching must not be worth as much as grasping.
+def test_the_two_achievement_transitions_pay_a_step() -> None:
+  """Grasping and landing on the tower are achievements, not progress.
 
-  With the bands flush, reaching topped out at exactly the value grasping
+  With every boundary flush, reaching topped out at exactly the value grasping
   started at, so a policy already touching a cube gained nothing by closing --
-  and could not discover lifting without first closing. ManiSkill3 jumps a
-  quarter of its scale at the same transition.
+  and could not discover lifting without first closing. ManiSkill3 puts gaps at
+  the same two transitions and larger ones: normalized by their success bonus,
+  reaching spans [0, 0.25], grasped starts at 0.5, on-the-tower starts at 0.75.
   """
   from vbrl.tasks.stack_cubes.mdp.rewards import BANDS, stage_scalar
 
-  # One gap, at the grasp; every other boundary is flush and none overlap.
   gaps = [BANDS[i + 1][0] - BANDS[i][1] for i in range(len(BANDS) - 1)]
+  # A step at the grasp and at the placement; the two carrying stages flush.
   assert gaps[0] > 0.05, "grasping must pay a step"
-  assert gaps[1:] == [0.0, 0.0, 0.0]
+  assert gaps[3] > 0.05, "landing on the tower must pay a step"
+  assert gaps[1] == pytest.approx(0.0) and gaps[2] == pytest.approx(0.0)
   assert all(lo < hi for lo, hi in BANDS) and BANDS[-1][1] == 1.0
 
   # A cube on the table, gripper right on it: touching versus holding.
@@ -1253,3 +1238,127 @@ def test_closing_the_hand_on_a_cube_pays_immediately() -> None:
   touching = T.tower_state(*_env(rows, ee=cube))
   holding = T.tower_state(*_env(rows, ee=cube, held=1))
   assert float(stage_scalar(holding)) > float(stage_scalar(touching)) + 0.05
+
+
+def test_letting_go_and_settling_are_rewarded_continuously() -> None:
+  """ManiSkill's `(ungrasp_reward + static_reward) / 2`, continuous in both.
+
+  Making each half a step function left the final stage -- the one that has to
+  teach letting go gently -- with no gradient at all. Opening the hand further
+  and slowing the cube must each pay more, rather than flipping at a threshold.
+  """
+  from vbrl.tasks.stack_cubes.mdp.rewards import stage_scalar
+
+  placed = [[_level(0), _level(1), _loose(2), _loose(3)]]
+
+  # Still gripping the placed cube: opening the hand wider pays more.
+  opening = []
+  for carriage in (0.002, 0.010, 0.018):
+    env, cfg = _env(placed, ee=_level(1), held=1)
+    env.scene["robot"].data.joint_pos = torch.tensor([[0.0] * 6 + [carriage]])
+    state = T.tower_state(env, cfg)
+    assert bool(state.held[0, 1]), carriage
+    opening.append(float(stage_scalar(state)))
+  assert opening[0] < opening[1] < opening[2], opening
+
+  # Released but still moving: slowing the cube pays more. These all stay above
+  # the static threshold, so the cube has not seated and is still the target.
+  speeds = []
+  for velocity in (0.6, 0.3, 0.1):
+    env, cfg = _env(placed, ee=_level(1))
+    env.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full(
+      (1, 3), velocity / 3**0.5
+    )
+    speeds.append(float(stage_scalar(T.tower_state(env, cfg))))
+  assert speeds[0] < speeds[1] < speeds[2], speeds
+
+  # And once it finally settles, the course counts: the tower grows and the
+  # task pays more, even though the stage scalar restarts on the next cube.
+  moving, cfg = _env(placed, ee=_level(1))
+  moving.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full((1, 3), 0.3)
+  settled, _ = _env(placed, ee=_level(1))
+  assert T.tower_state(moving, cfg).height.tolist() == [1]
+  assert T.tower_state(settled, cfg).height.tolist() == [2]
+  assert float(_reward(settled, cfg)) > float(_reward(moving, cfg))
+
+
+def test_reaching_alone_cannot_earn_more_than_half_the_first_band() -> None:
+  """DeepMind's `ConditionalAnd(reach_red, grasp, 0.9)`, and why it is there.
+
+  Their first stage fuses reaching with grasping: reaching alone is multiplied
+  by 0.5, and the other half unlocks only once the reach term clears 0.9, at
+  which point it is `Max((close_fingers, 0.5), (grasp, 1.0))`.
+
+  This band used to be reaching alone at full value, and three state-based runs
+  measured what that costs. Hovering over a cube with an open hand scored 0.162
+  of the stage scalar against 0.280 for a grasp, and hovering is free -- closing
+  on an off-centre cube pushes it away and loses reach. All three runs
+  converged on hovering: `reward_stage` flat at 0.94 of 5 for over a thousand
+  iterations, entropy down to 0.013, peak fingertip force climbing past 90 N
+  against cubes that never moved.
+  """
+  from vbrl.tasks.stack_cubes.mdp.rewards import (
+    BANDS,
+    GRASP_GATE,
+    _reach_and_grasp,
+    _reaching,
+  )
+
+  on_the_cube = torch.ones(1)
+  assert float(on_the_cube) > GRASP_GATE
+  ceiling = _reach_and_grasp(
+    on_the_cube, torch.ones(1), torch.ones(1, dtype=torch.bool)
+  )
+  open_hand = _reach_and_grasp(
+    on_the_cube, torch.zeros(1), torch.zeros(1, dtype=torch.bool)
+  )
+  squeezing = _reach_and_grasp(
+    on_the_cube, torch.ones(1), torch.zeros(1, dtype=torch.bool)
+  )
+  assert float(ceiling) == pytest.approx(1.0)
+  assert float(open_hand) == pytest.approx(0.5), "reaching alone tops out at half"
+  assert float(open_hand) < float(squeezing) < float(ceiling)
+
+  # Nothing in the band can outbid the band above it, which is what makes the
+  # grasp step a step rather than a trade.
+  low, high = BANDS[0]
+  assert low + (high - low) * float(ceiling) <= BANDS[1][0]
+
+  # DeepMind's reach kernel: flat inside 2 cm, 0.05 at the 15 cm margin. The
+  # `1 - tanh(d / 0.2)` it replaced paid 0.37 there.
+  assert float(_reaching(torch.tensor([0.015]))) == pytest.approx(1.0)
+  assert float(_reaching(torch.tensor([0.15]))) == pytest.approx(0.05, abs=1e-6)
+
+
+def test_a_placed_cube_pays_for_getting_the_hand_out_of_the_way() -> None:
+  """DeepMind's `Product(stack, above_red)`: the last stage wants the hand off.
+
+  `_get_reward_above_red` asks for the pinch point `RETREAT_HEIGHT` above the
+  cube and ignores horizontal position entirely -- their `position_tolerance`
+  is `(1, 1, 0.03)` metres. Without it the only reward for withdrawing came
+  from `home_pose`, which fires on a finished tower, so courses one to three
+  had none: the hand could sit on the cube it had just released while the next
+  approach began from inside the tower.
+  """
+  from vbrl.tasks.stack_cubes.mdp.rewards import RETREAT_HEIGHT, _retreat, stage_scalar
+
+  cube = torch.tensor([[0.34, 0.0, 0.02]])
+  above = torch.tensor([[0.34, 0.0, 0.02 + RETREAT_HEIGHT]])
+  assert float(_retreat(above, cube)) == pytest.approx(1.0)
+  assert float(_retreat(cube, cube)) < 0.01
+  # Horizontal offset at the right height still pays: height, not a path.
+  sideways = above + torch.tensor([[0.02, 0.0, 0.0]])
+  assert float(_retreat(sideways, cube)) == pytest.approx(1.0)
+
+  # And it moves the stage scalar: a released cube with the hand lifted clear
+  # scores above the same cube with the hand still sitting on it.
+  placed = [[_level(0), _level(1), _loose(2), _loose(3)]]
+  on_it, cfg = _env(placed, ee=_level(1))
+  clear, _ = _env(
+    placed, ee=(_level(1)[0], _level(1)[1], _level(1)[2] + RETREAT_HEIGHT)
+  )
+  on_it.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full((1, 3), 0.2)
+  clear.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full((1, 3), 0.2)
+  assert float(stage_scalar(T.tower_state(clear, cfg))) > float(
+    stage_scalar(T.tower_state(on_it, cfg))
+  )
