@@ -76,6 +76,11 @@ def run(
     f"          from {policy.metadata.source_run}, "
     f"obs {policy.metadata.observation_terms}"
   )
+  if policy.metadata.clip_actions is None:
+    print(
+      "          no clip_actions in the metadata: the action fed back as the "
+      "`actions` observation is unbounded, which winds up. Re-export it."
+    )
 
   arm = TrossenArm(config)
   camera = RealSenseCamera(config) if policy.metadata.needs_camera else None
@@ -93,7 +98,16 @@ def run(
         "field -- lower camera_exposure_us until this is a few percent"
       )
   home = policy.metadata.home_pose
-  print(f"Goal      {tuple(config.goal)} in the base frame")
+  # A policy whose observation terms carry neither goal_position nor
+  # target_pose never reads this number -- the goal reaches it only as the
+  # marker in its camera image -- so say so rather than printing it as an input.
+  reads_goal = bool(
+    {"goal_position", "target_pose"} & set(policy.metadata.observation_terms)
+  )
+  print(
+    f"Goal      {tuple(config.goal)} in the base frame"
+    + ("" if reads_goal else "  (not an input: this policy sees only the marker)")
+  )
   if keyboard_goal:
     print(f"Keys      the arrow keys move the goal\n{HELP}")
   print(f"Homing    {motion.home_seconds:.1f} s")
@@ -116,7 +130,16 @@ def run(
   # told, whether the policy is oscillating -- are all differences between
   # series, not single values.
   trace: dict[str, list] = {
-    k: [] for k in ("action", "joint_pos", "joint_vel", "target", "sent", "time")
+    k: []
+    for k in (
+      "action",
+      "network",
+      "joint_pos",
+      "joint_vel",
+      "target",
+      "sent",
+      "time",
+    )
   }
   frames: list = []
   # ExitStack so the terminal is handed back on every path out, including the
@@ -141,7 +164,11 @@ def run(
         joint_pos=joint_pos, joint_vel=joint_vel, image=frame
       )
 
-      arm_channels = action[:-1] if policy.has_gripper else action
+      # Checked on the network's own output rather than on `action`: the
+      # policy clamps to `clip_actions` before returning, so `action` cannot
+      # exceed 1.0 and would never trip this.
+      network = policy.network_action
+      arm_channels = network[:-1] if policy.has_gripper else network
       largest_arm_action = float(np.abs(arm_channels).max())
       if largest_arm_action > motion.max_arm_action:
         raise RuntimeError(
@@ -165,6 +192,7 @@ def run(
 
       if log is not None:
         trace["action"].append(np.asarray(action, dtype=np.float32))
+        trace["network"].append(np.asarray(network, dtype=np.float32))
         trace["joint_pos"].append(np.asarray(joint_pos, dtype=np.float32))
         trace["joint_vel"].append(np.asarray(joint_vel, dtype=np.float32))
         trace["target"].append(np.asarray(target, dtype=np.float32))

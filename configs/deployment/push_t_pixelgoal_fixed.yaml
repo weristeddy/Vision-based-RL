@@ -1,0 +1,69 @@
+version: 1
+
+# W&B run n92lvmra --
+# Mjlab-PushT-PixelGoalFixed-DinoV2ViTS14-Afa6-TrossenRealistic, 6,000
+# iterations at gamma 0.996. Like push_t_pixelgoal.yaml, `target_pose` is gone
+# from the actor and the action scale is halved, and on top of that the goal was
+# held at one pose for all of training -- this one, the pose measured on the
+# real table.
+#
+# Its sim numbers at the end of training, against 0.116 for the goal-conditioned
+# PixelGoal policy and 0.501 for the VisualSlow one that still saw the goal as
+# numbers: success 0.967, overlap 0.936, position error 4.8 mm, yaw error 0.048
+# rad. It is not a harder task solved better -- it is one goal instead of the
+# full distribution -- but it is the policy to try on the robot.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_pixelgoalfixed_5999.onnx
+
+arm_ip: 192.168.1.2
+
+# Not an input, and not a choice either. This graph's observation terms are
+# joint_pos, joint_vel, actions -- 22 numbers, no target_pose -- so the policy
+# never reads these numbers; the field is here because the manifest schema
+# range-checks it and the trace logs it.
+#
+# But this policy was trained against exactly this goal and no other, so the
+# physical marker has to be at this pose or the run is out of distribution. It
+# is `fixed_target` in the PixelGoalFixed registration, and it came from
+# artifacts/deployment/apriltags/goal4_1280x720.png via
+#
+#   python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+#
+# Re-solve after touching the marker and check it still lands here; if it has
+# moved, move it back rather than editing this file.
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+# Fixed colour exposure, set against the training distribution: sim frames sit
+# at median 150 and mean 141, and this camera measures median 158, mean 130, 0%
+# clipped at 7000 us, with clipping starting between 8000 and 11000. Auto
+# clipped 42% of the pixels the policy saw on the first logged run.
+#
+# Re-probe after any lighting change: python -m vbrl.deployment.camera
+camera_exposure_us: 7000
+
+control_hz: 50.0        # the training decimation: 0.005 s x 4
+
+motion:
+  # Nothing at all. This is the point of the run: the policy was trained with
+  # scale 0.05 and clip +/-0.05 rather than 0.1, and both travel with the graph
+  # in its ONNX metadata, so the 0.05 rad/step bound is applied by the same
+  # numbers training used. Shaping it here would only re-introduce what the
+  # traces already blamed -- at 0.010 the rate clamp fired on 100% of steps,
+  # cut a mean 0.043 rad off every command and held the arm at 0.284 rad/s
+  # against sim's 0.50, binding throughout instead of limiting excursions.
+  #
+  # The resulting hard bound is 0.05 rad/step x 50 Hz x the 0.24 of the
+  # commanded gap this arm closes per step, about 0.6 rad/s per joint.
+  action_smoothing: 1.0
+  response_gain: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01   # unused: Push-T drives joint_0..5 only
+  # Sized from the network's own output in sim over 25,600 steps: mean 1.28,
+  # p99.9 4.81, max 5.68. The old 6.0 was set against a policy whose max was
+  # 4.06 and would false-trip on healthy behaviour here. It is purely an
+  # out-of-distribution flag, not a limiter -- the delta is bounded at 0.05 rad
+  # by clip_actions and by the action term's own clip, whatever the magnitude --
+  # and it still catches a runaway fast: the windup this policy hit on hardware
+  # passed 8.0 by its fifth step on the way to 22.
+  max_arm_action: 8.0
+  home_seconds: 3.0

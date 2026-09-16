@@ -90,6 +90,18 @@ def main(argv: Sequence[str] | None = None) -> int:
   if clip is not None:
     metadata["action_clip_low"] = clip[0, :, 0].cpu().tolist()
     metadata["action_clip_high"] = clip[0, :, 1].cpu().tolist()
+  # RSL-RL's vector wrapper clamps the action to +/-`clip_actions` *before* the
+  # environment sees it, so that bound is where the policy's own `actions`
+  # observation was drawn from: during training it never saw a value outside
+  # it. Deployment has no wrapper, so without this the term feeds back its
+  # unclipped output and each step's observation is further out of
+  # distribution than the last -- measured on hardware as a monotone ramp,
+  # 2.1, 3.0, 3.7, 4.2, 5.2, 6.5, against a band of [-1, 1].
+  from mjlab.tasks.registry import load_rl_cfg
+
+  clip_actions = load_rl_cfg(arguments.task_id).clip_actions
+  if clip_actions is not None:
+    metadata["clip_actions"] = float(clip_actions)
   attach_metadata_to_onnx(str(destination), metadata)
   print(f"Wrote {destination} ({destination.stat().st_size / 1e6:.0f} MB)")
   return 0

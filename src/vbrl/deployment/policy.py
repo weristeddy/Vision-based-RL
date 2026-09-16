@@ -47,6 +47,15 @@ class PolicyMetadata:
   """``(low, high)`` on the processed delta, or ``None`` if unbounded."""
   relative: bool
   """``target = current + scale * action`` rather than ``offset + scale * action``."""
+  clip_actions: float | None
+  """The bound RSL-RL's wrapper put on the action *before* the env saw it.
+
+  It is the band the policy's own ``actions`` observation was drawn from -- in
+  training it never saw a value outside it -- so it has to be applied here too,
+  where there is no wrapper. Leaving it off lets the term feed back its
+  unclipped output, and since a more extreme `actions` observation produces a
+  more extreme action, the two wind each other up: measured on hardware as
+  2.1, 3.0, 3.7, 4.2, 5.2, 6.5 over six consecutive steps."""
   needs_camera: bool
   source_run: str
   """The training run the weights came from, for the startup banner."""
@@ -80,6 +89,9 @@ class PolicyMetadata:
         else None
       ),
       relative=meta.get("action_type", "absolute") == "relative",
+      clip_actions=(
+        float(meta["clip_actions"]) if "clip_actions" in meta else None
+      ),
       needs_camera=any(i.name == "camera" for i in onnx_session.get_inputs()),
       source_run=meta.get("run_path", "unknown"),
     )
@@ -113,6 +125,7 @@ class Policy:
     self._smoothing = smoothing
     self._response_gain = response_gain
     self._last_action = np.zeros(self.metadata.action_dim)
+    self._network_action = np.zeros(self.metadata.action_dim)
     self._goal_position = np.full(3, np.inf)
     self._position = self.metadata.action_offset
 
@@ -178,11 +191,22 @@ class Policy:
   def act(self, *, joint_pos: Any, joint_vel: Any, image: Any) -> Any:
     """The action to apply, smoothed and remembered as the next `actions` term."""
     observation = self.observe(joint_pos=joint_pos, joint_vel=joint_vel, image=image)
-    raw_action = self._infer(observation)
+    # Kept unclamped for the caller's out-of-distribution check: once the
+    # clamp is applied nothing can exceed it, so the clamped value carries no
+    # signal about how far outside its training band the policy has gone.
+    self._network_action = raw_action = self._infer(observation)
+    if self.metadata.clip_actions is not None:
+      bound = self.metadata.clip_actions
+      raw_action = np.clip(raw_action, -bound, bound)
     self._last_action = (
       self._smoothing * raw_action + (1.0 - self._smoothing) * self._last_action
     )
     return self._last_action
+
+  @property
+  def network_action(self) -> Any:
+    """The last action straight off the graph, before `clip_actions`."""
+    return self._network_action
 
   @property
   def has_gripper(self) -> bool:

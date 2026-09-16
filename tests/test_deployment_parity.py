@@ -47,6 +47,11 @@ class _Session:
       if isinstance(term, RelativeJointPositionActionCfg)
       else "absolute"
     )
+    from mjlab.tasks.registry import load_rl_cfg
+
+    clip_actions = load_rl_cfg(TASK).clip_actions
+    if clip_actions is not None:
+      metadata["clip_actions"] = float(clip_actions)
     self._action_dim = env.unwrapped.action_manager.total_action_dim
     self._meta = _Meta(
       {
@@ -203,6 +208,7 @@ def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
     action_dim=6,
     action_clip=None,
     relative=True,
+    clip_actions=None,
     needs_camera=False,
     source_run="test",
   )
@@ -253,3 +259,71 @@ def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
   # 1.0 and -1.0 scale to +-0.1 and must come back at the bound.
   assert clipped[0] == pytest.approx(default[0] + 0.05)
   assert clipped[1] == pytest.approx(default[1] - 0.05)
+
+
+def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() -> None:
+  """`clip_actions` bounds the `actions` observation, or the policy winds up.
+
+  RSL-RL's vector wrapper clamps the action to +/-`clip_actions` before the
+  environment sees it, and the `actions` observation term reads that clamped
+  value -- so a policy never saw one outside the band while training.
+  Deployment has no wrapper. Feeding back the unclipped output closes a
+  positive loop: a more extreme `actions` observation produces a more extreme
+  action, which is fed back more extreme still.
+
+  Measured on hardware, replaying the frame the aborted run logged: 2.1, 3.2,
+  4.2, 5.6, 7.8, 10.7, 14.2, 17.4, diverging to 22.3, against 2.1, 2.8, 2.9,
+  2.95 settling once the bound is applied.
+  """
+  from dataclasses import replace
+
+  import numpy as np
+
+  from vbrl.deployment.policy import ARM_JOINTS, Policy, PolicyMetadata
+
+  default = np.zeros(len(ARM_JOINTS) + 1)
+  metadata = PolicyMetadata(
+    joint_names=tuple(ARM_JOINTS) + ("left_carriage_joint",),
+    default_joint_pos=default,
+    action_offset=np.zeros(len(ARM_JOINTS)),
+    action_scale=np.full(len(ARM_JOINTS), 0.05),
+    observation_terms=("actions",),
+    action_dim=6,
+    action_clip=(np.full(6, -0.05), np.full(6, 0.05)),
+    relative=True,
+    clip_actions=1.0,
+    needs_camera=False,
+    source_run="test",
+  )
+
+  def build(bound):
+    policy = Policy.__new__(Policy)
+    policy.metadata = replace(metadata, clip_actions=bound)
+    policy._last_action = np.zeros(6)
+    policy._network_action = np.zeros(6)
+    policy._smoothing = 1.0
+    policy._response_gain = 1.0
+    # A divergent map, in the sense the real loop is: the output grows with the
+    # action fed back to it. Gain 1.5 > 1, so the only thing that can stop it
+    # is a bound on what gets fed back.
+    policy._infer = lambda observation: 1.5 * observation["obs"][0] + 2.0
+    return policy
+
+  joint_pos = np.zeros(len(ARM_JOINTS))
+  unbounded, bounded = build(None), build(1.0)
+  for _ in range(40):
+    for policy in (unbounded, bounded):
+      policy.act(joint_pos=joint_pos, joint_vel=joint_pos, image=None)
+
+  # Unbounded, it runs away -- past the 6.0 the first hardware run aborted at.
+  assert float(np.abs(unbounded.network_action).max()) > 100.0
+
+  # Bounded, it settles at the fixed point of the map evaluated at the bound.
+  assert float(np.abs(bounded.network_action).max()) == pytest.approx(3.5)
+  # And what reaches the joints is the clamped action, never the raw output.
+  assert np.all(np.abs(bounded.act(
+    joint_pos=joint_pos, joint_vel=joint_pos, image=None
+  )) <= 1.0)
+  # while `network_action` keeps the unclamped value, so the loop's
+  # out-of-distribution check still has something to measure.
+  assert float(np.abs(bounded.network_action).max()) > 1.0
