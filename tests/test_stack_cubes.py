@@ -295,7 +295,7 @@ def test_a_complete_tower_pays_more_at_the_observation_pose() -> None:
   at_home, asset_cfg = _env(complete, arm=home)
   away, _ = _env(complete, arm=(0.0,) * 6)
   assert float(_reward(at_home, asset_cfg, arm=home)) == pytest.approx(1.0, abs=1e-3)
-  assert 0.9 <= float(_reward(away, asset_cfg, arm=home)) < 1.0
+  assert 0.9 - 1e-6 <= float(_reward(away, asset_cfg, arm=home)) < 1.0
 
 
 def test_breaking_the_tower_removes_the_home_bonus() -> None:
@@ -911,36 +911,30 @@ def test_arriving_at_the_target_still_held_is_not_a_completed_placement() -> Non
   assert float(_reward(released, asset_cfg)) > float(_reward(held, asset_cfg))
 
 
-def test_the_hover_point_sits_one_cube_above_the_place_point() -> None:
-  """Transport clearance is derived from the cube, not chosen."""
-  from vbrl.tasks.stack_cubes.mdp.rewards import HOVER_CLEARANCE
-  from vbrl.tasks.stack_cubes.mdp.tower import stack_point
-
-  for built in range(T.MAX_CUBES):
-    place = stack_point(torch.tensor([built]))[0]
-    assert HOVER_CLEARANCE == T.CUBE_SIZE
-    # The hover pose clears the tower's own top face by a whole cube.
-    assert float(place[2]) + HOVER_CLEARANCE > T.level_height(built) + T.CUBE_HALF
-
-
 def test_the_task_reward_never_falls_along_a_successful_placement() -> None:
   """Walk an idealised pick-and-place and check the reward only goes up.
 
   The stage scalar alone is *not* monotone here and should not be: the moment a
   cube seats, the tower grows and the target moves to the next cube, so ``s``
-  resets to the reaching band while ``h`` absorbs the finished course. What has
-  to hold is that the sum never goes backwards -- otherwise there is a moment
-  in every successful placement that the policy is paid to avoid.
+  restarts on that cube while ``h`` absorbs the finished course. What has to
+  hold is that the sum never goes backwards -- otherwise there is a moment in
+  every successful placement that the policy is paid to avoid.
+
+  This is the property the Lift-Cube product form exists to give. The staged
+  band ladder it replaced satisfied this test and still could not be trained,
+  because "never falls" is not the same as "always rises": the ladder was flat
+  from the moment the hand arrived at a cube until a binary contact test
+  flipped, and a policy cannot cross a flat stretch it has to explore into.
+  `test_every_step_of_a_placement_pays_before_the_next_one_starts` pins the
+  stronger property.
   """
-  from vbrl.tasks.stack_cubes.mdp.rewards import HOVER_CLEARANCE
 
   def lerp(a, b, t):
     return [x + (y - x) * t for x, y in zip(a, b, strict=True)]
 
   start = [0.40, -0.14, T.CUBE_HALF]
   place = _level(1)
-  hover = [place[0], place[1], place[2] + HOVER_CLEARANCE]
-  lifted = [start[0], start[1], T.CUBE_HALF + T.CUBE_SIZE]
+  lifted = [start[0], start[1], place[2]]
   others = [_level(0), None, [0.24, 0.15, T.CUBE_HALF], [0.42, 0.12, T.CUBE_HALF]]
 
   # approach, grasp, lift, carry to the hover pose, lower onto the tower, let go
@@ -948,8 +942,7 @@ def test_the_task_reward_never_falls_along_a_successful_placement() -> None:
     ([1.0, 1.0, 0.6], start, start, start, False),
     (start, start, start, start, True),
     (start, lifted, start, lifted, True),
-    (lifted, hover, lifted, hover, True),
-    (hover, place, hover, place, True),
+    (lifted, place, lifted, place, True),
     (place, place, place, place, False),
   )
   rewards = []
@@ -1161,8 +1154,16 @@ def test_the_update_matches_maniskills_stack_cube_recipe() -> None:
 
 
 def test_the_velocity_curriculum_cannot_outgrow_the_task_reward() -> None:
-  """Lift-Cube ramps this to -1.0; that reward tops out at 3.0 and this one at
-  1.0, so the same weight would make standing still optimal."""
+  """The penalties must never cost more than closing the hand pays.
+
+  Lift-Cube ramps this to -1.0, but its reward tops out at 3.0 against this
+  one's 1.0. Measured on the first state run, `joint_vel_hinge` costs -0.0159 a
+  step at weight -0.01 and `action_rate_l2` another -0.0154. Under ManiSkill3's
+  ladder, closing the hand on a cube -- the move five runs never made -- pays
+  +0.066, so the two penalties are level with it at weight -0.03 and would
+  overtake it at -0.06: a policy that had learned to grasp would be trained back
+  out of it. ManiSkill's own Stack-Cube carries no action penalty at all.
+  """
   from vbrl.tasks.stack_cubes.stack_cubes_env_cfg import NUM_STEPS_PER_ENV
 
   from mjlab.tasks.registry import load_rl_cfg
@@ -1171,9 +1172,9 @@ def test_the_velocity_curriculum_cannot_outgrow_the_task_reward() -> None:
   stages = cfg.curriculum["joint_vel_hinge_weight"].params["stages"]
   weights = [stage["weight"] for stage in stages]
   assert weights[0] == pytest.approx(-0.01)
-  # Monotonically tighter, and never past a tenth of the task's own scale.
+  # Monotonically tighter, and never past what the grasp step can absorb.
   assert all(a > b for a, b in zip(weights[:-1], weights[1:], strict=True))
-  assert min(weights) >= -0.1
+  assert min(weights) >= -0.03
 
   # The ramp is counted in environment steps, so it has to match the rollout.
   assert load_rl_cfg(STACK_CUBES_IDS[0]).num_steps_per_env == NUM_STEPS_PER_ENV
@@ -1214,30 +1215,48 @@ def test_a_gripper_stalled_on_a_cube_counts_as_closed() -> None:
   assert bool(T.tower_state(env, asset_cfg).held[0, 1]) is False
 
 
-def test_the_two_achievement_transitions_pay_a_step() -> None:
-  """Grasping and landing on the tower are achievements, not progress.
+def test_every_step_of_a_placement_pays_more_than_the_step_before() -> None:
+  """ManiSkill3's ladder, walked end to end: no flat stretch and no step down.
 
-  With every boundary flush, reaching topped out at exactly the value grasping
-  started at, so a policy already touching a cube gained nothing by closing --
-  and could not discover lifting without first closing. ManiSkill3 puts gaps at
-  the same two transitions and larger ones: normalized by their success bonus,
-  reaching spans [0, 0.25], grasped starts at 0.5, on-the-tower starts at 0.75.
+  Three state runs stalled with the hand parked on a cube. The reward they ran
+  was a five-band ladder of this repository's own invention, and its defect
+  shows up as a *flat* stretch here: from the moment the hand arrived at a cube
+  until a binary contact test flipped, every small motion paid exactly nothing,
+  and a policy cannot explore across a plateau it gets no gradient on.
+
+  ManiSkill3's `StackCube-v1` has no such stretch, and the grasp -- the thing
+  that was never learned -- is the single largest step in the approach, because
+  their `reward[is_cubeA_grasped] = 4 + place` jumps clear of a reaching term
+  that tops out at 2.
   """
-  from vbrl.tasks.stack_cubes.mdp.rewards import BANDS, stage_scalar
+  from vbrl.tasks.stack_cubes.mdp.rewards import stage_scalar
 
-  gaps = [BANDS[i + 1][0] - BANDS[i][1] for i in range(len(BANDS) - 1)]
-  # A step at the grasp and at the placement; the two carrying stages flush.
-  assert gaps[0] > 0.05, "grasping must pay a step"
-  assert gaps[3] > 0.05, "landing on the tower must pay a step"
-  assert gaps[1] == pytest.approx(0.0) and gaps[2] == pytest.approx(0.0)
-  assert all(lo < hi for lo, hi in BANDS) and BANDS[-1][1] == 1.0
+  start = [0.40, -0.14, T.CUBE_HALF]
+  goal = _level(1)
+  others = [_level(0), None, [0.24, 0.15, T.CUBE_HALF], [0.42, 0.12, T.CUBE_HALF]]
 
-  # A cube on the table, gripper right on it: touching versus holding.
-  cube = _loose(1)
-  rows = [[_level(0), cube, _loose(2), _loose(3)]]
-  touching = T.tower_state(*_env(rows, ee=cube))
-  holding = T.tower_state(*_env(rows, ee=cube, held=1))
-  assert float(stage_scalar(holding)) > float(stage_scalar(touching)) + 0.05
+  def score(cube, ee, grasped):
+    rows = [others[0], cube, others[2], others[3]]
+    env, cfg = _env([rows], ee=ee, held=1 if grasped else None)
+    return float(stage_scalar(T.tower_state(env, cfg)))
+
+  # Approach, grasp, lift, carry, arrive. One entry per waypoint.
+  lifted = [start[0], start[1], T.CUBE_HALF + T.CUBE_SIZE]
+  over = [goal[0], goal[1], goal[2] + T.CUBE_SIZE]
+  walk = [
+    (start, [start[0] - 0.12, start[1], start[2] + 0.10], False),
+    (start, [start[0] - 0.06, start[1], start[2] + 0.05], False),
+    (start, start, False),
+    (start, start, True),
+    (lifted, lifted, True),
+    ([0.37, -0.07, 0.08], [0.37, -0.07, 0.08], True),
+    (over, over, True),
+  ]
+  trace = [score(*step) for step in walk]
+  steps = [b - a for a, b in zip(trace[:-1], trace[1:], strict=True)]
+  assert all(d > 0.0 for d in steps), (trace, steps)
+  # Closing the hand is the biggest single move in the whole approach.
+  assert steps[2] == max(steps), steps
 
 
 def test_letting_go_and_settling_are_rewarded_continuously() -> None:
@@ -1280,99 +1299,3 @@ def test_letting_go_and_settling_are_rewarded_continuously() -> None:
   assert T.tower_state(moving, cfg).height.tolist() == [1]
   assert T.tower_state(settled, cfg).height.tolist() == [2]
   assert float(_reward(settled, cfg)) > float(_reward(moving, cfg))
-
-
-def test_reaching_alone_cannot_earn_more_than_half_the_first_band() -> None:
-  """DeepMind's `ConditionalAnd(reach_red, grasp, 0.9)`, and why it is there.
-
-  Their first stage fuses reaching with grasping: reaching alone is multiplied
-  by 0.5, and the other half unlocks only once the reach term clears 0.9, at
-  which point it is `Max((close_fingers, 0.5), (grasp, 1.0))`.
-
-  This band used to be reaching alone at full value, and three state-based runs
-  measured what that costs. Hovering over a cube with an open hand scored 0.162
-  of the stage scalar against 0.280 for a grasp, and hovering is free -- closing
-  on an off-centre cube pushes it away and loses reach. All three runs
-  converged on hovering: `reward_stage` flat at 0.94 of 5 for over a thousand
-  iterations, entropy down to 0.013, peak fingertip force climbing past 90 N
-  against cubes that never moved.
-  """
-  from vbrl.tasks.stack_cubes.mdp.rewards import (
-    BANDS,
-    GRASP_GATE,
-    REACH_TOLERANCE,
-    _reach_and_grasp,
-    _reaching,
-  )
-
-  on_the_cube = torch.ones(1)
-  assert float(on_the_cube) > GRASP_GATE
-  ceiling = _reach_and_grasp(
-    on_the_cube, torch.ones(1), torch.ones(1, dtype=torch.bool)
-  )
-  open_hand = _reach_and_grasp(
-    on_the_cube, torch.zeros(1), torch.zeros(1, dtype=torch.bool)
-  )
-  squeezing = _reach_and_grasp(
-    on_the_cube, torch.ones(1), torch.zeros(1, dtype=torch.bool)
-  )
-  assert float(ceiling) == pytest.approx(1.0)
-  assert float(open_hand) == pytest.approx(0.5), "reaching alone tops out at half"
-  assert float(open_hand) < float(squeezing) < float(ceiling)
-
-  # Nothing in the band can outbid the band above it, which is what makes the
-  # grasp step a step rather than a trade.
-  low, high = BANDS[0]
-  assert low + (high - low) * float(ceiling) <= BANDS[1][0]
-
-  # The kernel has to keep a live gradient across the distances episodes
-  # actually start at. Measured over 3,072 resets, the target cube begins a
-  # median 0.207 m from the end-effector, q99 0.263. DeepMind's own 0.15 m
-  # `tanh_squared` margin pays 0.011 at that median and 0.0007 at 0.30 m --
-  # flat across the entire workspace, because their basket keeps the pinch
-  # close to the objects and this table does not. It was tried: both visual
-  # runs diverged outright (value loss 4e9, `action_rate_l2` -48,000) and both
-  # state runs ended 83% of their episodes on table contact at 45% of full
-  # length.
-  assert float(_reaching(torch.tensor([0.015]))) == pytest.approx(1.0)
-  assert float(_reaching(torch.tensor([0.207]))) > 0.2
-  assert float(_reaching(torch.tensor([0.30]))) > 0.05
-  # The flat top begins exactly where the shaped part reaches the grasp gate,
-  # so the band does not jump at the tolerance.
-  assert float(_reaching(torch.tensor([REACH_TOLERANCE + 1e-4]))) == pytest.approx(
-    GRASP_GATE, abs=2e-3
-  )
-
-
-def test_a_placed_cube_pays_for_getting_the_hand_out_of_the_way() -> None:
-  """DeepMind's `Product(stack, above_red)`: the last stage wants the hand off.
-
-  `_get_reward_above_red` asks for the pinch point `RETREAT_HEIGHT` above the
-  cube and ignores horizontal position entirely -- their `position_tolerance`
-  is `(1, 1, 0.03)` metres. Without it the only reward for withdrawing came
-  from `home_pose`, which fires on a finished tower, so courses one to three
-  had none: the hand could sit on the cube it had just released while the next
-  approach began from inside the tower.
-  """
-  from vbrl.tasks.stack_cubes.mdp.rewards import RETREAT_HEIGHT, _retreat, stage_scalar
-
-  cube = torch.tensor([[0.34, 0.0, 0.02]])
-  above = torch.tensor([[0.34, 0.0, 0.02 + RETREAT_HEIGHT]])
-  assert float(_retreat(above, cube)) == pytest.approx(1.0)
-  assert float(_retreat(cube, cube)) < 0.01
-  # Horizontal offset at the right height still pays: height, not a path.
-  sideways = above + torch.tensor([[0.02, 0.0, 0.0]])
-  assert float(_retreat(sideways, cube)) == pytest.approx(1.0)
-
-  # And it moves the stage scalar: a released cube with the hand lifted clear
-  # scores above the same cube with the hand still sitting on it.
-  placed = [[_level(0), _level(1), _loose(2), _loose(3)]]
-  on_it, cfg = _env(placed, ee=_level(1))
-  clear, _ = _env(
-    placed, ee=(_level(1)[0], _level(1)[1], _level(1)[2] + RETREAT_HEIGHT)
-  )
-  on_it.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full((1, 3), 0.2)
-  clear.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full((1, 3), 0.2)
-  assert float(stage_scalar(T.tower_state(clear, cfg))) > float(
-    stage_scalar(T.tower_state(on_it, cfg))
-  )

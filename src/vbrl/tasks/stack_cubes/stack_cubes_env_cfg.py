@@ -232,12 +232,20 @@ def build_env_cfg(
   cfg.terminations["nan_detection"] = TerminationTermCfg(func=mdp.nan_detection)
   # Lift-Cube ramps this to -1.0 by iteration 1,000. Both numbers are wrong
   # here and were carried over without re-checking. Measured on the first
-  # state run, `joint_vel_hinge` is -0.052 per second at weight -0.01 while the
-  # whole task pays 0.102 -- so -1.0 would charge -5.2 against a task worth at
-  # most 0.9, and the optimal policy becomes "do not move". Lift-Cube survives
-  # it because its reward tops out at 3.0 and its episode is one grasp;
-  # Stack-Cubes tops out at 1.0 and needs four. The ramp is also far too early:
-  # at iteration 1,000 of 6,000 this policy has barely learned to grasp.
+  # state run, `joint_vel_hinge` is -0.0159 per step at weight -0.01 and
+  # `action_rate_l2` another -0.0154, so the regularizers already cost -0.031
+  # against a task that tops out at 0.9. Lift-Cube survives its own weights
+  # because its reward tops out at 3.0 and its episode is one grasp.
+  #
+  # The ceiling is set by what the policy is being paid to do. Under
+  # ManiSkill3's ladder, closing the hand on a cube is worth +0.066 a step --
+  # the largest single move in the whole approach, and the one five runs never
+  # made. At -0.03 the two penalties come to about -0.062, which is already
+  # level with it; the -0.06 rung this used to end on would put them at -0.11
+  # and make grasping cost more than it pays, so a policy that had learned to
+  # grasp by iteration 2,000 would be trained back out of it by 4,000.
+  # ManiSkill's own Stack-Cube carries no action penalty at all, so -0.03 is
+  # the most this can justify and there is no rung above it.
   cfg.curriculum = {
     "joint_vel_hinge_weight": CurriculumTermCfg(
       func=mdp.reward_curriculum,
@@ -246,7 +254,6 @@ def build_env_cfg(
         "stages": [
           {"step": 0, "weight": -0.01},
           {"step": 2000 * NUM_STEPS_PER_ENV, "weight": -0.03},
-          {"step": 4000 * NUM_STEPS_PER_ENV, "weight": -0.06},
         ],
       },
     ),

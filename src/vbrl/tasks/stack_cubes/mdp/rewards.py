@@ -25,12 +25,9 @@ from mjlab.entity import Entity
 from mjlab.managers import SceneEntityCfg
 
 from .tower import (
-  CUBE_HALF,
-  CUBE_SIZE,
   GRIPPER_OPEN_M,
   MAX_CUBES,
   TowerState,
-  gather_rows,
   stack_point,
   tower_state,
 )
@@ -39,133 +36,77 @@ if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
 
-# Five equal bands of 0.2. Each band's floor is the band below it at full
-# value, so the scalar is continuous across a stage transition and no stage can
-# outbid the one after it -- which is what keeps a large reaching term from
-# competing with actually placing the cube.
-# Where each stage starts and ends on the [0, 1] progress scale.
+# ManiSkill3's `StackCube-v1`, `mani_skill/envs/tasks/tabletop/stack_cube.py`.
+# Their ladder in full, and the only published dense reward for this exact task:
 #
-# Two of the four boundaries meet exactly; the other two are deliberate
-# **gaps**, at the two moments that are achievements rather than progress --
-# closing the hand on a cube, and getting that cube onto the tower. Each has to
-# pay something the instant it happens or the policy cannot discover the stage
-# that follows it.
+#     reward = 2 * (1 - tanh(5 * d(tcp, cubeA)))
+#     reward[is_cubeA_grasped] = 4 + (1 - tanh(5 * d(cubeA, goal)))
+#     reward[is_cubeA_on_cubeB] = 6 + (ungrasp + static) / 2
+#     reward[success] = 8
 #
-# The first version had every boundary flush, which looked tidy and was wrong:
-# reaching topped out at exactly the value grasping started at, so a policy
-# already touching a cube gained nothing by closing, and the only payoff was
-# lifting -- which it could not reach without first closing.
-#
-# ManiSkill3 puts gaps in the same two places and larger ones. Normalized by
-# their success bonus of 8: reaching spans [0, 0.25], the grasped branch starts
-# at 0.5, the on-the-tower branch starts at 0.75, and success is 1.0 -- 37% of
-# their scale is gaps. These two are 0.10 each, a fifth of the scale, which is
-# the same structure at a gentler size.
-BANDS = (
-  (0.00, 0.18),  # reach
-  (0.28, 0.42),  # grasped, lifting clear of the table
-  (0.42, 0.56),  # carrying to the hover pose
-  (0.56, 0.72),  # descending onto the tower
-  (0.82, 1.00),  # on the tower, letting go and settling
-)
-STAGES = len(BANDS)
-
-# ManiSkill3's `1 - tanh(5 d)`, with DeepMind's flat top inside
-# `_REACH_POSITION_TOLERANCE = 0.02` so the term genuinely reaches 1.0 and the
-# `GRASP_GATE` below is crossable -- the end-effector site cannot sit at a
-# cube's centre, so an ungated kernel tops out near 0.90.
-#
-# DeepMind's shaping tolerance of 0.15 m was tried here and is **wrong for this
-# workspace**. Measured over 3,072 resets, an episode starts with the target
-# cube a median 0.207 m from the end-effector (q01 0.123, q99 0.263): their
-# basket keeps the pinch close to the objects, this table does not. Through
-# their `tanh_squared` that median pays 0.011 against this kernel's 0.226 -- a
-# factor of 20, and 144 at 0.30 m -- so the band that has to get the hand to a
-# cube in the first place was flat across the entire workspace. Both visual
-# runs then diverged outright (value loss 4e9, `action_rate_l2` -48,000, the
-# arm slamming joint limits) and both state runs spent 83% of their episodes
-# ending on table contact at 45% of full length. One kernel, two failure modes,
-# same cause.
-REACH_STD = 0.2
-REACH_TOLERANCE = 0.02
-# `ConditionalAnd(reach_red, grasp, 0.9)`: the reach term has to clear 0.9
-# before the grasp half of the band unlocks.
-GRASP_GATE = 0.9
-HOVER_STD = 0.1
-PLACE_STD = 0.05
-# Enough clearance to carry a cube over one already lying on the table, and no
-# more: the hover stage takes it the rest of the way up.
-LIFT_CLEARANCE = CUBE_SIZE
-# The cube is asked to pass one cube-height above its target level before
-# descending onto it.
-HOVER_CLEARANCE = CUBE_SIZE
-HOVER_TOL = 0.06
+# Note these are *assignments*, not maxima: each branch overwrites the one above
+# it, so a grasped cube scores 4 however far it is from the goal. `goal` is
+# cubeB's top face, which is `stack_point`. `REACH_K = 5` is `1 / 0.2`, the same
+# width MJLab Lift-Cube uses for its own reaching kernel.
+STACK_SCALE = 8.0
+REACH_K = 5.0
+PLACE_K = 5.0
+STATIC_K = 10.0
 # Reaching the tower is worth 0.9; the last tenth pays for withdrawing to the
 # observation pose, so a complete tower is still worth more than an incomplete
 # one however the arm is parked.
 TASK_SHARE = 0.9
 HOME_STD = 0.5
-# DeepMind's `_get_reward_above_red`: `offset=(0, 0, _HOVER_OFFSET)` with
-# `_HOVER_OFFSET = 0.1`, `position_tolerance=(1, 1, 0.03)` -- anywhere
-# horizontally -- and `shaping_tolerance=0.05`.
-RETREAT_HEIGHT = 0.10
-RETREAT_MARGIN = 0.05
-RETREAT_TOLERANCE = (1.0, 1.0, 0.03)
 
 
 def stage_scalar(state: TowerState) -> torch.Tensor:
-  """Normalized progress of the current target cube, in [0, 1].
+  """How far the best-placed loose cube is through its course, in [0, 1].
 
-  ``reach -> lift -> hover -> place -> release and settle``, taken as the
-  largest band whose gate holds. Taking the maximum rather than a chain of
-  conditions is what stops opening the gripper -- the very thing the last stage
-  asks for -- from dropping the policy back into the reaching band.
+  ManiSkill3's `StackCube-v1` dense reward, branch for branch, divided by their
+  success value of 8 so one course spans [0, 1] and four of them compose. The
+  mapping onto this task is exact: their ``is_cubeA_grasped`` is ``held``,
+  their ``is_cubeA_on_cubeB`` is ``at_level``, their ``goal_xyz`` -- cubeB's top
+  face -- is ``stack_point``, and their ``success`` is ``seated``.
+
+  Two deliberate departures, both forced by this task rather than chosen:
+
+  * **The maximum over loose cubes.** They have one cube to place; this has up
+    to four, and the reward has to say which. A per-step nearest-cube ``argmin``
+    let the target flip between two cubes as the hand passed between them,
+    stepping the reward with it. MJLab's own ``MultiCubeLiftingCommand`` latches
+    its choice at reset for the same reason; a maximum of continuous functions
+    is continuous and needs no latch.
+  * **``ungrasp`` is measured against ``GRIPPER_OPEN_M``**, the width that clears
+    a cube, not against the carriage's mechanical limit. Theirs divides by the
+    Panda's joint limit and carries a ``# NOTE: hard-coded with panda`` beside
+    it; this gripper's release happens at 22 mm of a 44 mm travel, so the limit
+    would score a hand that has fully let go at only one half.
+
+  Their ``reward[success] = 8`` has no branch here because it cannot be reached:
+  a seated cube is part of the tower in the same ``tower_state`` that seats it,
+  so it leaves the pool this maximum runs over. The course is paid for by
+  ``height`` rising instead, which is worth ``0.9 / 4`` for good -- more than
+  the 8 would have been, and it does not decay.
   """
-  cube = gather_rows(state.position, state.target)
-  held = gather_rows(state.held, state.target)
-  reach = gather_rows(state.reach, state.target)
-  at_level = gather_rows(state.at_level, state.target)
-  level = gather_rows(state.level, state.target)
+  goal = stack_point(state.height.clamp(max=MAX_CUBES - 1))
+  place_error = torch.linalg.vector_norm(state.position - goal.unsqueeze(1), dim=-1)
 
-  next_level = state.height.clamp(max=MAX_CUBES - 1)
-  place = stack_point(next_level)
-  hover = place.clone()
-  hover[:, 2] += HOVER_CLEARANCE
+  reward = 2.0 * (1.0 - torch.tanh(REACH_K * state.reach))
 
-  lift = ((cube[:, 2] - CUBE_HALF) / LIFT_CLEARANCE).clamp(0.0, 1.0)
-  hover_error = torch.linalg.vector_norm(cube - hover, dim=-1)
-  place_error = torch.linalg.vector_norm(cube - place, dim=-1)
-  placed = at_level & (level == next_level)
-  # ManiSkill3's `(ungrasp_reward + static_reward) / 2`, continuous in both like
-  # theirs, plus DeepMind's third factor. The first version made each half a
-  # step function -- released or not, still or not -- which left the last stage,
-  # the one that has to teach letting go gently, with no gradient at all.
-  opening = torch.where(held, state.opening, torch.ones_like(state.opening))
-  speed = gather_rows(state.speed, state.target)
-  spin = gather_rows(state.spin, state.target)
-  static = 1.0 - torch.tanh(10.0 * speed + spin)
-  settled = (opening + static + _retreat(state.ee, cube)) / 3.0
-  zero = torch.zeros_like(reach)
+  place = 1.0 - torch.tanh(PLACE_K * place_error)
+  reward = torch.where(state.held, 4.0 + place, reward)
 
-  reaching = _reaching(reach)
-  hovering = _kernel(hover_error, HOVER_STD)
-  placing = _kernel(place_error, PLACE_STD)
-  def band(index: int, fraction: torch.Tensor, gate: torch.Tensor | None = None):
-    low, high = BANDS[index]
-    value = low + (high - low) * fraction
-    return value if gate is None else torch.where(gate, value, zero)
-
-  bands = torch.stack(
-    (
-      band(0, _reach_and_grasp(reaching, state.closure, held)),
-      band(1, lift, held),
-      band(2, hovering, held & (lift >= 1.0)),
-      band(3, placing, hover_error < HOVER_TOL),
-      band(4, settled, placed),
-    ),
-    dim=0,
+  ungrasp = torch.where(
+    state.held, state.opening.unsqueeze(1), torch.ones_like(state.reach)
   )
-  return bands.amax(dim=0)
+  static = 1.0 - torch.tanh(STATIC_K * state.speed + state.spin)
+  on_level = state.at_level & (
+    state.level == state.height.clamp(max=MAX_CUBES - 1).unsqueeze(1)
+  )
+  reward = torch.where(on_level, 6.0 + (ungrasp + static) / 2.0, reward)
+
+  stage = reward / STACK_SCALE
+  return stage.masked_fill(state.stacked, -1.0).amax(dim=1).clamp(min=0.0)
 
 
 def home_pose(
@@ -180,7 +121,7 @@ def home_pose(
   error = torch.linalg.vector_norm(arm - arm.new_tensor(joint_pos), dim=-1)
   carriage = robot.data.joint_pos[:, gripper_cfg.joint_ids].squeeze(1)
   opened = (carriage / GRIPPER_OPEN_M).clamp(0.0, 1.0)
-  return _kernel(error, HOME_STD) * opened
+  return torch.exp(-torch.square(error) / HOME_STD**2) * opened
 
 
 def stack_progress(
@@ -225,83 +166,11 @@ def _tanh_squared(error: torch.Tensor, margin: float) -> torch.Tensor:
   return 1.0 - torch.tanh(weight * error) ** 2
 
 
-def _reaching(reach: torch.Tensor) -> torch.Tensor:
-  """Flat 1.0 inside the tolerance, ManiSkill's ``1 - tanh(5 d)`` outside.
-
-  The two meet where they should: ``1 - tanh(d / 0.2)`` is 0.90 at exactly
-  20.1 mm, so the flat top begins at the tolerance rather than jumping to it.
-  """
-  return torch.where(
-    reach <= REACH_TOLERANCE, torch.ones_like(reach), _kernel(reach, REACH_STD)
-  )
-
-
-def _reach_and_grasp(
-  reaching: torch.Tensor, closure: torch.Tensor, held: torch.Tensor
-) -> torch.Tensor:
-  """DeepMind's ``ConditionalAnd(reach_red, grasp, 0.9)``.
-
-  Their first stage fuses reaching with grasping and caps reaching alone at
-  **half** the band; the other half unlocks only once the hand is essentially
-  on the cube, and is then ``Max((close_fingers, 0.5), (grasp, 1.0))`` -- a
-  continuous half for squeezing and a full one for a grasp that holds.
-
-  This band used to be reaching alone at full value, and that is the measured
-  reason three state runs stalled. Hovering over a cube with an open hand
-  scored 0.162 of the scalar against 0.280 for a grasp, so 58% of everything a
-  course could earn was available without touching anything, immediately and
-  with no risk -- closing on an off-centre cube pushes it away and *loses*
-  reach. All three runs converged on hovering: ``reward_stage`` flat at 0.94 of
-  5 for 1,000+ iterations, policy entropy down to 0.013, peak fingertip force
-  climbing to 90 N against cubes that never moved. Under DeepMind's structure
-  the same hover pays 0.09, squeezing pays 0.135, a grasp pays 0.18 and lifting
-  0.28 -- a monotone path where there was a cliff.
-  """
-  grasp = torch.maximum(0.5 * closure, held.float())
-  return torch.where(
-    reaching > GRASP_GATE, (0.5 + 0.5 * grasp) * reaching, 0.5 * reaching
-  )
-
-
-def _retreat(ee: torch.Tensor, cube: torch.Tensor) -> torch.Tensor:
-  """DeepMind's ``_get_reward_above_red``: get the hand off the cube you placed.
-
-  Their last stage is ``Product(stack, above_red)``, so a course only pays in
-  full once the pinch point is ``RETREAT_HEIGHT`` above it. Horizontal position
-  is free -- their ``position_tolerance`` is ``(1, 1, 0.03)``, metres -- so this
-  asks for height, not a particular withdrawal path.
-
-  Without it the only reward for getting out of the way came from
-  ``home_pose``, which fires on a *finished* tower, so courses 1 to 3 had none
-  at all: the hand could sit on the cube it had just released while the next
-  approach started from inside the tower.
-  """
-  delta = cube - ee
-  delta = torch.stack(
-    (delta[:, 0], delta[:, 1], delta[:, 2] + RETREAT_HEIGHT), dim=-1
-  )
-  tolerance = delta.new_tensor(RETREAT_TOLERANCE)
-  inside = torch.linalg.vector_norm(delta / tolerance, dim=-1) <= 1.0
-  error = torch.linalg.vector_norm(delta, dim=-1)
-  return torch.where(
-    inside, torch.ones_like(error), _tanh_squared(error, RETREAT_MARGIN)
-  )
-
-
-def _kernel(error: torch.Tensor, std: float) -> torch.Tensor:
-  return 1.0 - torch.tanh(error / std)
-
-
 __all__ = [
-  "BANDS",
-  "GRASP_GATE",
-  "REACH_STD",
-  "REACH_TOLERANCE",
-  "RETREAT_HEIGHT",
-  "HOVER_CLEARANCE",
-  "HOVER_TOL",
-  "LIFT_CLEARANCE",
-  "STAGES",
+  "PLACE_K",
+  "REACH_K",
+  "STACK_SCALE",
+  "STATIC_K",
   "TASK_SHARE",
   "home_pose",
   "stack_progress",

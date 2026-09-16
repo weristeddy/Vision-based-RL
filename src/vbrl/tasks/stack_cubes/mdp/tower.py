@@ -148,7 +148,6 @@ class TowerState(NamedTuple):
   speed: torch.Tensor  # (B, N) linear speed, m/s
   spin: torch.Tensor  # (B, N) angular speed, rad/s
   opening: torch.Tensor  # (B,) gripper opening, 0 shut to 1 wide
-  closure: torch.Tensor  # (B,) how far the hand has squeezed, 0 wide to 1 shut
   at_level: torch.Tensor  # (B, N) seated on its level, grasp and motion aside
   level: torch.Tensor  # (B, N) which level its height puts it on
   stacked: torch.Tensor  # (B, N) part of the contiguous tower
@@ -212,10 +211,9 @@ def tower_state(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> TowerState
   origins = env.scene.env_origins
   cubes = [env.scene[name] for name in CUBE_NAMES]
 
-  position = (
-    torch.stack([cube.data.root_link_pos_w for cube in cubes], dim=1)
-    - origins.unsqueeze(1)
-  )
+  position = torch.stack(
+    [cube.data.root_link_pos_w for cube in cubes], dim=1
+  ) - origins.unsqueeze(1)
   quat = torch.stack([cube.data.root_link_quat_w for cube in cubes], dim=1)
   speed = torch.stack(
     [cube.data.root_link_lin_vel_w.norm(dim=-1) for cube in cubes], dim=1
@@ -284,16 +282,6 @@ def tower_state(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> TowerState
     speed=speed,
     spin=spin,
     opening=(carriage / GRIPPER_OPEN_M).clamp(0.0, 1.0),
-    # 0 at the width the hand rests at, 1 once it has squeezed down to a cube.
-    # Measured against the carriage's mechanical limit (0.044) instead, a hand
-    # sitting at its own default target already scored 0.863 -- 86% of the
-    # grasp credit for doing nothing, and the same attractor the band split
-    # exists to remove. The default target *is* `GRIPPER_OPEN_M`, and the whole
-    # motion this has to teach is the 3.5 mm from there to a cube's width,
-    # which is an action of -0.35 at the gripper's 0.01 scale.
-    closure=(
-      (GRIPPER_OPEN_M - carriage) / (GRIPPER_OPEN_M - GRIPPER_GRIP_M)
-    ).clamp(0.0, 1.0),
     at_level=at_level,
     level=level,
     stacked=stacked,
@@ -362,9 +350,7 @@ def blockers(
   if asset_cfg is not None:
     ee = gripper_position(env, ids, asset_cfg)
     blocked[:, 1, :2] = ee[:, :2]
-    blocked[:, 1, 2] = torch.where(
-      ee[:, 2] < GRIPPER_KEEPOUT_Z, GRIPPER_KEEPOUT, 0.0
-    )
+    blocked[:, 1, 2] = torch.where(ee[:, 2] < GRIPPER_KEEPOUT_Z, GRIPPER_KEEPOUT, 0.0)
   return blocked
 
 
@@ -384,9 +370,7 @@ def gripper_blocks_the_tower(
 ) -> torch.Tensor:
   """Whether the hand is standing where the tower would be rebuilt. (B,)."""
   ee = gripper_position(env, ids, asset_cfg)
-  reach = torch.linalg.vector_norm(
-    ee[:, :2] - ee.new_tensor(STACK_XY), dim=-1
-  )
+  reach = torch.linalg.vector_norm(ee[:, :2] - ee.new_tensor(STACK_XY), dim=-1)
   return (reach < GRIPPER_KEEPOUT) & (ee[:, 2] < TOWER_KEEPOUT_Z)
 
 

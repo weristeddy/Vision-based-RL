@@ -118,9 +118,7 @@ def reset_stack_scenario(
   tower[..., 2] = CUBE_HALF + rank * CUBE_SIZE
 
   loose = torch.zeros(count, MAX_CUBES, 3, device=device)
-  loose[..., :2] = sample_loose_xy(
-    count, MAX_CUBES, blockers(env, ids, asset_cfg)
-  )
+  loose[..., :2] = sample_loose_xy(count, MAX_CUBES, blockers(env, ids, asset_cfg))
   loose[..., 2] = CUBE_HALF
 
   is_tower = (rank < stacked.unsqueeze(1)).unsqueeze(-1)
@@ -261,9 +259,7 @@ def randomize_cube_friction(
 ) -> None:
   """Give every cube and the tabletop one shared sliding coefficient."""
   ids = resolve_env_ids(env, env_ids).to(env.device)
-  sampled = sample_gaussian(
-    mean, std, (len(ids), 1), device=env.device
-  ).clamp_min_(0.0)
+  sampled = sample_gaussian(mean, std, (len(ids), 1), device=env.device).clamp_min_(0.0)
   friction = env.sim.model.geom_friction
 
   table = env.scene["table"]
