@@ -5610,6 +5610,23 @@
       "backbone.convnet.layer4.bias:(2048,)",
       "backbone.convnet.layer4.weight:(2048, 1024, 1, 1)"
     ],
+    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic": [
+      "adapter.pool.k_norm.bias:(64,)",
+      "adapter.pool.k_norm.weight:(64,)",
+      "adapter.pool.kv.bias:(768,)",
+      "adapter.pool.kv.weight:(768, 384)",
+      "adapter.pool.latent:(1, 1, 384)",
+      "adapter.pool.norm.bias:(384,)",
+      "adapter.pool.norm.weight:(384,)",
+      "adapter.pool.q.bias:(384,)",
+      "adapter.pool.q.weight:(384, 384)",
+      "adapter.pool.q_norm.bias:(64,)",
+      "adapter.pool.q_norm.weight:(64,)",
+      "adapter.proj.bias:(256,)",
+      "adapter.proj.weight:(256, 384)",
+      "backbone.embeddings.bias:(384,)",
+      "backbone.embeddings.weight:(384, 3, 14, 14)"
+    ],
     "Mjlab-StackCubes-Ext-NatureCnn-SpatialSoftmax-TrossenRealistic": [
       "adapter.output_norm.bias:(256,)",
       "adapter.output_norm.weight:(256,)",

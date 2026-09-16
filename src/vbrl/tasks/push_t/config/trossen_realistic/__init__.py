@@ -197,6 +197,27 @@ _PIXEL_GOAL_FIXED_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
 )
 _VISUAL_SLOW_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW)
 _VISUAL_SLOW_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW, play=True)
+# `VisualSlowStep` is `VisualSlow` with the per-step delta cap cut to 0.03, and
+# nothing else. `VisualSlow`'s "slow" is its goal-yaw schedule, not its speed,
+# which is why this needs a token of its own.
+#
+# It exists so the raw policy output is deployable as it stands. The cap is both
+# the action scale and the action clip, so it travels in the ONNX metadata and
+# deployment needs no clamp, no smoothing and no `response_gain` -- the arm moves
+# at the speed it trained at. Measured on the 0.05 generation's hardware trace,
+# the median commanded delta was 0.0359 rad, so a 0.03 cap binds 55% of
+# channel-steps against 40% at 0.05 and leaves 70% of the per-step motion. The
+# reachable workspace per episode shrinks with it, so raise `episode_length_s`
+# if the arm runs out of table before it runs out of steps.
+#
+# This is also the first goal-conditioned run to carry the corrected physics:
+# the 50.7 g mass, 0.55 table friction, stiffened contacts and the gripper shell
+# collision all landed after `VisualSlow` (yhhr77ar) had finished.
+_VISUAL_SLOW_STEP = {**_VISUAL_SLOW, "action_delta": 0.03}
+_VISUAL_SLOW_STEP_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_SLOW_STEP)
+_VISUAL_SLOW_STEP_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(
+  **_VISUAL_SLOW_STEP, play=True
+)
 _VISUAL_GROW = {**_VISUAL_GOAL_FREE, "separation_curriculum": True}
 _VISUAL_GROW_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GROW)
 _VISUAL_GROW_PLAY_ENV = trossen_realistic_push_t_rgb_env_cfg(**_VISUAL_GROW, play=True)
@@ -419,6 +440,26 @@ def _visual_slow(task_id: str, architecture: str) -> None:
       camera="external_cam",
       success_tag="success_90",
       extra_tags=("goal_yaw_curriculum", "visual_goal"),
+    ),
+  )
+
+
+def _visual_slow_step(task_id: str, architecture: str) -> None:
+  """Register one drawn-goal policy at the 0.03 per-step delta cap.
+
+  Differs from :func:`_visual_slow` by that cap alone.
+  """
+  register_mjlab_task(
+    task_id,
+    _VISUAL_SLOW_STEP_ENV,
+    _VISUAL_SLOW_STEP_PLAY_ENV,
+    trossen_realistic_push_t_rgb_ppo_runner_cfg(
+      task_id,
+      ARCHITECTURES[architecture],
+      scene="real_texture",
+      camera="external_cam",
+      success_tag="success_90",
+      extra_tags=("goal_yaw_curriculum", "visual_goal", "slow_step"),
     ),
   )
 
@@ -1226,6 +1267,10 @@ _visual_grow(
 
 
 # --- VisualSlow: VisualGoal on SlowGoal's goal-yaw schedule ------------------
+_visual_slow_step(
+  "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "DinoV2ViTS14-Afa6",
+)
 _pixel_goal(
   "Mjlab-PushT-PixelGoal-DinoV2ViTS14-Afa6-TrossenRealistic", "DinoV2ViTS14-Afa6"
 )
