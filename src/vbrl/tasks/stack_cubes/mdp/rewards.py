@@ -133,11 +133,16 @@ def stack_progress(
   state = tower_state(env, asset_cfg)
   progress = (state.height + stage_scalar(state)) / MAX_CUBES
   home = home_pose(env, arm_cfg, gripper_cfg, home_joint_pos)
-  return torch.where(
+  reward = torch.where(
     state.complete,
     TASK_SHARE + (1.0 - TASK_SHARE) * home,
     TASK_SHARE * progress,
   )
+  # A world whose physics has diverged is terminated in this same step, but the
+  # reward is computed before the reset and RSL-RL checks rewards as well as
+  # observations -- one NaN here kills the rank. Score it zero and let the
+  # termination do its job.
+  return torch.nan_to_num(reward, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _kernel(error: torch.Tensor, std: float) -> torch.Tensor:

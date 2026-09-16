@@ -30,6 +30,13 @@ from vbrl.tasks.utils import EE_GROUND_CONTACT_SENSOR, make_tabletop_env_cfg
 from . import mdp
 
 
+# The rollout length the curriculum's step counts assume. It lives in `rl_cfg`,
+# which the env config must not import, so it is restated here and pinned by a
+# test -- a curriculum measured in environment steps mistimes its ramp if the
+# two ever disagree.
+NUM_STEPS_PER_ENV = 24
+
+
 # 40 s at 50 Hz: 2,000 policy steps. Lift-Cube's 20 s covers one pick and
 # place; this has up to four of them, plus the withdrawal, plus whatever a
 # mid-episode scenario change or a disturbance asks for afterwards.
@@ -172,6 +179,11 @@ def build_env_cfg(
   actor_terms = {**proprioception, **privileged, "actions": base_terms["actions"]}
   cfg.observations["actor"].terms = dict(actor_terms)
   cfg.observations["critic"].terms = dict(actor_terms)
+  # A diverged world is reset in the same step it is detected, but observations
+  # for the *other* envs are computed from the same buffers; sanitizing keeps
+  # one bad world from taking down the rank through RSL-RL's `check_nan`.
+  cfg.observations["actor"].nan_policy = "sanitize"
+  cfg.observations["critic"].nan_policy = "sanitize"
 
   cfg.rewards = {
     # The whole task, normalized to roughly [0, 1]; see mdp.rewards.
@@ -210,6 +222,22 @@ def build_env_cfg(
     func=mdp.illegal_contact,
     params={"sensor_name": EE_GROUND_CONTACT_SENSOR, "force_threshold": 10.0},
   )
+  # Physics divergence, caught one step before it becomes NaN, and NaN itself
+  # as the backstop. Without these a single blown-up world out of 4,096 ends
+  # the whole job: the rank raises, and the other three hang in an all-reduce
+  # until NCCL's ten-minute watchdog kills them.
+  cfg.terminations["diverged"] = TerminationTermCfg(
+    func=mdp.diverged, params={"asset_cfg": task_cfg}
+  )
+  cfg.terminations["nan_detection"] = TerminationTermCfg(func=mdp.nan_detection)
+  # Lift-Cube ramps this to -1.0 by iteration 1,000. Both numbers are wrong
+  # here and were carried over without re-checking. Measured on the first
+  # state run, `joint_vel_hinge` is -0.052 per second at weight -0.01 while the
+  # whole task pays 0.102 -- so -1.0 would charge -5.2 against a task worth at
+  # most 0.9, and the optimal policy becomes "do not move". Lift-Cube survives
+  # it because its reward tops out at 3.0 and its episode is one grasp;
+  # Stack-Cubes tops out at 1.0 and needs four. The ramp is also far too early:
+  # at iteration 1,000 of 6,000 this policy has barely learned to grasp.
   cfg.curriculum = {
     "joint_vel_hinge_weight": CurriculumTermCfg(
       func=mdp.reward_curriculum,
@@ -217,8 +245,8 @@ def build_env_cfg(
         "reward_name": "joint_vel_hinge",
         "stages": [
           {"step": 0, "weight": -0.01},
-          {"step": 500 * 24, "weight": -0.1},
-          {"step": 1000 * 24, "weight": -1.0},
+          {"step": 2000 * NUM_STEPS_PER_ENV, "weight": -0.03},
+          {"step": 4000 * NUM_STEPS_PER_ENV, "weight": -0.06},
         ],
       },
     ),

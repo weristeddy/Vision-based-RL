@@ -631,12 +631,19 @@ def test_the_shared_cube_colour_is_always_saturated_and_bright() -> None:
 
 
 def test_a_finished_tower_is_not_a_termination() -> None:
-  """Only timeout, an unrecoverable cube, and a table collision end an episode."""
+  """Nothing about succeeding ends an episode.
+
+  What does: the clock, a cube the arm can no longer reach, a table collision,
+  and a world whose physics has diverged. A complete tower is not on that list
+  and neither is one that falls over.
+  """
   for task_id in STACK_CUBES_IDS:
     assert set(_cfg(task_id).terminations) == {
       "time_out",
       "cube_out_of_reach",
       "ee_table_contact",
+      "diverged",
+      "nan_detection",
     }
 
 
@@ -1059,3 +1066,132 @@ def test_the_command_does_not_duplicate_the_metric_terms() -> None:
     "peak_grasp_force",
     "reward_stage",
   }
+
+
+# --- surviving a diverged world ---------------------------------------------
+
+
+def test_a_diverged_world_is_terminated_before_it_becomes_nan() -> None:
+  """The crash that killed the first three runs, and its guard.
+
+  MuJoCo Warp answers a fast gripper arriving inside a cube with an impulse
+  large enough to take a whole world to NaN in one step. RSL-RL then raises on
+  the observation, that rank dies, and the other three hang in an all-reduce
+  until NCCL's watchdog kills the job ten minutes later. Catching the state
+  while it is merely implausible is what keeps the run alive.
+  """
+  from vbrl.tasks.stack_cubes.mdp.terminations import (
+    MAX_CUBE_HEIGHT,
+    MAX_CUBE_SPEED,
+    diverged,
+  )
+
+  normal, asset_cfg = _env([[_level(0), _level(1), _loose(2), _loose(3)]])
+  assert diverged(normal, asset_cfg).tolist() == [False]
+
+  # A cube launched above anything the tower can reach.
+  high, _ = _env([[_level(0), [0.34, 0.0, MAX_CUBE_HEIGHT + 0.1], _loose(2), _loose(3)]])
+  assert diverged(high, asset_cfg).tolist() == [True]
+
+  # A cube moving faster than physics here can produce.
+  fast, _ = _env(
+    [[_level(0), _loose(1), _loose(2), _loose(3)]], moving=[False, True, False, False]
+  )
+  fast.scene[T.CUBE_NAMES[1]].data.root_link_lin_vel_w = torch.full(
+    (1, 3), MAX_CUBE_SPEED
+  )
+  assert diverged(fast, asset_cfg).tolist() == [True]
+
+  # And the non-finite state itself, which is the backstop.
+  gone, _ = _env([[_level(0), _loose(1), _loose(2), _loose(3)]])
+  gone.scene[T.CUBE_NAMES[0]].data.root_link_pos_w = torch.full((1, 3), float("nan"))
+  assert diverged(gone, asset_cfg).tolist() == [True]
+
+
+def test_the_reward_is_finite_even_on_a_diverged_world() -> None:
+  """RSL-RL checks rewards as well as observations, and the reward is computed
+  before the termination resets the world."""
+  env, asset_cfg = _env([[_level(0), _loose(1), _loose(2), _loose(3)]])
+  env.scene[T.CUBE_NAMES[1]].data.root_link_pos_w = torch.full((1, 3), float("nan"))
+  assert torch.isfinite(_reward(env, asset_cfg)).all()
+
+
+def test_every_task_sanitizes_its_observations_and_guards_nan() -> None:
+  for task_id in STACK_CUBES_IDS:
+    cfg = _cfg(task_id)
+    assert cfg.observations["actor"].nan_policy == "sanitize", task_id
+    assert cfg.observations["critic"].nan_policy == "sanitize", task_id
+    assert {"diverged", "nan_detection"} <= set(cfg.terminations), task_id
+
+
+# --- the learning rate ------------------------------------------------------
+
+
+def test_the_learning_rate_is_fixed_not_kl_adaptive() -> None:
+  """Measured: the KL-adaptive schedule collapsed to RSL-RL's 1e-5 floor.
+
+  Eight epochs over 32 minibatches is 256 gradient steps per iteration, which
+  keeps approx_kl above desired_kl on ~90% of iterations, so the controller
+  divides the rate every time and never recovers it. The two visual runs sat at
+  the floor for 42% and 52% of their iterations. ManiSkill3 does not adapt on
+  KL for this task.
+  """
+  from mjlab.tasks.registry import load_rl_cfg
+
+  for task_id in STACK_CUBES_IDS:
+    algorithm = load_rl_cfg(task_id).algorithm
+    assert algorithm.schedule == "fixed", task_id
+    assert algorithm.learning_rate == pytest.approx(3.0e-4), task_id
+
+
+def test_the_update_matches_maniskills_stack_cube_recipe() -> None:
+  """Everything the published Stack-Cube-v1 baseline fixes, we fix the same way.
+
+  Their command is `--num_envs=4096 --num-steps=16 --update_epochs=8
+  --num_minibatches=32`, with ppo_fast.py's defaults for the rest. The four
+  departures are deliberate and all follow from their episode being 50 steps
+  against this one's 2,000 -- see the provenance block in `rl_cfg.py`.
+  """
+  from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
+
+  maniskill = {
+    "learning_rate": 3.0e-4,
+    "num_learning_epochs": 8,
+    "num_mini_batches": 32,
+    "clip_param": 0.2,
+    "max_grad_norm": 0.5,
+    "value_loss_coef": 0.5,
+    "desired_kl": 0.1,
+    "use_clipped_value_loss": False,
+    "normalize_advantage_per_mini_batch": True,
+  }
+  departures = {"gamma": 0.99, "lam": 0.95, "entropy_coef": 0.005}
+
+  for task_id in STACK_CUBES_IDS:
+    algorithm = load_rl_cfg(task_id).algorithm
+    for name, value in {**maniskill, **departures}.items():
+      assert getattr(algorithm, name) == pytest.approx(value), f"{task_id}.{name}"
+    # Their 4,096 environments, as four ranks of the profile's 1,024.
+    assert load_env_cfg(task_id).scene.num_envs == 1024, task_id
+
+
+def test_the_velocity_curriculum_cannot_outgrow_the_task_reward() -> None:
+  """Lift-Cube ramps this to -1.0; that reward tops out at 3.0 and this one at
+  1.0, so the same weight would make standing still optimal."""
+  from vbrl.tasks.stack_cubes.stack_cubes_env_cfg import NUM_STEPS_PER_ENV
+
+  from mjlab.tasks.registry import load_rl_cfg
+
+  cfg = _cfg(STACK_CUBES_IDS[0])
+  stages = cfg.curriculum["joint_vel_hinge_weight"].params["stages"]
+  weights = [stage["weight"] for stage in stages]
+  assert weights[0] == pytest.approx(-0.01)
+  # Monotonically tighter, and never past a tenth of the task's own scale.
+  assert all(a > b for a, b in zip(weights[:-1], weights[1:], strict=True))
+  assert min(weights) >= -0.1
+
+  # The ramp is counted in environment steps, so it has to match the rollout.
+  assert load_rl_cfg(STACK_CUBES_IDS[0]).num_steps_per_env == NUM_STEPS_PER_ENV
+  iterations = [stage["step"] / NUM_STEPS_PER_ENV for stage in stages]
+  # Nothing tightens before the policy has had a real chance to learn to grasp.
+  assert min(i for i in iterations if i > 0) >= 1000
