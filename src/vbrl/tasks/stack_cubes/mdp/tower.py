@@ -112,11 +112,23 @@ UPRIGHT_MIN = 0.95
 STATIC_SPEED = 0.03
 STATIC_SPIN = 1.0
 
-# Measured off the gripper MJCF: the pad gap is 0.013 + 2*carriage, so 0.018
-# closes the fingers to 49 mm -- the 40 mm cube plus 9 mm. Anything wider is an
-# open hand. ``GRIPPER_OPEN_M`` is the carriage position the robot's own home
-# pose uses.
-GRIPPER_CLOSED_M = 0.018
+# The carriage position that counts as a closed hand, derived rather than
+# guessed -- getting this wrong is silent and total.
+#
+# The pad *faces* are 0.003 + 2*carriage apart (centre-to-centre is
+# 0.013 + 2*carriage and each pad is 5 mm thick, which is the distinction the
+# first attempt got wrong). A hand squeezing a 40 mm cube therefore cannot
+# close past (0.040 - 0.003)/2 = 0.0185: the cube is in the way. Measured, it
+# settles at 0.01857 against a commanded 0.0001.
+#
+# The first threshold was 0.018 -- five millimetres too tight, and by bad luck
+# just *below* that stall. `held` was then false whenever the gripper was
+# actually holding something, so the policy reached, closed, squeezed at up to
+# 113 N and never left the reaching band for 2,300 iterations. The threshold
+# has to sit *above* the stall and below an open hand.
+GRIPPER_PAD_FACE_OFFSET = 0.003
+GRIPPER_GRIP_M = (CUBE_SIZE - GRIPPER_PAD_FACE_OFFSET) / 2
+GRIPPER_CLOSED_M = GRIPPER_GRIP_M + 0.002
 GRIPPER_OPEN_M = 0.022
 # One contact sensor per cube, named after it. The primary set is the six
 # fingertip pad geoms, so the sensor reports which pads are touching that cube
@@ -370,6 +382,8 @@ __all__ = [
   "CUBE_SIZE",
   "CONTACT_SENSORS",
   "GRIPPER_CLOSED_M",
+  "GRIPPER_GRIP_M",
+  "GRIPPER_PAD_FACE_OFFSET",
   "GRIPPER_OPEN_M",
   "MAX_CUBES",
   "MIN_CUBE_SEPARATION",

@@ -1195,3 +1195,61 @@ def test_the_velocity_curriculum_cannot_outgrow_the_task_reward() -> None:
   iterations = [stage["step"] / NUM_STEPS_PER_ENV for stage in stages]
   # Nothing tightens before the policy has had a real chance to learn to grasp.
   assert min(i for i in iterations if i > 0) >= 1000
+
+
+# --- the grasp threshold ----------------------------------------------------
+
+
+def test_a_gripper_stalled_on_a_cube_counts_as_closed() -> None:
+  """The bug that cost 2,300 iterations of the first state run.
+
+  A hand squeezing a 40 mm cube cannot close past the cube's own width -- the
+  carriage stalls at (40 - 3)/2 = 18.5 mm against a commanded 0.1 mm, measured
+  at 18.57 mm in the simulator. The first threshold was 18.0 mm, derived from
+  centre-to-centre pad distance instead of face-to-face, which put it just
+  *below* that stall: `held` was false exactly when the gripper was holding
+  something, so the policy reached, closed, squeezed at up to 113 N and never
+  left the reaching band. The threshold must bracket the stall.
+  """
+  assert T.GRIPPER_GRIP_M < T.GRIPPER_CLOSED_M < T.GRIPPER_OPEN_M
+  # Derived from the cube, so a different cube moves it.
+  assert T.GRIPPER_GRIP_M == pytest.approx(
+    (T.CUBE_SIZE - T.GRIPPER_PAD_FACE_OFFSET) / 2
+  )
+  # And it matches what the simulator actually does.
+  assert T.GRIPPER_GRIP_M == pytest.approx(0.01857, abs=2e-4)
+
+  # A hand stalled on a cube reads as closed; an open hand does not.
+  rows = [[_level(0), _loose(1), _loose(2), _loose(3)]]
+  env, asset_cfg = _env(rows, ee=_loose(1), held=1)
+  env.scene["robot"].data.joint_pos = torch.tensor(
+    [[0.0] * 6 + [T.GRIPPER_GRIP_M]]
+  )
+  assert bool(T.tower_state(env, asset_cfg).held[0, 1]) is True
+
+  env.scene["robot"].data.joint_pos = torch.tensor([[0.0] * 6 + [T.GRIPPER_OPEN_M]])
+  assert bool(T.tower_state(env, asset_cfg).held[0, 1]) is False
+
+
+def test_closing_the_hand_on_a_cube_pays_immediately() -> None:
+  """Reaching must not be worth as much as grasping.
+
+  With the bands flush, reaching topped out at exactly the value grasping
+  started at, so a policy already touching a cube gained nothing by closing --
+  and could not discover lifting without first closing. ManiSkill3 jumps a
+  quarter of its scale at the same transition.
+  """
+  from vbrl.tasks.stack_cubes.mdp.rewards import BANDS, stage_scalar
+
+  # One gap, at the grasp; every other boundary is flush and none overlap.
+  gaps = [BANDS[i + 1][0] - BANDS[i][1] for i in range(len(BANDS) - 1)]
+  assert gaps[0] > 0.05, "grasping must pay a step"
+  assert gaps[1:] == [0.0, 0.0, 0.0]
+  assert all(lo < hi for lo, hi in BANDS) and BANDS[-1][1] == 1.0
+
+  # A cube on the table, gripper right on it: touching versus holding.
+  cube = _loose(1)
+  rows = [[_level(0), cube, _loose(2), _loose(3)]]
+  touching = T.tower_state(*_env(rows, ee=cube))
+  holding = T.tower_state(*_env(rows, ee=cube, held=1))
+  assert float(stage_scalar(holding)) > float(stage_scalar(touching)) + 0.05

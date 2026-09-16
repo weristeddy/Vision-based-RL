@@ -35,8 +35,28 @@ if TYPE_CHECKING:
 # value, so the scalar is continuous across a stage transition and no stage can
 # outbid the one after it -- which is what keeps a large reaching term from
 # competing with actually placing the cube.
-STAGES = 5
-BAND = 1.0 / STAGES
+# Where each stage starts and ends on the [0, 1] progress scale.
+#
+# Four of the five boundaries meet exactly, so the scalar is continuous there
+# and no stage can outbid the one after it. The exception is deliberate: there
+# is a 0.10 **gap** between reaching and grasping, because closing the hand has
+# to pay something at the moment it happens.
+#
+# The first version had them all flush, which looked tidy and was wrong.
+# Reaching tops out at 0.20 and grasping started at 0.20, so a policy that had
+# driven the gripper onto a cube gained exactly nothing by closing it -- the
+# only payoff was lifting, which it could not discover without first closing.
+# ManiSkill3 does not do this either: their reaching term maxes at 2 and the
+# grasped branch starts at 4, a jump of a quarter of the whole scale. This is
+# the same idea at a tenth, which is worth 0.0225 of task reward per step.
+BANDS = (
+  (0.00, 0.20),  # reach
+  (0.30, 0.45),  # grasped, lifting clear of the table
+  (0.45, 0.60),  # carrying to the hover pose
+  (0.60, 0.80),  # descending onto the tower
+  (0.80, 1.00),  # released and settled
+)
+STAGES = len(BANDS)
 
 # ManiSkill3's Stack-Cube uses 1 - tanh(5 d) for reaching and placement.
 REACH_STD = 0.2
@@ -86,13 +106,18 @@ def stage_scalar(state: TowerState) -> torch.Tensor:
   reaching = _kernel(reach, REACH_STD)
   hovering = _kernel(hover_error, HOVER_STD)
   placing = _kernel(place_error, PLACE_STD)
+  def band(index: int, fraction: torch.Tensor, gate: torch.Tensor | None = None):
+    low, high = BANDS[index]
+    value = low + (high - low) * fraction
+    return value if gate is None else torch.where(gate, value, zero)
+
   bands = torch.stack(
     (
-      0 * BAND + BAND * reaching,
-      torch.where(held, 1 * BAND + BAND * lift, zero),
-      torch.where(held & (lift >= 1.0), 2 * BAND + BAND * hovering, zero),
-      torch.where(hover_error < HOVER_TOL, 3 * BAND + BAND * placing, zero),
-      torch.where(placed, 4 * BAND + BAND * settled, zero),
+      band(0, reaching),
+      band(1, lift, held),
+      band(2, hovering, held & (lift >= 1.0)),
+      band(3, placing, hover_error < HOVER_TOL),
+      band(4, settled, placed),
     ),
     dim=0,
   )
@@ -150,6 +175,7 @@ def _kernel(error: torch.Tensor, std: float) -> torch.Tensor:
 
 
 __all__ = [
+  "BANDS",
   "HOVER_CLEARANCE",
   "HOVER_TOL",
   "LIFT_CLEARANCE",
