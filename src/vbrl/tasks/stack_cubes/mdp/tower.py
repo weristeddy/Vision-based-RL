@@ -130,10 +130,6 @@ GRIPPER_PAD_FACE_OFFSET = 0.003
 GRIPPER_GRIP_M = (CUBE_SIZE - GRIPPER_PAD_FACE_OFFSET) / 2
 GRIPPER_CLOSED_M = GRIPPER_GRIP_M + 0.002
 GRIPPER_OPEN_M = 0.022
-# The carriage joint's own upper limit, and the far end of the squeeze. It is
-# what `closure` is measured against, so the reward for closing the hand spans
-# the whole travel rather than the last 3.5 mm of it.
-GRIPPER_TRAVEL_M = 0.044
 # One contact sensor per cube, named after it. The primary set is the six
 # fingertip pad geoms, so the sensor reports which pads are touching that cube
 # and how hard -- which is what turns "the hand is near a cube" into "the hand
@@ -288,8 +284,15 @@ def tower_state(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> TowerState
     speed=speed,
     spin=spin,
     opening=(carriage / GRIPPER_OPEN_M).clamp(0.0, 1.0),
+    # 0 at the width the hand rests at, 1 once it has squeezed down to a cube.
+    # Measured against the carriage's mechanical limit (0.044) instead, a hand
+    # sitting at its own default target already scored 0.863 -- 86% of the
+    # grasp credit for doing nothing, and the same attractor the band split
+    # exists to remove. The default target *is* `GRIPPER_OPEN_M`, and the whole
+    # motion this has to teach is the 3.5 mm from there to a cube's width,
+    # which is an action of -0.35 at the gripper's 0.01 scale.
     closure=(
-      (GRIPPER_TRAVEL_M - carriage) / (GRIPPER_TRAVEL_M - GRIPPER_GRIP_M)
+      (GRIPPER_OPEN_M - carriage) / (GRIPPER_OPEN_M - GRIPPER_GRIP_M)
     ).clamp(0.0, 1.0),
     at_level=at_level,
     level=level,
@@ -401,7 +404,6 @@ __all__ = [
   "GRIPPER_GRIP_M",
   "GRIPPER_PAD_FACE_OFFSET",
   "GRIPPER_OPEN_M",
-  "GRIPPER_TRAVEL_M",
   "MAX_CUBES",
   "MIN_CUBE_SEPARATION",
   "REACH_MAX",

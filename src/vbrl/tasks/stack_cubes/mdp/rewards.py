@@ -70,14 +70,23 @@ BANDS = (
 )
 STAGES = len(BANDS)
 
-# The reach band is DeepMind's, constant for constant: `_REACH_SHAPING_TOLERANCE
-# = 0.15` and `_REACH_POSITION_TOLERANCE = 0.02` from `rgb_stacking/
-# stack_rewards.py`, through their `tanh_squared` loss. The band this replaced
-# was `1 - tanh(d / 0.2)`, which pays 0.37 at 15 cm where DeepMind's pays 0.05
-# -- seven times as much for merely being in the neighbourhood, and a shallow
-# gradient the whole way in. Measured on three state runs, that is half of why
-# the policy settled on hovering: see `_reach_and_grasp`.
-REACH_MARGIN = 0.15
+# ManiSkill3's `1 - tanh(5 d)`, with DeepMind's flat top inside
+# `_REACH_POSITION_TOLERANCE = 0.02` so the term genuinely reaches 1.0 and the
+# `GRASP_GATE` below is crossable -- the end-effector site cannot sit at a
+# cube's centre, so an ungated kernel tops out near 0.90.
+#
+# DeepMind's shaping tolerance of 0.15 m was tried here and is **wrong for this
+# workspace**. Measured over 3,072 resets, an episode starts with the target
+# cube a median 0.207 m from the end-effector (q01 0.123, q99 0.263): their
+# basket keeps the pinch close to the objects, this table does not. Through
+# their `tanh_squared` that median pays 0.011 against this kernel's 0.226 -- a
+# factor of 20, and 144 at 0.30 m -- so the band that has to get the hand to a
+# cube in the first place was flat across the entire workspace. Both visual
+# runs then diverged outright (value loss 4e9, `action_rate_l2` -48,000, the
+# arm slamming joint limits) and both state runs spent 83% of their episodes
+# ending on table contact at 45% of full length. One kernel, two failure modes,
+# same cause.
+REACH_STD = 0.2
 REACH_TOLERANCE = 0.02
 # `ConditionalAnd(reach_red, grasp, 0.9)`: the reach term has to clear 0.9
 # before the grasp half of the band unlocks.
@@ -217,9 +226,13 @@ def _tanh_squared(error: torch.Tensor, margin: float) -> torch.Tensor:
 
 
 def _reaching(reach: torch.Tensor) -> torch.Tensor:
-  """DeepMind's ``reach_red``: flat 1.0 inside the tolerance, shaped outside."""
+  """Flat 1.0 inside the tolerance, ManiSkill's ``1 - tanh(5 d)`` outside.
+
+  The two meet where they should: ``1 - tanh(d / 0.2)`` is 0.90 at exactly
+  20.1 mm, so the flat top begins at the tolerance rather than jumping to it.
+  """
   return torch.where(
-    reach <= REACH_TOLERANCE, torch.ones_like(reach), _tanh_squared(reach, REACH_MARGIN)
+    reach <= REACH_TOLERANCE, torch.ones_like(reach), _kernel(reach, REACH_STD)
   )
 
 
@@ -282,7 +295,7 @@ def _kernel(error: torch.Tensor, std: float) -> torch.Tensor:
 __all__ = [
   "BANDS",
   "GRASP_GATE",
-  "REACH_MARGIN",
+  "REACH_STD",
   "REACH_TOLERANCE",
   "RETREAT_HEIGHT",
   "HOVER_CLEARANCE",

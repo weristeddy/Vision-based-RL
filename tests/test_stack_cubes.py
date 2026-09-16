@@ -1300,6 +1300,7 @@ def test_reaching_alone_cannot_earn_more_than_half_the_first_band() -> None:
   from vbrl.tasks.stack_cubes.mdp.rewards import (
     BANDS,
     GRASP_GATE,
+    REACH_TOLERANCE,
     _reach_and_grasp,
     _reaching,
   )
@@ -1324,10 +1325,23 @@ def test_reaching_alone_cannot_earn_more_than_half_the_first_band() -> None:
   low, high = BANDS[0]
   assert low + (high - low) * float(ceiling) <= BANDS[1][0]
 
-  # DeepMind's reach kernel: flat inside 2 cm, 0.05 at the 15 cm margin. The
-  # `1 - tanh(d / 0.2)` it replaced paid 0.37 there.
+  # The kernel has to keep a live gradient across the distances episodes
+  # actually start at. Measured over 3,072 resets, the target cube begins a
+  # median 0.207 m from the end-effector, q99 0.263. DeepMind's own 0.15 m
+  # `tanh_squared` margin pays 0.011 at that median and 0.0007 at 0.30 m --
+  # flat across the entire workspace, because their basket keeps the pinch
+  # close to the objects and this table does not. It was tried: both visual
+  # runs diverged outright (value loss 4e9, `action_rate_l2` -48,000) and both
+  # state runs ended 83% of their episodes on table contact at 45% of full
+  # length.
   assert float(_reaching(torch.tensor([0.015]))) == pytest.approx(1.0)
-  assert float(_reaching(torch.tensor([0.15]))) == pytest.approx(0.05, abs=1e-6)
+  assert float(_reaching(torch.tensor([0.207]))) > 0.2
+  assert float(_reaching(torch.tensor([0.30]))) > 0.05
+  # The flat top begins exactly where the shaped part reaches the grasp gate,
+  # so the band does not jump at the tolerance.
+  assert float(_reaching(torch.tensor([REACH_TOLERANCE + 1e-4]))) == pytest.approx(
+    GRASP_GATE, abs=2e-3
+  )
 
 
 def test_a_placed_cube_pays_for_getting_the_hand_out_of_the_way() -> None:
