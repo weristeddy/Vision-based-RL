@@ -77,9 +77,15 @@ def run(
     f"obs {policy.metadata.observation_terms}"
   )
   if policy.metadata.clip_actions is None:
+    # Absent means unknown, not necessarily wrong. Lift-Cube's training config
+    # really does set `clip_actions=None`, so unbounded feedback is what it
+    # trained under; Push-T's is 1.0, and a graph exported before that was
+    # recorded winds up. The graph cannot tell the two apart, so say which is
+    # which rather than demanding a re-export.
     print(
-      "          no clip_actions in the metadata: the action fed back as the "
-      "`actions` observation is unbounded, which winds up. Re-export it."
+      "          clip_actions absent: nothing bounds the action fed back as "
+      "the `actions` observation. Correct for a task trained with "
+      "clip_actions=None (Lift-Cube); for Push-T it is 1.0, so re-export."
     )
 
   arm = TrossenArm(config)

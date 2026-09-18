@@ -1,0 +1,69 @@
+version: 1
+
+# W&B run 9w8z704o --
+# Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic, 6,000
+# iterations at gamma 0.997 with 8 s episodes. Goal-conditioned (`target_pose`
+# is in the actor, 27 inputs) with the corrected physics -- 50.7 g object, 0.55
+# table friction, stiffened contacts, gripper shell collision -- and the
+# per-step delta cap at 0.03, a third of the original 0.1.
+#
+# Read the numbers before spending robot time. Over the full goal-yaw circle it
+# finished at 0.131 episode success, against 0.501 for the 0.1-cap VisualSlow
+# that preceded it. It peaked at 0.646 at iteration 2,999 while the goal yaw was
+# still pinned and fell as the curriculum widened -- 0.220 at +/-0.81 rad, 0.127
+# at +/-pi -- which is the same collapse PixelGoal showed, so it is not about
+# reading the goal from pixels: this policy is handed the goal as numbers.
+#
+# At this manifest's goal specifically, which is the pinned-yaw end where it was
+# strongest, it reached overlap >= 0.90 in 23.4% of 64 simulated envs and >= 0.80
+# in 50.0%. So expect it to transport the T and approach the marker, and to
+# place it about one run in four.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_visualslowstep_5999.onnx
+
+arm_ip: 192.168.1.2
+
+# Unlike the two PixelGoal manifests, this number IS an input: `target_pose` is
+# in the observation, so the policy sees the goal twice -- as these numbers and
+# as the marker drawn on the table -- and they have to agree. Solve it from one
+# external-camera frame with the two tag25h9 markers seated in the notches:
+#
+#   python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+#
+# then take the tags off, because the policy must never see them. These came
+# from artifacts/deployment/apriltags/goal4_1280x720.png and were checked by
+# reprojecting the marker outline onto the frame. Re-solve if the marker moves,
+# and change both the marker and this line together.
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+# Fixed colour exposure, set against the training distribution: sim frames sit
+# at median 150 and mean 141, and this camera measures median 158, mean 130, 0%
+# clipped at 7000 us, with clipping starting between 8000 and 11000. Auto
+# clipped 42% of the pixels the policy saw on the first logged run.
+#
+# Re-probe after any lighting change: python -m vbrl.deployment.camera
+camera_exposure_us: 7000
+
+control_hz: 50.0        # the training decimation: 0.005 s x 4
+
+motion:
+  # Nothing at all, which is the point of the 0.03 cap. Scale and clip both sit
+  # at 0.03 and travel with the graph in its ONNX metadata, so the bound is
+  # applied by the same numbers training used and there is nothing left for the
+  # manifest to shape. A clamp here would only re-introduce what the earlier
+  # traces blamed: at 0.010 it fired on 100% of steps, cut a mean 0.043 rad off
+  # every command and held the arm at 0.284 rad/s against sim's 0.50.
+  #
+  # This is a third of the original cap and 60% of the PixelGoal generation's
+  # 0.05, so it should be the slowest of the four Push-T policies at raw output.
+  action_smoothing: 1.0
+  response_gain: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01   # unused: Push-T drives joint_0..5 only
+  # Carried over from the PixelGoal manifests rather than measured for this
+  # policy: the widest network-output spread seen in that generation was 5.68
+  # against sim's own max, and 8.0 cleared it without false-tripping. If this
+  # one aborts on step 1 or 2 with a value just over 8, it is the threshold that
+  # is wrong, not the policy -- the delta is bounded at 0.03 rad regardless.
+  max_arm_action: 8.0
+  home_seconds: 3.0
