@@ -1,5 +1,3 @@
-"""Fit deterministic ridge probes and plot held-out predictions."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -16,8 +14,6 @@ from .io import load_npz, resolve_outputs, save_figure, save_npz, string_list
 
 @dataclass(frozen=True)
 class ProbeResult:
-  """Metrics and held-out predictions from one deterministic ridge probe."""
-
   train_size: int
   test_size: int
   r2: float
@@ -35,7 +31,6 @@ def ridge_probe(
   alpha: float = 1.0,
   seed: int = 0,
 ) -> ProbeResult:
-  """Fit a standardized ridge model and evaluate one deterministic split."""
   from sklearn.linear_model import Ridge
   from sklearn.metrics import mean_absolute_error, r2_score
   from sklearn.pipeline import make_pipeline
@@ -77,7 +72,6 @@ def save_probe(
   *,
   metadata: Mapping[str, Any] | None = None,
 ) -> Path:
-  """Persist one probe result without pickle-backed arrays."""
   return save_npz(
     path,
     {
@@ -95,7 +89,6 @@ def save_probe(
 
 
 def load_probe(path: str | Path) -> ProbeResult:
-  """Load one probe result from its compressed NumPy artifact."""
   arrays, metadata = load_npz(path)
   return ProbeResult(
     train_size=int(arrays["train_size"]),
@@ -114,7 +107,6 @@ def plot_probe_predictions(
   *,
   output: str | Path,
 ) -> Path:
-  """Plot predicted values against held-out targets for every target dimension."""
   import matplotlib.pyplot as plt
 
   targets = np.asarray(targets).reshape(len(targets), -1)
@@ -153,7 +145,6 @@ def run(
   alpha: float = 1.0,
   seed: int = 0,
 ) -> tuple[Path, ...]:
-  """Fit and plot every requested feature-stage/target probe pair."""
   jobs = resolve_outputs(
     context,
     {"output": output, "plot": plot},

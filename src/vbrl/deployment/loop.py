@@ -12,22 +12,13 @@ from vbrl.deployment.camera import RealSenseCamera
 from vbrl.deployment.keyboard import HELP, ArrowKeys, nudge_goal
 from vbrl.deployment.policy import load_policy
 
-# Joints settle within a few mrad, so this catches a wrong starting pose
-# without tripping on servo error.
 HOME_TOLERANCE = 0.10
-# What the task scores: LiftingCommandCfg.success_threshold, on the cube.
 SUCCESS_THRESHOLD = 0.05
 # Carriage travel with nothing between the fingers; a cube blocks it near 0.019.
 GRIPPER_WHEN_EMPTY = 0.004
 
 
 def home(config: Any) -> int:
-  """Move to the policy's home pose and hold it, then park on Ctrl-C.
-
-  Needs no camera, so it works with the RealSense unplugged. It holds rather
-  than returning because the driver's cleanup may idle the joints, and home is
-  a raised pose to fall from.
-  """
   policy = load_policy(config)
   arm = TrossenArm(config)
   print(f"Homing    {config.motion.home_seconds:.1f} s")
@@ -45,7 +36,6 @@ def home(config: Any) -> int:
 
 
 def park(config: Any) -> int:
-  """Bring the arm down to rest and release torque."""
   arm = TrossenArm(config)
   arm.park(seconds=config.motion.home_seconds)
   arm.close()
@@ -61,13 +51,7 @@ def run(
   keyboard_goal: bool = True,
   log: Any = None,
 ) -> int:
-  """Home the arm, then drive it with the policy until stopped.
-
-  ``keyboard_goal`` lets the arrow keys move the target while the policy runs,
-  which is how to tell tracking from a memorised trajectory.
-  """
-  # The arrow keys nudge (x, y, z) against Lift-Cube's ranges; a Push-T goal's
-  # third number is a heading, so a keypress would clamp it into the z window.
+  # A Push-T goal's third number is a heading, not a z the keys may clamp.
   keyboard_goal = keyboard_goal and config.goal_space == "lift_xyz"
   motion = config.motion
   policy = load_policy(config)
@@ -77,11 +61,6 @@ def run(
     f"obs {policy.metadata.observation_terms}"
   )
   if policy.metadata.clip_actions is None:
-    # Absent means unknown, not necessarily wrong. Lift-Cube's training config
-    # really does set `clip_actions=None`, so unbounded feedback is what it
-    # trained under; Push-T's is 1.0, and a graph exported before that was
-    # recorded winds up. The graph cannot tell the two apart, so say which is
-    # which rather than demanding a re-export.
     print(
       "          clip_actions absent: nothing bounds the action fed back as "
       "the `actions` observation. Correct for a task trained with "
@@ -104,9 +83,6 @@ def run(
         "field -- lower camera_exposure_us until this is a few percent"
       )
   home = policy.metadata.home_pose
-  # A policy whose observation terms carry neither goal_position nor
-  # target_pose never reads this number -- the goal reaches it only as the
-  # marker in its camera image -- so say so rather than printing it as an input.
   reads_goal = bool(
     {"goal_position", "target_pose"} & set(policy.metadata.observation_terms)
   )
@@ -119,8 +95,6 @@ def run(
   print(f"Homing    {motion.home_seconds:.1f} s")
   arm.move_to(home, seconds=motion.home_seconds)
 
-  # Every observation is relative to the home pose, so starting away from it
-  # feeds the policy proprioception it never saw.
   home_error = float(np.abs(home - arm.read()[0]).max())
   if home_error > HOME_TOLERANCE:
     raise RuntimeError(f"{home_error:.3f} rad from home, above {HOME_TOLERANCE}.")
@@ -131,10 +105,6 @@ def run(
   period = 1.0 / config.control_hz
   closest_error, at_goal = float("inf"), False
   step = 0
-  # Per-step trace. Recorded rather than printed because the interesting things
-  # -- whether the rate clamp is firing, whether the arm reaches what it was
-  # told, whether the policy is oscillating -- are all differences between
-  # series, not single values.
   trace: dict[str, list] = {
     k: []
     for k in (
@@ -148,8 +118,6 @@ def run(
     )
   }
   frames: list = []
-  # ExitStack so the terminal is handed back on every path out, including the
-  # abort on an out-of-distribution action.
   stack = ExitStack()
   started_at = deadline = time.perf_counter()
   try:
@@ -170,9 +138,7 @@ def run(
         joint_pos=joint_pos, joint_vel=joint_vel, image=frame
       )
 
-      # Checked on the network's own output rather than on `action`: the
-      # policy clamps to `clip_actions` before returning, so `action` cannot
-      # exceed 1.0 and would never trip this.
+      # The network's own output: `action` is already clamped and never trips.
       network = policy.network_action
       arm_channels = network[:-1] if policy.has_gripper else network
       largest_arm_action = float(np.abs(arm_channels).max())
@@ -183,9 +149,7 @@ def run(
           "distribution."
         )
 
-      # A held cube sits 5.6 mm from the ee site, well inside the 50 mm
-      # threshold, so the end effector's position is the cube's -- but only
-      # while the cube is really held, hence the gripper check.
+      # A held cube sits 5.6 mm from the ee site, hence the gripper check.
       holding = policy.has_gripper and bool(
         action[-1] < 0.0 and joint_pos[-1] > GRIPPER_WHEN_EMPTY
       )
@@ -236,7 +200,6 @@ def run(
         max_joint_step=np.float32(
           np.nan if motion.max_joint_step is None else motion.max_joint_step
         ),
-        response_gain=np.float32(motion.response_gain),
         action_smoothing=np.float32(motion.action_smoothing),
         control_hz=np.float32(config.control_hz),
         frames=np.asarray(frames, dtype=np.uint8),
@@ -257,8 +220,7 @@ def run(
       print(f"  the terminal was taken back {keys.reclaims} time(s)")
     if camera is not None:
       camera.close()
-    # Park rather than release: idle is not gravity-compensated, and the policy
-    # leaves the arm wherever its last action put it.
+    # Park rather than release: idle is not gravity-compensated.
     arm.park(seconds=motion.home_seconds)
     arm.close()
   return 0

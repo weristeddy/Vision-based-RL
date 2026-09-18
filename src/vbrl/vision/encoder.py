@@ -1,12 +1,9 @@
-"""Visual encoder execution, freezing, autocast, and chunking."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-
 
 Preprocess = Callable[[torch.Tensor], torch.Tensor]
 Extract = Callable[[nn.Module, torch.Tensor], torch.Tensor]
@@ -17,7 +14,6 @@ def _freeze(module: nn.Module) -> None:
     parameter.requires_grad_(False)
 
 
-# VisionConfig.validate has already rejected anything outside this table.
 _AUTOCAST_DTYPES = {
   "bfloat16": torch.bfloat16,
   "float16": torch.float16,
@@ -26,8 +22,6 @@ _AUTOCAST_DTYPES = {
 
 
 class VisualEncoder(nn.Module):
-  """Backbone/adapter composition with a stable feature-cache interface."""
-
   def __init__(
     self,
     *,
@@ -59,7 +53,7 @@ class VisualEncoder(nn.Module):
   def output_dim(self) -> int:
     return self._output_dim
 
-  def train(self, mode: bool = True) -> "VisualEncoder":
+  def train(self, mode: bool = True) -> VisualEncoder:
     super().train(mode)
     if self.freeze_backbone:
       self.backbone.eval()

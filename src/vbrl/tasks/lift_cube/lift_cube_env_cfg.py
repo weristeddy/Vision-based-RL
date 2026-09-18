@@ -1,5 +1,3 @@
-"""Generic robot adaptation of MJLab's Lift-Cube task."""
-
 from __future__ import annotations
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -12,7 +10,6 @@ from vbrl.tasks.utils import attach_robot
 
 from . import mdp
 
-
 OBJECT_REST_HEIGHT = 0.02
 
 
@@ -23,7 +20,6 @@ def build_env_cfg(
   rgb: bool = False,
   play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-  """Adapt MJLab Lift-Cube to one registered robot and modality."""
   cfg = make_lift_cube_env_cfg()
   attach_robot(cfg, robot, action_delay=rgb)
 

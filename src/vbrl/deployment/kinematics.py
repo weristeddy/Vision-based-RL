@@ -6,19 +6,11 @@ import numpy as np
 
 
 class Kinematics:
-  """Where the end effector is, given the joint angles.
-
-  Deployment needs this because ``goal_position`` is the target expressed in
-  the end effector's frame, and the arm's MJCF is what defines that frame.
-  Checked against the arm's own Cartesian reading: the two agree to 3 mm.
-  """
-
   def __init__(self) -> None:
     import mujoco
 
     from vbrl.asset_zoo.robots.trossen_wxai import WXAI_XML, make_wxai
 
-    # Both Trossen variants share these kinematics and differ only in appearance.
     self._model = mujoco.MjModel.from_xml_path(str(WXAI_XML))
     self._data = mujoco.MjData(self._model)
     self._ee_site = mujoco.mj_name2id(
@@ -26,7 +18,6 @@ class Kinematics:
     )
 
   def ee_pose(self, joint_pos: Any) -> tuple[Any, Any]:
-    """End-effector position and orientation quaternion, in the base frame."""
     import mujoco
 
     self._data.qpos[: len(joint_pos)] = joint_pos

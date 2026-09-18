@@ -1,5 +1,3 @@
-"""Patch-occlusion sensitivity artifacts and heatmaps."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -16,15 +14,12 @@ from vbrl.vision.preprocessing import prepare_images
 from .features import encode_stages
 from .io import load_npz, resolve_outputs, save_figure, save_npz, string_list
 
-
 OcclusionStage = Literal["backbone", "adapter"]
 OcclusionFill = Literal["zero", "mean"]
 
 
 @dataclass(frozen=True)
 class OcclusionResult:
-  """Per-image cosine-distance scores over an occlusion patch grid."""
-
   scores: np.ndarray
   metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -44,7 +39,6 @@ def occlusion_sensitivity(
   device: str | torch.device,
   metadata: Mapping[str, Any] | None = None,
 ) -> OcclusionResult:
-  """Measure feature cosine distance after occluding each image patch."""
   if patch_size <= 0 or batch_size <= 0:
     raise ValueError("patch_size and batch_size must be positive.")
   if fill not in {"zero", "mean"}:
@@ -102,12 +96,10 @@ def occlusion_sensitivity(
 
 
 def save_occlusion(result: OcclusionResult, path: str | Path) -> Path:
-  """Persist an occlusion result as a compressed, non-pickle NPZ."""
   return save_npz(path, {"scores": result.scores}, result.metadata)
 
 
 def load_occlusion(path: str | Path) -> OcclusionResult:
-  """Restore a saved occlusion result."""
   arrays, metadata = load_npz(path)
   return OcclusionResult(scores=arrays["scores"], metadata=metadata)
 
@@ -118,7 +110,6 @@ def plot_occlusion_heatmap(
   output: str | Path,
   title: str = "Mean patch occlusion sensitivity",
 ) -> Path:
-  """Plot the mean patch sensitivity over all analyzed images."""
   import matplotlib.pyplot as plt
 
   figure, axis = plt.subplots(figsize=(6.0, 5.0), constrained_layout=True)
@@ -140,7 +131,6 @@ def run(
   num_images: int = 64,
   fill: str = "mean",
 ) -> tuple[Path, ...]:
-  """Compute sensitivity with the already-loaded actor camera encoder."""
   from .capture import load_capture
   from .features import camera_encoder
 

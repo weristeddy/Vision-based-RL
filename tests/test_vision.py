@@ -1,9 +1,3 @@
-"""Capability, validation, and wire-format contracts for the vision registry.
-
-Module *layout* -- the weight keys the 26 retained checkpoints load against --
-is pinned separately in ``test_vision_checkpoint_layout.py``.
-"""
-
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -19,7 +13,6 @@ from vbrl.vision.config import VisionConfig
 from vbrl.vision.model import VisionModel
 from vbrl.vision.preprocessing import prepare_images
 from vbrl.vision.registry import ADAPTERS, ENCODERS, build_encoder
-
 
 BACKBONES = (
   "nature_cnn", "compact_vit", "dinov2_vits14",
@@ -43,15 +36,19 @@ def _config(encoder: str, adapter: str, **overrides: object) -> VisionConfig:
   return VisionConfig(**values)
 
 
+# R3M's shape: a `convnet` holding the ResNet the spatial alias points at.
+class _StubR3M(nn.Module):
+  def __init__(self) -> None:
+    super().__init__()
+    self.convnet = nn.Identity()
+
+
 @pytest.fixture
 def _fake_pretrained_backbones(monkeypatch: pytest.MonkeyPatch) -> None:
   from vbrl.vision.backbones import dinov2, r3m
 
   monkeypatch.setattr(dinov2, "load", nn.Identity)
-  monkeypatch.setattr(r3m, "load", nn.Identity)
-
-
-# --- the one registry table --------------------------------------------------
+  monkeypatch.setattr(r3m, "load", _StubR3M)
 
 
 def test_declared_backbone_adapter_capability_matrix_is_complete() -> None:
@@ -65,8 +62,6 @@ def test_declared_backbone_adapter_capability_matrix_is_complete() -> None:
     "compact_vit": (128, "scratch", True, None),
     "dinov2_vits14": (384, "pretrained", False, 128),
     "r3m_resnet50": (2048, "pretrained", False, 256),
-    # Same frozen network one stage earlier: half the channels, four times the
-    # cells, so half the encode batch for twice the feature-map size.
     "r3m_resnet50_layer3": (1024, "pretrained", False, 128),
   }
   for name, (channels, weights, trainable, batch_size) in expected.items():
@@ -82,7 +77,6 @@ def test_declared_backbone_adapter_capability_matrix_is_complete() -> None:
     assert adapter.name == name
     assert adapter.feature_request in {"global", "spatial", "local_grid"}
 
-  # Only spatial_softmax fixes its width, and it fixes it at 256.
   assert registry.adapter_spec("spatial_softmax").fixed_output_dim == 256
   assert all(
     registry.adapter_spec(name).fixed_output_dim is None
@@ -91,9 +85,6 @@ def test_declared_backbone_adapter_capability_matrix_is_complete() -> None:
   )
 
 
-# The grid each backbone produces from a 224x224 image. NatureCnn's trunk has
-# total stride 8; CompactViT and DINOv2 tile by patch (16 and 14 pixels); R3M's
-# ResNet-50 has stride 32.
 NATIVE_GRIDS = {
   "nature_cnn": 24,
   "compact_vit": 14,
@@ -105,15 +96,6 @@ NATIVE_GRIDS = {
 
 @pytest.mark.usefixtures("_fake_pretrained_backbones")
 def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -> None:
-  """The two rules behind CURRENT_ARCHITECTURES, checked against real modules.
-
-  A local grid smaller than the encoder's own is pure loss, and it is unequal
-  loss -- pooling to 7 left R3M untouched while discarding twelve of every
-  thirteen NatureCnn cells. Reading the native grid instead costs
-  grid^2 x projected_channels x output_dim in the adapter's dense layer, which
-  is 9.4M parameters on NatureCnn's 76k trunk, so the scratch encoders use the
-  pooling heads that have no dense flatten.
-  """
   from vbrl.vision.architectures import ARCHITECTURES, CURRENT_ARCHITECTURES
 
   scratch_seen = set()
@@ -129,11 +111,8 @@ def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -
     backbone = sum(p.numel() for p in encoder.backbone.parameters())
     adapter = sum(p.numel() for p in encoder.adapter.parameters())
     if config.adapter in ("flatten", "flatten_relu"):
-      # The deliberate exception: the plain Nature-CNN head, whose dense layer
-      # would sit in the policy MLP instead if this row had no adapter at all.
-      # Pinned to exactly that matrix so nothing else creeps in beside it.
-      # `flatten` adds a LayerNorm (two vectors of width output_dim);
-      # `flatten_relu` is ManiSkill's rectified head and adds nothing.
+      # The deliberate exception: the plain Nature-CNN head, whose dense layer would sit
+      # in the policy MLP instead if this row had no adapter at all.
       channels = ENCODERS[config.encoder].channels
       flat = channels * config.target_grid_size**2
       trailing = 1 if config.adapter == "flatten_relu" else 3
@@ -145,13 +124,6 @@ def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -
 
 
 def test_afa_head_count_follows_the_published_64_wide_split() -> None:
-  """``Afa<N>`` is never chosen by hand: N is the encoder's channels over 64.
-
-  ``AttentionPoolLatent`` splits channels into 64-wide heads, which is DINOv2's
-  own head width (384/6) and timm's ``num_heads = dim // 64`` default. Picking N
-  freely would silently change head width per encoder and make the AFA column
-  compare four different attention shapes.
-  """
   from vbrl.vision.architectures import (
     AFA_HEAD_DIM,
     ARCHITECTURES,
@@ -169,8 +141,6 @@ def test_afa_head_count_follows_the_published_64_wide_split() -> None:
     assert channels % config.afa_num_heads == 0, token
     assert token.endswith(f"-Afa{config.afa_num_heads}"), token
 
-  # Three: the frozen backbones. AFA was dropped for the two scratch encoders,
-  # whose CNN features carry no position for it to attend over.
   assert seen == 3
 
 
@@ -190,7 +160,6 @@ def test_every_encoder_combines_with_every_adapter_and_loads_strictly(
 
 
 def test_linear_encoder_keeps_legacy_single_projection_layout() -> None:
-  """The eight registered ``*-Linear-*`` checkpoints load against this shape."""
   model = build_encoder(_config("nature_cnn", "linear"), input_dim=(64, 64))
 
   assert model.output_dim == 256
@@ -253,9 +222,6 @@ def test_r3m_spatial_encoder_retains_checkpoint_alias(
   } <= set(encoder.state_dict())
 
 
-# --- configuration validation ------------------------------------------------
-
-
 @pytest.mark.parametrize(
   ("overrides", "message"),
   (
@@ -295,11 +261,6 @@ def test_spatial_softmax_rejects_noncanonical_output_dim() -> None:
 
 
 def test_retired_fields_from_historical_runs_are_ignored_not_rejected() -> None:
-  """W&B run configs recorded before these options were removed must still parse.
-
-  Every retired field only ever held its default, so dropping it cannot change
-  the policy that gets rebuilt -- but the key must not raise.
-  """
   from vbrl.vision.config import RETIRED_FIELDS
 
   historical = {
@@ -330,9 +291,6 @@ def test_retired_fields_from_historical_runs_are_ignored_not_rejected() -> None:
 def test_genuinely_unknown_vision_fields_still_raise() -> None:
   with pytest.raises(ValueError, match="Unknown vision configuration fields"):
     VisionConfig.from_mapping({"encoder": "nature_cnn", "not_a_field": 1})
-
-
-# --- VisionModel -------------------------------------------------------------
 
 
 def test_prepare_images_accepts_nhwc_uint8() -> None:
@@ -370,7 +328,6 @@ def test_vision_model_joins_proprioception_and_images_with_gradients() -> None:
 
 
 def test_vision_model_constructs_directly_from_schema_v1_agent_cnn_cfg() -> None:
-  """``cnn_cfg["vision"]`` is wire format inside historical W&B run configs."""
   actor = yaml.safe_load(
     """
 class_name: src.vision.model:VisionModel

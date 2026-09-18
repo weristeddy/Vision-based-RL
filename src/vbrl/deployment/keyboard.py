@@ -12,9 +12,8 @@ import numpy as np
 from vbrl.deployment.config import GOAL_RANGE
 
 STEP = 0.02
-# Left is +y, not -y: the base frame is right-handed with x forward and z up,
-# so +y points to the robot's own left. x has no key and holds its manifest
-# value.
+# Left is +y, not -y: the base frame is right-handed with x forward and z up, so +y
+# points to the robot's own left. x has no key and holds its manifest value.
 AXES = {
   "up": (2, +STEP),
   "down": (2, -STEP),
@@ -42,7 +41,6 @@ HELP = (
 
 
 def decode(buffer: str) -> tuple[tuple[str, ...], str]:
-  """Arrow keys in ``buffer``, and the tail that may still complete one."""
   keys = []
   while buffer:
     if len(buffer) < 3:
@@ -60,12 +58,6 @@ def decode(buffer: str) -> tuple[tuple[str, ...], str]:
 
 
 def nudge_goal(goal: Any, keys: Any) -> tuple[Any, tuple[str, ...]]:
-  """Apply keypresses to ``goal``, clamped to the range the policy trained on.
-
-  Every press counts, so N presses move N steps. A press that would leave the
-  range is clamped to its edge and reported, since one that silently does
-  nothing looks like a dropped keystroke.
-  """
   goal = np.array(goal, dtype=np.float64)
   refused = []
   for key in keys:
@@ -85,15 +77,6 @@ def nudge_goal(goal: Any, keys: Any) -> tuple[Any, tuple[str, ...]]:
 
 
 class ArrowKeys:
-  """Non-blocking arrow-key reads from the terminal, as a context manager.
-
-  cbreak rather than raw mode: raw clears ISIG, and ctrl-c must always be able
-  to stop a moving arm. The mode is re-asserted on every read because the arm
-  and camera drivers start after this one does and put the terminal back into
-  canonical mode, where the keys echo instead of arriving. With no terminal on
-  stdin this disables itself.
-  """
-
   def __init__(self, stream: Any = None) -> None:
     self._stream = sys.stdin if stream is None else stream
     self._buffer = ""
@@ -123,7 +106,6 @@ class ArrowKeys:
       self._terminal = None
 
   def pressed(self) -> tuple[str, ...]:
-    """Every arrow key typed since the last call. Never blocks."""
     if self._terminal is None:
       return ()
     if termios.tcgetattr(self._terminal)[3] & (termios.ICANON | termios.ECHO):

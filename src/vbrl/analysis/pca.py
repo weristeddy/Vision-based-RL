@@ -1,5 +1,3 @@
-"""Plot deterministic two-dimensional feature PCA projections."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -20,7 +18,6 @@ def plot_feature_pca(
   title: str = "Visual feature PCA",
   output: str | Path,
 ) -> Path:
-  """Plot the leading two singular-vector coordinates of flattened features."""
   import matplotlib.pyplot as plt
 
   flattened = flatten_features(features)
@@ -47,7 +44,6 @@ def run(
   capture: str | None = None,
   color_target: str | None = None,
 ) -> tuple[Path, ...]:
-  """Plot a PCA projection for every requested feature stage."""
   jobs = resolve_outputs(
     context,
     {"output": output},

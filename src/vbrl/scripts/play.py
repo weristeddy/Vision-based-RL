@@ -1,49 +1,17 @@
-"""Inspect a registered task or deploy one checkpoint in Viser."""
-
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from vbrl.runtime import AGENTS, CheckpointRef, build_env, default_device, make_policy
 from vbrl.scenes.presets import ood_scenes
 
 
+# MJLab bakes textures into the meshes it uploads and every hook that decides when to
+# redo that watches colour only, so texture swaps never reach the browser.
 def track_appearance_randomization() -> None:
-  """Let Viser follow appearance swaps in time and across envs, not just colour.
-
-  MJLab bakes the texture into the meshes it uploads to the browser, and two
-  places decide when that happens. Both compare colour and ignore textures, so
-  the photographic table banks -- which vary ``mat_texid`` -- and the procedural
-  banks -- which vary ``geom_matid`` -- are invisible to the viewer while the
-  camera observation, rendered from the per-world model, has them:
-
-  * ``_VISER_APPEARANCE_HANDLE_FIELDS`` decides when a frame's appearance is
-    stale enough to rebuild, so without ``mat_texid`` the view keeps whichever
-    texture was current when the viewer was built, for the whole session.
-  * ``_VISER_BAKED_HANDLE_FIELDS`` decides whether MJLab's per-env variant path
-    runs at all. It is a module constant composed at import time, so widening
-    the appearance set does not reach it; left alone, the scene falls through
-    to mjviser's plain path, which uploads one mesh per body and instances it
-    across every env.
-  * ``_geom_subgroup_visual_fingerprint`` then decides how many variants that
-    path uploads, and envs sharing a fingerprint share one instanced mesh. Two
-    envs whose tables differ only by texture collapse into one variant, so N
-    envs render the same tabletop no matter how the model was randomized.
-
-  Textures are appended to the fingerprint rather than replacing it, so
-  upstream's own fields keep counting. All three patches are process-global and
-  idempotent.
-
-  This costs one uploaded mesh per distinct texture, so a Viser session showing
-  many envs pays for many tabletops. That is the intended trade for a handful
-  of envs; it is not a reason to point the viewer at a training-sized batch.
-
-  Raises:
-    AttributeError: if MJLab renames either hook, so an upgrade surfaces here
-      rather than silently restoring the collapsed view.
-  """
   from mjlab.viewer.viser import scene
 
   textured = {"mat_texid", "geom_matid"}
@@ -78,13 +46,10 @@ def run_viser(
   frame_rate: float,
   max_steps: int | None,
 ) -> None:
-  """Run MJLab's viewer on an explicitly bound Viser server."""
 
   import viser
   from mjlab.viewer import ViserPlayViewer
 
-  # Before the viewer builds its scene: the widened set is read in
-  # MjlabViserScene.__init__.
   track_appearance_randomization()
 
   server = viser.ViserServer(
@@ -110,8 +75,6 @@ def run_viser(
 
 
 def record_rollout(wrapped: Any, policy: Any, args: Any) -> Path:
-  """Write one framed shot of every env, at the size the container deserves."""
-
   from vbrl.evaluation.recording import default_output, record
   from vbrl.paths import artifact_path
 
@@ -124,7 +87,6 @@ def record_rollout(wrapped: Any, policy: Any, args: Any) -> Path:
     steps=args.record_steps,
     width=args.record_width or width,
     height=args.record_height or height,
-    # A video keeps the simulated rate, so playback runs at wall-clock speed.
     fps=args.record_fps or fps or round(1.0 / wrapped.unwrapped.step_dt),
   )
 
@@ -220,17 +182,11 @@ def _validate(
   return ref
 
 
+# Not degenerate target ranges: the goal is drawn on a ring and rejected
+# outside the rectangle, so a rectangle collapsed to a point never converges.
 def _pin_goal(
   parser: argparse.ArgumentParser, env: Any, goal: Sequence[float]
 ) -> None:
-  """Overwrite the goal after every resample, leaving the object untouched.
-
-  Not degenerate target ranges: the goal is drawn on a ring around the object
-  and rejected if it leaves the rectangle, so collapsing the rectangle to a
-  point simply never converges. Wrapping the resample keeps the object's own
-  distribution and the separation floor exactly as trained, and just replaces
-  the goal the draw produced.
-  """
   import torch
   from mjlab.utils.lab_api.math import quat_from_euler_xyz
 
@@ -277,9 +233,8 @@ def main(argv: Sequence[str] | None = None) -> int:
       scene=args.scene,
       eval_dr=args.eval_dr or "fixed",
       drop_terminations=args.no_terminations,
-      # One shot of many envs is lit by whichever env the recorder makes
-      # primary, so a randomized sun colour would tint every recording
-      # differently.
+      # One shot of many envs is lit by whichever env the recorder makes primary, so a
+      # randomized sun colour would tint every recording differently.
       fixed_lighting=args.record is not None,
     )
     if args.goal is not None:

@@ -1,5 +1,3 @@
-"""Run one evaluation episode in every MJLab vector environment."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -7,13 +5,10 @@ from typing import Any
 import torch
 from tensordict import TensorDict
 
-
 Episode = dict[str, int | float | bool]
 
 
 def _success_term(env: Any) -> Any:
-  """Find the task command that publishes episode success."""
-
   manager = env.unwrapped.command_manager
   terms = [manager.get_term(name) for name in manager.active_terms]
   terms = [term for term in terms if "episode_success" in term.metrics]
@@ -25,16 +20,12 @@ def _success_term(env: Any) -> Any:
 
 
 def _reset_completed(env: Any, done: torch.Tensor) -> TensorDict:
-  """Reset finished MJLab slots and rebuild the RSL-RL observation."""
-
   env_ids = done.nonzero(as_tuple=False).squeeze(-1)
   observations, _ = env.unwrapped.reset(env_ids=env_ids)
   return TensorDict(observations, batch_size=[env.num_envs])
 
 
 def run_episodes(env: Any, policy: Any, seed: int) -> list[Episode]:
-  """Record the first completed episode from every vector worker."""
-
   env.seed(seed)
   observations, _ = env.reset()
   success_term = _success_term(env)
@@ -54,10 +45,6 @@ def run_episodes(env: Any, policy: Any, seed: int) -> list[Episode]:
 
     first_completions = done & ~recorded
     success = success_term.metrics["episode_success"]
-    # Every other per-env metric the command publishes -- yaw error, overlap,
-    # position error -- read at the step the episode ends. `success` is latched
-    # over the episode; these are terminal, which is what "how well did it end"
-    # means and what the training curves cannot tell you.
     terminal = {
       name: value
       for name, value in success_term.metrics.items()

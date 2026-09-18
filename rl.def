@@ -26,6 +26,7 @@ From: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
     export TRANSFORMERS_OFFLINE=1
 
 %post
+    set -e
     # uv creates and populates /opt/venv, so pip and venv are not needed; git is,
     # for the pinned R3M source dependency.
     apt-get update && apt-get install -y --no-install-recommends \
@@ -52,11 +53,12 @@ From: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
     UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-editable
     export PATH="/opt/venv/bin:${PATH}"
 
-    # Bake the pinned backbones into the image so a cluster job never touches
-    # the network or a user's home cache. The URLs and SHA-256 digests live in
-    # vbrl.asset_zoo.backbones, which a development host fetches from too, so
-    # there is no second copy of the manifest to keep in step.
-    vbrl-fetch-backbones /opt/vbrl-models
+    # Bake the backbones in so a cluster job never touches the network. Each
+    # upstream caches in its own layout under one root; a development host runs
+    # the same command. %environment is not applied during %post, but set these
+    # explicitly so the build cannot be broken by a future export of them.
+    HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 vbrl-fetch-backbones /opt/vbrl-models
+    vbrl-fetch-backbones /opt/vbrl-models --verify
     chmod -R a+rX /opt/vbrl-models
 
 %test
@@ -84,12 +86,9 @@ task_ids = set(vbrl_task_ids())
 expected = {
     "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-    "Mjlab-PushCube-State-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic",
-    "Mjlab-PushT-SlowGoal-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
-    "Mjlab-PushT-Balanced-NatureCnn-FlattenRelu-TrossenRealistic",
-    "Mjlab-PushT-VisualGoal-NatureCnn-Flatten-TrossenRealistic",
+    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-PixelGoalFixed-DinoV2ViTS14-Afa6-TrossenRealistic",
 }
 missing = expected - task_ids
 assert not missing, (

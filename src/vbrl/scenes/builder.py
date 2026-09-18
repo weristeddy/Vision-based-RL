@@ -1,19 +1,11 @@
-"""Compose one scene preset onto a task configuration.
-
-:func:`apply_scene` (registration time) and :func:`replace_scene` (runtime OOD
-swap) share :func:`_apply`, so a scene cannot behave differently depending on
-when it was built.
-"""
-
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mujoco
-
 from mjlab.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
@@ -44,9 +36,8 @@ if TYPE_CHECKING:
 
 SpecSource = Callable[[], mujoco.MjSpec]
 
-# Every event this module owns. Reapplying a scene clears all of them first so
-# a replacement can never inherit a stale term from the preset it replaces.
-# The three appearance-only light terms: pose jitter is deliberately not here.
+# Reapplying a scene clears all of these, so a replacement cannot inherit a stale term
+# from the preset it replaces.
 LIGHT_COLOUR_EVENTS = ("light_diffuse", "light_specular", "light_ambient")
 
 SCENE_EVENTS = (
@@ -81,12 +72,6 @@ _MATCHED_RANGES = {
   "direction": {0: (-0.12, 0.12), 1: (-0.12, 0.12), 2: (-0.08, 0.08)},
   "fill": {0: (-0.10, 0.10), 1: (-0.10, 0.10), 2: (-0.06, 0.06)},
 }
-# Absolute colour ranges for the directional training sun, spanning the static
-# values it is built with (diffuse 0.88/0.84/0.78, ambient 0.10, specular
-# 0.08). Randomizing per channel varies colour temperature as well as
-# brightness. MJLab 1.6 also ships dr.light_attenuation, dr.light_cutoff, and
-# dr.light_exponent; MuJoCo ignores all three for directional lights, so they
-# have nothing to act on here and are deliberately not wired up.
 _LIGHT_COLOR_RANGES = {
   "diffuse": {axis: (0.70, 1.00) for axis in range(3)},
   "specular": {axis: (0.02, 0.18) for axis in range(3)},
@@ -95,11 +80,7 @@ _LIGHT_COLOR_RANGES = {
 
 
 def _load_mjcf(path: str) -> mujoco.MjSpec:
-  """Load MJCF through a Python function that TorchrunX can serialize."""
   return mujoco.MjSpec.from_file(path)
-
-
-# --- world construction -----------------------------------------------------
 
 
 def _add_lights(spec: mujoco.MjSpec, preset: ScenePreset) -> None:
@@ -143,7 +124,6 @@ def _add_lights(spec: mujoco.MjSpec, preset: ScenePreset) -> None:
 
 
 def table_spec(preset: ScenePreset) -> mujoco.MjSpec:
-  """Build the support table, its lights, and its material bank."""
   spec = mujoco.MjSpec()
   _add_lights(spec, preset)
   bank = preset.table
@@ -154,7 +134,6 @@ def table_spec(preset: ScenePreset) -> mujoco.MjSpec:
       file=str(UNIT_BOX_UV_MESH),
       scale=TABLE_HALF_EXTENTS,
     )
-    # The box stays as the physics proxy; the textured mesh is render-only.
     body_kwargs = {"group": 5, "rgba": bank.proxy_rgba}
   else:
     body_kwargs = {"rgba": (0.45, 0.45, 0.45, 1.0)}
@@ -165,11 +144,8 @@ def table_spec(preset: ScenePreset) -> mujoco.MjSpec:
     type=mujoco.mjtGeom.mjGEOM_BOX,
     size=TABLE_HALF_EXTENTS,
     pos=TABLE_CENTER,
-    # A stiff tabletop. MuJoCo mixes solref/solimp across a contact pair, so the
-    # object's own stiffening does almost nothing while this side keeps the
-    # defaults -- measured, the T still sank 13.3 mm of its 24 mm height. The
-    # time constant is 0.01 = 2x the 0.005 timestep, MuJoCo's own stability
-    # floor, and the impedance width is 0.2 mm rather than 1 mm.
+    # MuJoCo mixes solref/solimp across a contact pair, so stiffening only the object
+    # does almost nothing -- the T still sank 13.3 mm of its 24 mm.
     solref=(0.01, 1.0),
     solimp=(0.95, 0.99, 0.0002, 0.5, 2.0),
     **body_kwargs,
@@ -189,7 +165,6 @@ def table_spec(preset: ScenePreset) -> mujoco.MjSpec:
 
 
 def _declares(spec: mujoco.MjSpec, tag: str) -> bool:
-  """Whether an object MJCF opts into an appearance through ``<text>``."""
   return tag in next(
     (text.data.split() for text in spec.texts if text.name == "appearances"),
     (),
@@ -197,7 +172,6 @@ def _declares(spec: mujoco.MjSpec, tag: str) -> bool:
 
 
 def object_spec(preset: ScenePreset, source: SpecSource) -> mujoco.MjSpec:
-  """Load the task object and dress it if it opts into this scene's bank."""
   spec = source()
   bank = preset.obj
   if bank is None or not _declares(spec, bank.appearance_tag or ""):
@@ -213,11 +187,7 @@ def object_spec(preset: ScenePreset, source: SpecSource) -> mujoco.MjSpec:
   return spec
 
 
-# --- events -----------------------------------------------------------------
-
-
 def _colour_event(entity: str, ranges, *, materials=(), shared_random=False):
-  """Randomize an entity's colour through whichever slot it actually has."""
   if materials:
     asset_cfg = SceneEntityCfg(entity, material_names=tuple(materials))
     func = dr.mat_rgba
@@ -237,10 +207,7 @@ def _colour_event(entity: str, ranges, *, materials=(), shared_random=False):
 
 
 def _appearance_event(entity: str, bank: MaterialBank, geom_names=None):
-  """Sample this bank's appearance through whichever slot it varies."""
   if bank.slot == "texid":
-    # One material, many textures: repoint its RGB role slot. The geoms bound
-    # to the material never change, so `geom_names` has nothing to scope.
     return EventTermCfg(
       func=dr.mat_texid,
       mode="reset",
@@ -333,55 +300,36 @@ def _bank_events(
   return events
 
 
-def _object_keys(object_names: tuple[str, ...]):
-  """Pair each manipulated object with the event key prefix it owns.
-
-  The first object keeps the bare ``object`` prefix, so a single-object task --
-  every task but Stack-Cubes -- derives exactly the event names it always had.
-  """
-  for index, name in enumerate(object_names):
-    yield ("object" if index == 0 else f"object_{name}"), name
-
-
 def _events(
   preset: ScenePreset,
   *,
-  object_names: tuple[str, ...],
+  object_name: str,
   object_materials: tuple[str, ...],
   object_dressed: bool,
   camera_model: str | None,
   eval_dr: EvaluationDr,
 ) -> dict[str, EventTermCfg]:
-  """Derive the complete visual-randomization event set from one preset."""
   events: dict[str, EventTermCfg] = {}
-  # Nothing renders the scene, so there is no appearance to randomize. This is
-  # what keeps the state tasks free of dead lighting and camera terms.
   if camera_model is None:
     return events
-  # A fixed OOD scene is the evaluation baseline: one appearance, no variation.
   if preset.ood and eval_dr == "fixed":
     return events
 
   matched = preset.ood and eval_dr == "matched"
   if not matched:
-    # A randomized material bank replaces flat colour randomization.
     if preset.colour_dr and preset.table is None:
       events["table_color"] = _colour_event("table", (0.15, 0.85))
     if preset.table is not None:
       events.update(
         _bank_events("table", "table", preset.table, (TABLE_VISUAL_GEOM_NAME,))
       )
-    # One independent draw per manipulated object: four cubes dressed by a
-    # single event would share one colour, which is exactly what a multi-cube
-    # task must not do.
-    for key, name in _object_keys(object_names):
-      if preset.colour_dr and not object_dressed:
-        events[f"{key}_color"] = _colour_event(
-          name, (0.0, 1.0), materials=object_materials, shared_random=True
-        )
-      if object_dressed:
-        assert preset.obj is not None
-        events.update(_bank_events(key, name, preset.obj, None))
+    if preset.colour_dr and not object_dressed:
+      events["object_color"] = _colour_event(
+        object_name, (0.0, 1.0), materials=object_materials, shared_random=True
+      )
+    if object_dressed:
+      assert preset.obj is not None
+      events.update(_bank_events("object", object_name, preset.obj, None))
 
   ranges = _MATCHED_RANGES if matched else _LIGHT_RANGES[preset.wide_lighting]
   operation = "add" if matched else "abs"
@@ -396,9 +344,8 @@ def _events(
       dr.light_dir, FILL_LIGHT_NAME, ranges["fill"], operation="add"
     )
   else:
-    # Colour and intensity of the training sun. Held out of the matched branch
-    # so a sim2sim evaluation keeps measuring exactly the lighting it was
-    # calibrated against.
+    # Held out of the matched branch so a sim2sim evaluation measures exactly
+    # the lighting it was calibrated against.
     for field, func in (
       ("diffuse", dr.light_diffuse),
       ("specular", dr.light_specular),
@@ -412,14 +359,11 @@ def _events(
   return events
 
 
-# --- entry points -----------------------------------------------------------
-
-
 def _apply(
   cfg: ManagerBasedRlEnvCfg,
   preset: ScenePreset,
   *,
-  object_names: tuple[str, ...],
+  object_name: str,
   object_source: SpecSource,
   camera_model: str | None,
   eval_dr: EvaluationDr,
@@ -431,24 +375,15 @@ def _apply(
   )
 
   cfg.scene.entities["table"] = EntityCfg(spec_fn=partial(table_spec, preset))
-  for name in object_names:
-    cfg.scene.entities[name] = EntityCfg(
-      spec_fn=partial(object_spec, preset, object_source)
-    )
+  cfg.scene.entities[object_name] = EntityCfg(
+    spec_fn=partial(object_spec, preset, object_source)
+  )
   for name in SCENE_EVENTS:
     cfg.events.pop(name, None)
-  # SCENE_EVENTS covers the first object's bare `object_*` keys; the extras a
-  # multi-object task installs are named after the entity and are cleared here,
-  # so a replacement cannot inherit one cube's appearance from the preset it
-  # replaces. Derived from the full name list, not a slice of it: `_object_keys`
-  # gives its own first entry the bare prefix.
-  for key, _ in _object_keys(object_names):
-    for suffix in ("_color", "_material", "_material_tint"):
-      cfg.events.pop(f"{key}{suffix}", None)
   cfg.events.update(
     _events(
       preset,
-      object_names=object_names,
+      object_name=object_name,
       object_materials=object_materials,
       object_dressed=object_dressed,
       camera_model=camera_model,
@@ -459,15 +394,6 @@ def _apply(
 
 
 def hold_lighting_colour_fixed(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
-  """Drop the sun's colour randomization, keeping its pose jitter.
-
-  Each channel of `diffuse` is sampled independently over a range wide enough
-  to tint the whole shot, so a recording's floor -- one plane shared by every
-  env, lit by whichever env the recorder makes primary -- comes out a different
-  colour every run. Clearing these three leaves the sun at the colour the scene
-  declares, which is inside the range a policy trained under this DR has seen,
-  so a recording still shows the policy on an input distribution it knows.
-  """
   for name in LIGHT_COLOUR_EVENTS:
     cfg.events.pop(name, None)
   return cfg
@@ -481,25 +407,16 @@ def apply_scene(
   camera_view: CameraView | None = None,
   object_xml: Path,
   object_name: str,
-  extra_object_names: Sequence[str] = (),
   eval_dr: EvaluationDr = "fixed",
 ) -> ManagerBasedRlEnvCfg:
-  """Compose one scene around a freshly built task configuration.
-
-  ``extra_object_names`` installs further entities from the same ``object_xml``
-  and gives each its own independent appearance draw. It exists for Stack-Cubes,
-  which manipulates four identical cubes; left empty -- every other task -- this
-  builds exactly the single-object scene it always did.
-  """
   preset = get_preset(scene, eval_dr=eval_dr)
   # The terrain the tabletop base installs is the env-origin grid, not scenery,
   # so a scene must not clear it: see tasks.utils.lay_out_envs_on_a_grid.
   return _apply(
     cfg,
     preset,
-    object_names=(object_name, *extra_object_names),
+    object_name=object_name,
     object_source=partial(_load_mjcf, str(object_xml)),
-    # None means the task has no camera, so it gets no visual randomization.
     camera_model=(
       None if camera_view is None else robot.resolve_camera(camera_view).model_name
     ),
@@ -507,26 +424,18 @@ def apply_scene(
   )
 
 
-# Scenery and fixtures, none of which is the manipulated object. `goal_marker`
-# is the drawn target the visual-goal variants install.
 _NON_OBJECT_ENTITIES = frozenset({"robot", "table", "goal_marker"})
 
 
-def _task_objects(entities) -> tuple[str, ...]:
-  """The manipulated objects, in the order the task installed them.
-
-  Stack-Cubes has four; every other task has one. They all come from the same
-  MJCF, so a replacement re-dresses them from whichever one is first -- which
-  is what ``apply_scene`` did to build them in the first place.
-  """
-  names = tuple(
+def _task_object(entities) -> str:
+  names = [
     name
     for name, entity in entities.items()
     if name not in _NON_OBJECT_ENTITIES and entity.spec_fn is not None
-  )
+  ]
   if not names:
-    raise ValueError("Scene replacement requires at least one task object.")
-  return names
+    raise ValueError("Scene replacement requires a task object.")
+  return names[0]
 
 
 def _camera_model_from(cfg: ManagerBasedRlEnvCfg) -> str | None:
@@ -543,15 +452,14 @@ def replace_scene(
   scene: str,
   eval_dr: EvaluationDr = "fixed",
 ) -> ManagerBasedRlEnvCfg:
-  """Replace only the visual scene of an already-registered configuration."""
   preset = get_preset(scene, eval_dr=eval_dr, require_ood=True)
-  object_names = _task_objects(cfg.scene.entities)
-  source = cfg.scene.entities[object_names[0]].spec_fn
+  object_name = _task_object(cfg.scene.entities)
+  source = cfg.scene.entities[object_name].spec_fn
   assert source is not None
   return _apply(
     cfg,
     preset,
-    object_names=object_names,
+    object_name=object_name,
     object_source=source,
     camera_model=_camera_model_from(cfg),
     eval_dr=eval_dr,

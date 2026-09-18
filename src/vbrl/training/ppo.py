@@ -4,19 +4,15 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from tensordict import TensorDict
-
+from mjlab.rl import RslRlPpoAlgorithmCfg
 from rsl_rl.algorithms import PPO
 from rsl_rl.env import VecEnv
 from rsl_rl.storage import RolloutStorage
-
-from mjlab.rl import RslRlPpoAlgorithmCfg
+from tensordict import TensorDict
 
 
 @dataclass
 class VisualPpoCfg(RslRlPpoAlgorithmCfg):
-  """Native PPO plus visual caching and accumulated updates."""
-
   cache_frozen_features: bool = True
   feature_cache_dtype: str = "bfloat16"
   gradient_accumulation_steps: int = 1
@@ -45,8 +41,6 @@ def resolve_cache_dtype(dtype: str) -> torch.dtype:
 
 
 class VisualPPO(PPO):
-  """PPO with cached frozen features and accumulated updates."""
-
   learning_rate: float
 
   def __init__(
@@ -106,14 +100,6 @@ class VisualPPO(PPO):
     return self._cached_feature_models
 
   def _update_with_gradient_accumulation(self) -> dict[str, float]:
-    """Accumulate micro-batch gradients, with optional KL early stop.
-
-    A transliteration of native PPO's update loop with the logical minibatch
-    split into ``gradient_accumulation_steps`` micro-batches, so a frozen
-    visual encoder's activations fit in memory. Feed-forward only, which every
-    registered task is -- the guards below protect against a future config
-    that is not, since the micro-batch loop slices no hidden state.
-    """
     if self.actor.is_recurrent or self.critic.is_recurrent:
       raise NotImplementedError("Gradient accumulation supports feed-forward PPO only.")
     if self.rnd or self.symmetry:
@@ -221,13 +207,8 @@ class VisualPPO(PPO):
       mean_approx_kl += logical_approx_kl.item()
       mean_clip_fraction += logical_clip_fraction.item()
       diagnostic_batches += 1
-      # Never abort before the first optimizer step of an iteration. If the very
-      # first minibatch could stop the update, a distribution shift freezes the
-      # policy for good: no step is taken, so the next iteration's rollout is
-      # just as off-policy, so its first minibatch aborts too. A 6,000-iteration
-      # run spent its last 2,950 iterations performing zero updates for exactly
-      # that reason, after a curriculum rung widened the goal distribution --
-      # `Loss/performed_updates` sat at 0 and `Loss/entropy` at exactly 0.
+      # Never abort before the first optimizer step: with no step taken the next rollout
+      # is equally off-policy and aborts the same way.
       if (
         self.early_stop_kl
         and performed_updates
@@ -288,8 +269,7 @@ class VisualPPO(PPO):
     env: VecEnv,
     cfg: dict,
     device: str,
-  ) -> "VisualPPO":
-    """Reuse native construction, replacing only cache-enabled storage."""
+  ) -> VisualPPO:
     if not cfg["algorithm"].get("cache_frozen_features", False):
       return PPO.construct_algorithm(obs, env, cfg, device)
 

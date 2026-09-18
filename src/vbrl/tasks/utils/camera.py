@@ -1,5 +1,3 @@
-"""Camera observation composition shared by RGB task modalities."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -14,7 +12,6 @@ if TYPE_CHECKING:
 
 
 def camera_rgb_uint8(env, sensor_name: str):
-  """Return native camera bytes in the BCHW layout expected by policies."""
   rgb = env.scene[sensor_name].data.rgb
   assert rgb is not None, f"Camera {sensor_name!r} has no RGB data."
   return rgb.permute(0, 3, 1, 2)
@@ -29,12 +26,6 @@ def add_rgb_camera(
   width: int | None = None,
   height: int | None = None,
 ) -> None:
-  """Attach the selected robot camera as a policy observation.
-
-  ``visual`` renders the real meshes and is the default. ``collision`` renders
-  the collision proxies instead, and exists only to reproduce the retained
-  Lift-Cube checkpoints that were trained against them.
-  """
   import mujoco
   from mjlab.managers import ObservationGroupCfg, ObservationTermCfg
   from mjlab.sensor import CameraSensorCfg
@@ -55,13 +46,8 @@ def add_rgb_camera(
     use_textures=True,
   )
   cfg.scene.sensors = (cfg.scene.sensors or ()) + (sensor,)
-  # Draw recorded videos with the geometry the policy is actually fed. Without
-  # this the offscreen renderer keeps MuJoCo's default groups 0-2, so a
-  # collision-geometry task records footage of the visual meshes instead.
-  # The floor is the one addition: it is scenery for whoever is watching, which
-  # is why it sits in a group of its own and never in the camera's. The D405 body
-  # is in that group too, for the same reason and because the wrist camera is
-  # mounted inside it.
+  # Record the geometry the policy is fed: without this the offscreen renderer keeps
+  # MuJoCo's default groups 0-2, so a collision-geometry task films the visual meshes.
   drawn = set(geom_groups) | {ORIGIN_PLANE_GROUP}
   cfg.viewer.geom_group = tuple(
     int(group in drawn) for group in range(mujoco.mjNGROUP)

@@ -1,5 +1,3 @@
-"""Compressed-NPZ persistence and output paths shared by the analysis steps."""
-
 from __future__ import annotations
 
 import json
@@ -9,7 +7,6 @@ from typing import Any
 
 import numpy as np
 
-
 METADATA_KEY = "metadata_json"
 
 
@@ -18,7 +15,6 @@ def save_npz(
   arrays: Mapping[str, np.ndarray],
   metadata: Mapping[str, Any] | None = None,
 ) -> Path:
-  """Write a compressed NPZ plus a JSON metadata blob, creating parents."""
   destination = Path(path)
   destination.parent.mkdir(parents=True, exist_ok=True)
   payload = dict(arrays)
@@ -28,7 +24,6 @@ def save_npz(
 
 
 def load_npz(path: str | Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-  """Return every array in an NPZ plus its decoded metadata blob."""
   with np.load(Path(path), allow_pickle=False) as data:
     arrays = {key: data[key].copy() for key in data.files if key != METADATA_KEY}
     metadata = json.loads(str(data[METADATA_KEY])) if METADATA_KEY in data else {}
@@ -36,7 +31,6 @@ def load_npz(path: str | Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
 
 
 def prefixed(arrays: Mapping[str, np.ndarray], prefix: str) -> dict[str, np.ndarray]:
-  """Select the ``prefix``-tagged arrays of an NPZ, with the prefix removed."""
   return {
     key.removeprefix(prefix): value
     for key, value in arrays.items()
@@ -45,7 +39,6 @@ def prefixed(arrays: Mapping[str, np.ndarray], prefix: str) -> dict[str, np.ndar
 
 
 def save_figure(figure: Any, path: str | Path) -> Path:
-  """Write a matplotlib figure and close it, creating parents."""
   import matplotlib.pyplot as plt
 
   destination = Path(path)
@@ -56,7 +49,6 @@ def save_figure(figure: Any, path: str | Path) -> Path:
 
 
 def string_list(value: Any, field: str) -> tuple[str, ...]:
-  """Coerce a manifest field to a tuple of strings, rejecting a bare string."""
   if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
     raise ValueError(f"{field} must be a list of strings.")
   if not all(isinstance(item, str) for item in value):
@@ -71,13 +63,6 @@ def resolve_outputs(
   *,
   label: str,
 ) -> list[tuple[Mapping[str, str], dict[str, Path]]]:
-  """Expand output templates over ``axes``, rejecting colliding destinations.
-
-  ``templates`` maps a role (``"output"``, ``"plot"``, ...) to a format string;
-  each entry of ``axes`` supplies the substitutions for one job. Two jobs that
-  format to the same path would silently overwrite each other, so that is an
-  error rather than a race.
-  """
   jobs: list[tuple[Mapping[str, str], dict[str, Path]]] = []
   seen: set[Path] = set()
   for values in axes:

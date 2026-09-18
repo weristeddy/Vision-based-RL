@@ -1,16 +1,3 @@
-"""The deployment observation must equal the one the simulator computes.
-
-Deployment rebuilds the actor observation from scratch: sensor reads, a
-configured target, and forward kinematics off the MJCF. Every step can be
-subtly wrong -- a joint in the wrong slot, a velocity that should have been
-relative, a quaternion applied forward instead of inverse -- and none of those
-look like errors on hardware. They look like a policy that almost works.
-
-So this feeds the simulator's own state through the deployment assembler and
-demands the same vector back. It is the only check that can fail on a desk
-instead of on a moving arm.
-"""
-
 from __future__ import annotations
 
 import numpy as np
@@ -27,15 +14,11 @@ TASK = "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic"
 
 
 class _Meta:
-  """The metadata an exported ONNX carries, without needing the file."""
-
   def __init__(self, values: dict[str, str]) -> None:
     self.custom_metadata_map = values
 
 
 class _Session:
-  """Enough of an ONNX Runtime session for PolicySpec to read the contract."""
-
   def __init__(self, env) -> None:
     from mjlab.envs.mdp.actions import RelativeJointPositionActionCfg
     from mjlab.rl.exporter_utils import get_base_metadata
@@ -91,7 +74,6 @@ def metadata(simulation):
 def test_the_contract_read_from_metadata_matches_the_simulator(
   simulation, metadata
 ) -> None:
-  """The exported metadata must describe what the environment actually does."""
   unwrapped = simulation.unwrapped
   robot = unwrapped.scene["robot"]
   action = unwrapped.action_manager.get_term("joint_pos")
@@ -118,17 +100,11 @@ def test_deployment_observation_matches_the_simulator(simulation) -> None:
 
   robot = unwrapped.scene["robot"]
   command = unwrapped.command_manager.get_term("lift_height")
-  # `Policy.goal` is in the arm's BASE frame -- the frame its forward kinematics
-  # work in -- so the goal has to be referred to the robot's own root, not to the
-  # env origin. The two coincided only while the base sat at z = 0; it now sits
-  # on the 5 mm mounting plate, and using the origin here left the deployment
-  # side reading a goal 5 mm high.
+  # `Policy.goal` is in the arm's BASE frame, not the env origin.
   base = robot.data.root_link_pos_w[0].cpu().numpy()
   goal = command.target_pos[0].cpu().numpy() - base
 
   policy = Policy(_Session(simulation), goal=tuple(goal))
-  # ``actions`` is mdp.last_action, the raw policy output, which is exactly
-  # what Policy.act remembers -- so no rescaling happens on either side.
   policy._last_action = unwrapped.action_manager.action[0].cpu().numpy()
 
   observation = policy.observe(
@@ -144,7 +120,6 @@ def test_deployment_observation_matches_the_simulator(simulation) -> None:
 
 
 def test_the_camera_feed_is_float_in_zero_to_one(simulation) -> None:
-  """Measured contract: raw 0..255 shifts the actions by 1.65 and looks fine."""
   from vbrl.deployment.policy import Policy
 
   unwrapped = simulation.unwrapped
@@ -169,9 +144,6 @@ def test_the_camera_feed_is_float_in_zero_to_one(simulation) -> None:
 def test_a_goal_outside_the_training_range_is_refused(tmp_path) -> None:
   from vbrl.deployment.config import GOAL_RANGE, DeploymentConfig
 
-  # An empty file is enough: `validate` checks the graph exists before it checks
-  # the goal, so naming a real export here would tie this assertion to whichever
-  # 90 MB file happens to be in the checkout.
   graph = tmp_path / "policy.onnx"
   graph.touch()
   config = DeploymentConfig(
@@ -184,14 +156,6 @@ def test_a_goal_outside_the_training_range_is_refused(tmp_path) -> None:
 
 
 def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
-  """Relative and absolute mappings agree only at the home pose.
-
-  Push-T uses `RelativeJointPositionAction` -- `target = current + scale *
-  action` -- while Lift-Cube's is absolute against the default pose. Applying
-  the absolute one to a relatively-trained policy is silent: the arm stays
-  within one action scale of home for the whole episode and reads as a policy
-  that does nothing, rather than as an error.
-  """
   from dataclasses import replace
 
   import numpy as np
@@ -214,40 +178,23 @@ def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
   )
   policy = Policy.__new__(Policy)
   policy.metadata = metadata
-  policy._response_gain = 1.0
   action = np.array([1.0, -1.0, 0.5, 0.0, 0.25, -0.5])
 
-  # At the home pose the two mappings coincide, which is exactly why the bug
-  # survives a bench test and only shows up once the arm has moved.
   policy._position = default.copy()
   assert np.allclose(policy.joint_targets(action)[:6], default[:6] + 0.1 * action)
 
-  # Away from home they do not, and the relative one must track the arm.
   moved = default + 0.4
   policy._position = moved
   targets = policy.joint_targets(action)
   assert np.allclose(targets[:6], moved[:6] + 0.1 * action)
   assert not np.allclose(targets[:6], default[:6] + 0.1 * action)
 
-  # Push-T drives six joints; the seventh holds its default, which is how the
-  # gripper stays closed without a channel of its own.
   assert targets.shape == (len(ARM_JOINTS),)
   assert targets[6] == pytest.approx(default[6])
   assert policy.has_gripper is False
 
-  # `response_gain` scales the delta at every magnitude, which a rate clamp
-  # cannot: sim realizes 0.267 of what it commands, so on hardware a clamp
-  # throttles transport while leaving fine corrections 3.7x too responsive.
-  policy._response_gain = 0.267
-  scaled = policy.joint_targets(action)
-  assert np.allclose(scaled[:6], moved[:6] + 0.267 * 0.1 * action)
-  assert scaled[6] == pytest.approx(default[6])
-
-  # The action term's clip is part of the contract, not a safety extra. Without
-  # it a deployment sends whatever the policy asks for: on Push-T the commanded
-  # gap reached 0.31 rad against the 0.1 the simulator ever applies, which is
-  # the whole of "the robot moves way too fast".
-  policy._response_gain = 1.0
+  # The clip is part of the contract, not a safety extra: without it Push-T
+  # commanded 0.31 rad against the 0.1 the simulator ever applies.
   policy.metadata = replace(
     metadata, action_clip=(np.full(6, -0.05), np.full(6, 0.05))
   )
@@ -256,25 +203,11 @@ def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
   assert np.allclose(
     clipped[:6], default[:6] + np.clip(0.1 * action, -0.05, 0.05)
   )
-  # 1.0 and -1.0 scale to +-0.1 and must come back at the bound.
   assert clipped[0] == pytest.approx(default[0] + 0.05)
   assert clipped[1] == pytest.approx(default[1] - 0.05)
 
 
 def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() -> None:
-  """`clip_actions` bounds the `actions` observation, or the policy winds up.
-
-  RSL-RL's vector wrapper clamps the action to +/-`clip_actions` before the
-  environment sees it, and the `actions` observation term reads that clamped
-  value -- so a policy never saw one outside the band while training.
-  Deployment has no wrapper. Feeding back the unclipped output closes a
-  positive loop: a more extreme `actions` observation produces a more extreme
-  action, which is fed back more extreme still.
-
-  Measured on hardware, replaying the frame the aborted run logged: 2.1, 3.2,
-  4.2, 5.6, 7.8, 10.7, 14.2, 17.4, diverging to 22.3, against 2.1, 2.8, 2.9,
-  2.95 settling once the bound is applied.
-  """
   from dataclasses import replace
 
   import numpy as np
@@ -302,10 +235,8 @@ def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() 
     policy._last_action = np.zeros(6)
     policy._network_action = np.zeros(6)
     policy._smoothing = 1.0
-    policy._response_gain = 1.0
-    # A divergent map, in the sense the real loop is: the output grows with the
-    # action fed back to it. Gain 1.5 > 1, so the only thing that can stop it
-    # is a bound on what gets fed back.
+    # Divergent the way the real loop is: gain 1.5 > 1, so only a bound on what
+    # gets fed back can stop it.
     policy._infer = lambda observation: 1.5 * observation["obs"][0] + 2.0
     return policy
 
@@ -315,15 +246,10 @@ def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() 
     for policy in (unbounded, bounded):
       policy.act(joint_pos=joint_pos, joint_vel=joint_pos, image=None)
 
-  # Unbounded, it runs away -- past the 6.0 the first hardware run aborted at.
   assert float(np.abs(unbounded.network_action).max()) > 100.0
 
-  # Bounded, it settles at the fixed point of the map evaluated at the bound.
   assert float(np.abs(bounded.network_action).max()) == pytest.approx(3.5)
-  # And what reaches the joints is the clamped action, never the raw output.
   assert np.all(np.abs(bounded.act(
     joint_pos=joint_pos, joint_vel=joint_pos, image=None
   )) <= 1.0)
-  # while `network_action` keeps the unclamped value, so the loop's
-  # out-of-distribution check still has something to measure.
   assert float(np.abs(bounded.network_action).max()) > 1.0

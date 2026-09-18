@@ -1,8 +1,3 @@
-"""Resolve a checkpoint, build a registered environment, and load an actor.
-
-Shared by evaluation, analysis, and playback so each keeps only its CLI.
-"""
-
 from __future__ import annotations
 
 import re
@@ -11,13 +6,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-
 CHECKPOINT_NAME = re.compile(r"model_\d+\.pt")
 AGENTS = ("trained", "zero", "random")
 
 
 def default_device() -> str:
-  """Prefer the first CUDA device, falling back to CPU."""
   import torch
 
   return "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -35,7 +28,6 @@ def read_manifest(
   allowed: set[str],
   label: str = "config",
 ) -> Mapping[str, Any]:
-  """Load a versioned YAML manifest, rejecting fields it does not declare."""
   import yaml  # type: ignore[import-untyped]
 
   if not path.is_file():
@@ -54,12 +46,6 @@ def read_manifest(
 
 @dataclass(frozen=True)
 class CheckpointRef:
-  """Where an actor's weights come from: a local file or a W&B run.
-
-  Exactly one source may be given. The task ID -- not this reference -- is
-  authoritative for architecture, so nothing here describes the model.
-  """
-
   checkpoint_file: str | None = None
   wandb_run_path: str | None = None
   wandb_checkpoint_name: str | None = None
@@ -86,9 +72,6 @@ class CheckpointRef:
     return not any(asdict(self).values())
 
   def validate(self, *, prefix: str = "") -> None:
-    """Enforce the local-file XOR W&B-run rule and each field's shape."""
-    # Order matters: a lone wandb_checkpoint_name is a more specific mistake
-    # than "neither source given", and reporting it first is more useful.
     if self.wandb_checkpoint_name is not None and self.wandb_run_path is None:
       raise ValueError(f"{prefix}wandb_checkpoint_name requires wandb_run_path.")
     if (self.checkpoint_file is None) == (self.wandb_run_path is None):
@@ -112,8 +95,6 @@ class CheckpointRef:
 
 
 class ConstantPolicy:
-  """A zero or uniform-random actor, for baselines and smoke tests."""
-
   def __init__(self, env: Any, *, random_actions: bool) -> None:
     import torch
 
@@ -137,7 +118,6 @@ def load_trained_policy(
   ref: CheckpointRef,
   log_root: str | Path = "logs/rsl_rl",
 ) -> tuple[Any, Any, Any, Path]:
-  """Build the registered runner and strict-load its actor checkpoint."""
   from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
   from mjlab.tasks.registry import load_rl_cfg, load_runner_cls
 
@@ -188,7 +168,6 @@ def build_env(
   drop_terminations: bool = False,
   fixed_lighting: bool = False,
 ) -> Any:
-  """Construct one registered play environment, optionally re-dressed."""
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
 
@@ -221,7 +200,6 @@ def make_policy(
   ref: CheckpointRef,
   device: str,
 ) -> tuple[Any, Any, Any, Path | None]:
-  """Return ``(wrapped_env, runner, policy, checkpoint)`` for any agent kind."""
   if agent not in AGENTS:
     raise ValueError(f"agent must be one of {AGENTS}.")
   if agent == "trained":

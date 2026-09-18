@@ -55,7 +55,6 @@ motion:
   # The resulting hard bound is 0.05 rad/step x 50 Hz x the 0.24 of the
   # commanded gap this arm closes per step, about 0.6 rad/s per joint.
   action_smoothing: 1.0
-  response_gain: 1.0
   max_joint_step: null
   max_gripper_step: 0.01   # unused: Push-T drives joint_0..5 only
   # Sized from the network's own output in sim over 25,600 steps: mean 1.28,

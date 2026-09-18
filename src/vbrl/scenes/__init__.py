@@ -1,5 +1,1 @@
-"""Scene composition.
-
-Import the submodule you need directly: re-exporting ``builder`` here would
-force a MuJoCo import on every consumer of the mujoco-free ``presets``.
-"""
+# Nothing is re-exported: it would force MuJoCo on presets' consumers.

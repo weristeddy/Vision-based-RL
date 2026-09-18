@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${VBRL_REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 PROFILE="b200"
-VARIANT="SlowGoal"
+VARIANT="Sim2Real"
 ARCH_KEEP=""
 ARCH_DROP=""
 DRY_RUN="0"
@@ -28,13 +28,13 @@ USE_FALLBACK="0"
 usage() {
   command cat <<'EOF'
 Usage:
-  bash cluster/submit_sweep.sh [--profile b200] [--variant SlowGoal]
+  bash cluster/submit_sweep.sh [--profile b200] [--variant Sim2Real]
                               [--arch LIST] [--exclude LIST]
                               [--fallback] [--dry-run] [--yes]
                               [-- NATIVE OPTIONS ...]
 
   --profile NAME   a100, b200, testing, a100-single, b200-single (default: b200)
-  --variant TOKEN  the variant token in the task IDs to sweep (default: SlowGoal)
+  --variant TOKEN  the variant token in the task IDs to sweep (default: Sim2Real)
   --arch LIST      comma-separated substrings; keep only task IDs matching one.
                    Filters submission, never registration: an ID has to stay
                    registered for its existing checkpoints to remain loadable,

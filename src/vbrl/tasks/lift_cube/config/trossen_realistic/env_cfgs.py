@@ -1,12 +1,3 @@
-"""Realistic-material Trossen Lift-Cube environments.
-
-Identical to the standard Trossen build except for the robot asset:
-``wxai_realistic.xml`` splits five meshes so each part carries its own material.
-The control constants are shared, so this changes what the camera sees and
-nothing about the dynamics -- which is the point, for a sim2real attempt where
-the robot's own appearance is a large part of every wrist-camera frame.
-"""
-
 from __future__ import annotations
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -18,7 +9,6 @@ from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.lift_cube.lift_cube_env_cfg import build_env_cfg
 from vbrl.tasks.utils import add_rgb_camera
 
-
 _OBJECT_NAME = "cube"
 _OBJECT_XML = CUBE_XML
 
@@ -29,7 +19,6 @@ def trossen_realistic_lift_cube_env_cfg(
   camera_geometry: CameraGeometry = "visual",
   play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-  """Build the realistic-material Trossen Lift-Cube environment."""
   robot = make_wxai_realistic()
   cfg = build_env_cfg(
     robot=robot,

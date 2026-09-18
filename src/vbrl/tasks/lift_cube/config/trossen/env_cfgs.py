@@ -1,5 +1,3 @@
-"""Trossen Lift-Cube environments used by registered policy contracts."""
-
 from __future__ import annotations
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -11,7 +9,6 @@ from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.lift_cube.lift_cube_env_cfg import build_env_cfg
 from vbrl.tasks.utils import add_rgb_camera
 
-
 _OBJECT_NAME = "cube"
 _OBJECT_XML = CUBE_XML
 
@@ -22,7 +19,6 @@ def trossen_lift_cube_env_cfg(
   camera_geometry: CameraGeometry = "visual",
   play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-  """Build the Trossen Lift-Cube environment for one scene and camera."""
   robot = make_wxai()
   cfg = build_env_cfg(
     robot=robot,

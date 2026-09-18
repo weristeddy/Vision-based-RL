@@ -12,9 +12,8 @@ import yaml
 import vbrl.evaluation.report as report
 import vbrl.evaluation.suite as suite
 from vbrl.evaluation.rollout import run_episodes
-from vbrl.runtime import CheckpointRef
 from vbrl.evaluation.suite import EvaluationConfig, EvaluationModel, Scene
-
+from vbrl.runtime import CheckpointRef
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_ID = (

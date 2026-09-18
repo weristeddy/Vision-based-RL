@@ -1,11 +1,3 @@
-"""Explicit GPU audit for all thesis checkpoints retained under ``ckpts/``.
-
-This module is intentionally skipped during normal pytest runs.  Set
-``VBRL_AUDIT_RETAINED_CHECKPOINTS=1`` from the repository root after copying
-the 26 checkpoints into ``ckpts/`` to construct every registered policy and
-strict-load its actor weights.
-"""
-
 from __future__ import annotations
 
 import gc
@@ -13,7 +5,6 @@ import os
 from pathlib import Path
 
 import pytest
-
 
 pytestmark = [
   pytest.mark.gpu,

@@ -1,10 +1,3 @@
-"""The single registry of visual backbones, adapters, and their composition.
-
-**The module tree built here is checkpoint format.** ``nn.Sequential`` index
-positions, attribute names, and construction order are all weight keys for the
-26 retained checkpoints; ``tests/test_vision_checkpoint_layout.py`` pins them.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -32,7 +25,6 @@ from .config import (
 from .encoder import Extract, Preprocess, VisualEncoder
 from .preprocessing import preprocess_dinov2, preprocess_r3m, to_unit_interval
 
-
 BackboneBuilder = Callable[[tuple[int, int]], nn.Module]
 ExtractorFactory = Callable[[FeatureRequest, int], Extract]
 AdapterBuilder = Callable[
@@ -43,18 +35,10 @@ AdapterBuilder = Callable[
 
 @dataclass(frozen=True)
 class EncoderSpec:
-  """Everything known about one registered visual backbone."""
-
   name: EncoderName
   channels: int
   weights: Weights
   trainable: bool
-  # Requests for which this backbone's extractor returns [B, C, H, W].
-  #
-  # This is NOT a capability declaration. It decides whether the global and
-  # linear adapters prepend AdaptiveAvgPool2d + Flatten, which shifts every
-  # Sequential index -- and it gates the R3M `resnet` alias. Widening it would
-  # silently break the eight registered *-Linear-* checkpoints.
   spatial_requests: frozenset[FeatureRequest]
   default_encode_batch_size: int | None
   build: BackboneBuilder
@@ -67,8 +51,6 @@ class EncoderSpec:
 
 @dataclass(frozen=True)
 class AdapterSpec:
-  """Everything known about one registered adapter head."""
-
   name: AdapterName
   feature_request: FeatureRequest
   build: AdapterBuilder
@@ -81,11 +63,6 @@ _ALL_FEATURES: frozenset[FeatureRequest] = frozenset(
 _SPATIAL_FEATURES: frozenset[FeatureRequest] = frozenset({"spatial", "local_grid"})
 
 
-# --- adapter builders -------------------------------------------------------
-#
-# Sequential member order and count are checkpoint keys. The AdaptiveAvgPool2d
-# prefix is added only for backbones whose extractor returns a spatial map, so
-# `global`/`linear` on DINOv2 or R3M start at index 0.
 
 
 def _global_adapter(
@@ -107,7 +84,6 @@ def _linear_adapter(
   channels: int,
   spatial: bool,
 ) -> tuple[nn.Module, int]:
-  # Preserve Sequential indices and therefore existing checkpoint keys.
   layers: list[nn.Module] = []
   if spatial:
     layers.extend((nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)))
@@ -201,8 +177,6 @@ def _afa_adapter(
   return adapter, adapter.output_dim
 
 
-# --- the registry -----------------------------------------------------------
-
 ENCODERS: dict[EncoderName, EncoderSpec] = {
   "nature_cnn": EncoderSpec(
     "nature_cnn", 64, "scratch", True, _ALL_FEATURES, None,
@@ -220,10 +194,8 @@ ENCODERS: dict[EncoderName, EncoderSpec] = {
     "r3m_resnet50", 2048, "pretrained", False, _SPATIAL_FEATURES, 256,
     r3m.build, preprocess_r3m, r3m.make_extractor, r3m.install_spatial_alias,
   ),
-  # Same frozen network, tapped one stage earlier: stride 16 instead of 32, so
-  # the Push-T object spans 3.1 feature cells instead of 1.5. No `resnet` alias
-  # -- that exists only to load retained layer4 checkpoints. Halved encode batch
-  # because a layer3 map is twice the size of a layer4 one.
+  # Same frozen network, tapped one stage earlier: stride 16 instead of 32, so the
+  # Push-T object spans 3.1 feature cells instead of 1.5.
   "r3m_resnet50_layer3": EncoderSpec(
     "r3m_resnet50_layer3", 1024, "pretrained", False, _SPATIAL_FEATURES, 128,
     r3m.build, preprocess_r3m, r3m.make_layer3_extractor,
@@ -274,7 +246,6 @@ def adapter_spec(name: str) -> AdapterSpec:
 
 
 def check_composition(config: VisionConfig) -> None:
-  """Fail before loading weights when a composition is not registered."""
   spec = encoder_spec(config.encoder)
   adapter = adapter_spec(config.adapter)
   if config.weights != spec.weights:
@@ -316,7 +287,6 @@ def build_encoder(
   input_dim: tuple[int, int],
   input_channels: int = 3,
 ) -> VisualEncoder:
-  """Compose one registered backbone and adapter into a visual encoder."""
   config.validate()
   if config.encoder == "none":
     raise ValueError("encoder='none' does not create a visual encoder.")
@@ -328,7 +298,6 @@ def build_encoder(
   spec, adapter_cfg = ENCODERS[config.encoder], ADAPTERS[config.adapter]
   request = adapter_cfg.feature_request
   spatial = request in spec.spatial_requests
-  # Preserve seeded initialization order: backbone before adapter.
   backbone = spec.build(input_dim)
   adapter, output_dim = adapter_cfg.build(config, adapter_cfg, spec.channels, spatial)
   batch_size = config.encode_batch_size

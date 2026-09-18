@@ -5,13 +5,11 @@ from typing import Any
 
 import numpy as np
 
+from vbrl.deployment.config import TARGET_Z_BASE_M
 from vbrl.deployment.kinematics import Kinematics
 
 TERMS = ("joint_pos", "joint_vel", "actions", "goal_position", "target_pose")
-TARGET_Z = 0.0070
 
-# The gripper's two carriage joints mirror one another and the arm reports one,
-# so the hardware's seventh value is the left carriage.
 ARM_JOINTS = (
   "joint_0",
   "joint_1",
@@ -27,38 +25,17 @@ _REQUIRED = ("joint_names", "default_joint_pos", "observation_names", "action_sc
 
 @dataclass(frozen=True)
 class PolicyMetadata:
-  """How the trained policy expects to be fed, read out of the ONNX file.
-
-  mjlab attaches all of this at export, so deployment never consults the task
-  registry and cannot drift from the run that produced the weights.
-  """
-
   joint_names: tuple[str, ...]
-  """The model's joint order: 6 arm joints and both gripper carriages."""
   default_joint_pos: Any
-  """The nominal pose. ``joint_pos`` is reported relative to it."""
   action_offset: Any
   action_scale: Any
-  """``target = action_offset + action_scale * action``, over the 7 actuated joints."""
   observation_terms: tuple[str, ...]
-  """The order the observation vector is concatenated in."""
   action_dim: int
   action_clip: Any
-  """``(low, high)`` on the processed delta, or ``None`` if unbounded."""
   relative: bool
-  """``target = current + scale * action`` rather than ``offset + scale * action``."""
   clip_actions: float | None
-  """The bound RSL-RL's wrapper put on the action *before* the env saw it.
-
-  It is the band the policy's own ``actions`` observation was drawn from -- in
-  training it never saw a value outside it -- so it has to be applied here too,
-  where there is no wrapper. Leaving it off lets the term feed back its
-  unclipped output, and since a more extreme `actions` observation produces a
-  more extreme action, the two wind each other up: measured on hardware as
-  2.1, 3.0, 3.7, 4.2, 5.2, 6.5 over six consecutive steps."""
   needs_camera: bool
   source_run: str
-  """The training run the weights came from, for the startup banner."""
 
   @classmethod
   def from_onnx(cls, onnx_session: Any) -> PolicyMetadata:
@@ -98,32 +75,22 @@ class PolicyMetadata:
 
   @property
   def home_pose(self) -> Any:
-    """The 7 hardware joint targets matching the nominal pose, gripper last."""
     return self.action_offset
 
 
 class Policy:
-  """The exported policy: sensor readings in, an action out.
-
-  ``act`` remembers the action it returns, because the policy's own last action
-  is one of its inputs. Keeping that inside means the caller cannot feed back
-  something else -- the clamped joint target, say, which stalls the loop.
-  """
-
   def __init__(
     self,
     onnx_session: Any,
     *,
     goal: tuple[float, float, float],
     smoothing: float = 1.0,
-    response_gain: float = 1.0,
   ) -> None:
     self.metadata = PolicyMetadata.from_onnx(onnx_session)
     self._onnx = onnx_session
     self._kinematics = Kinematics()
     self._goal = np.asarray(goal, dtype=np.float64)
     self._smoothing = smoothing
-    self._response_gain = response_gain
     self._last_action = np.zeros(self.metadata.action_dim)
     self._network_action = np.zeros(self.metadata.action_dim)
     self._goal_position = np.full(3, np.inf)
@@ -142,24 +109,20 @@ class Policy:
 
   @property
   def goal_distance(self) -> float:
-    """How far the end effector is from the goal, as of the last observation."""
     return float(np.linalg.norm(self._goal_position))
 
   @property
   def goal(self) -> Any:
-    """The target in the base frame. A copy, so mutating it changes nothing."""
     return self._goal.copy()
 
   @goal.setter
   def goal(self, position: Any) -> None:
-    """Move the target. ``observe`` reads it again on the next step."""
     position = np.asarray(position, dtype=np.float64)
     if position.shape != (3,):
       raise ValueError(f"goal must be 3 values; got {position.shape}.")
     self._goal = position
 
   def observe(self, *, joint_pos: Any, joint_vel: Any, image: Any) -> dict[str, Any]:
-    """One step's observation, in the term order the metadata gives."""
     position = self._position = self._mirror_gripper(joint_pos)
     terms = {
       "joint_pos": position - self.metadata.default_joint_pos,
@@ -175,7 +138,7 @@ class Policy:
     if "target_pose" in self.metadata.observation_terms:
       x, y, yaw = self._goal
       terms["target_pose"] = np.array(
-        [x, y, TARGET_Z, np.sin(yaw), np.cos(yaw)]
+        [x, y, TARGET_Z_BASE_M, np.sin(yaw), np.cos(yaw)]
       )
     observation = {
       "obs": np.concatenate(
@@ -189,11 +152,7 @@ class Policy:
     return observation
 
   def act(self, *, joint_pos: Any, joint_vel: Any, image: Any) -> Any:
-    """The action to apply, smoothed and remembered as the next `actions` term."""
     observation = self.observe(joint_pos=joint_pos, joint_vel=joint_vel, image=image)
-    # Kept unclamped for the caller's out-of-distribution check: once the
-    # clamp is applied nothing can exceed it, so the clamped value carries no
-    # signal about how far outside its training band the policy has gone.
     self._network_action = raw_action = self._infer(observation)
     if self.metadata.clip_actions is not None:
       bound = self.metadata.clip_actions
@@ -205,7 +164,6 @@ class Policy:
 
   @property
   def network_action(self) -> Any:
-    """The last action straight off the graph, before `clip_actions`."""
     return self._network_action
 
   @property
@@ -213,19 +171,10 @@ class Policy:
     return self.metadata.action_dim == len(ARM_JOINTS)
 
   def joint_targets(self, action: Any) -> Any:
-    """The mapping the action term applies in sim, relative or absolute.
-
-    Unactuated joints hold their default, which is how Push-T keeps the gripper
-    closed: it drives `joint_0..5` only, and its default carries the closed
-    carriage. Getting the mapping wrong is silent rather than loud -- an
-    absolute mapping on a relatively-trained policy pins the arm within one
-    action scale of its home pose and looks like a policy that does nothing.
-    """
     n = self.metadata.action_dim
     base = self._position if self.metadata.relative else self.metadata.action_offset
     targets = self.metadata.action_offset.copy()
-    gain = self._response_gain if self.metadata.relative else 1.0
-    delta = gain * self.metadata.action_scale[:n] * action
+    delta = self.metadata.action_scale[:n] * action
     if self.metadata.action_clip is not None:
       low, high = self.metadata.action_clip
       delta = np.clip(delta, low[:n], high[:n])
@@ -235,24 +184,20 @@ class Policy:
   def warm_up(
     self, *, joint_pos: Any, joint_vel: Any, image: Any, runs: int = 5
   ) -> None:
-    """Pay kernel selection before the first real step, without changing state."""
     observation = self.observe(joint_pos=joint_pos, joint_vel=joint_vel, image=image)
     for _ in range(runs):
       self._infer(observation)
 
   def _infer(self, observation: dict[str, Any]) -> Any:
-    """One forward pass. ``None`` asks onnxruntime for every output."""
     return self._onnx.run(None, observation)[0].reshape(-1)
 
   def _mirror_gripper(self, measured: Any) -> Any:
-    """The arm's 7 values as the model's 8, duplicating the gripper carriage."""
     if len(measured) == len(self.metadata.joint_names):
       return measured
     return np.concatenate([measured, measured[-1:]])
 
 
 def load_policy(config: Any) -> Policy:
-  """Open the exported ONNX and wrap it with the run's goal and smoothing."""
   import onnxruntime as ort
 
   onnx_session = ort.InferenceSession(
@@ -262,12 +207,10 @@ def load_policy(config: Any) -> Policy:
     onnx_session,
     goal=config.goal,
     smoothing=config.motion.action_smoothing,
-    response_gain=config.motion.response_gain,
   )
 
 
 def _rotate_by_inverse(quaternion: Any, vector: Any) -> Any:
-  """Rotate by the inverse of a ``(w, x, y, z)`` quaternion."""
   w, x, y, z = quaternion
   axis = np.array([-x, -y, -z])
   first = np.cross(axis, vector)

@@ -1,5 +1,3 @@
-"""Deterministic planar geometry used by the Push-T task."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -8,8 +6,7 @@ from dataclasses import dataclass
 import torch
 
 
-def yaw_from_quat(quat: "torch.Tensor") -> "torch.Tensor":
-  """Return the Z-axis rotation of a world-frame quaternion."""
+def yaw_from_quat(quat: torch.Tensor) -> torch.Tensor:
   from mjlab.utils.lab_api.math import euler_xyz_from_quat
 
   return euler_xyz_from_quat(quat)[2]
@@ -34,14 +31,6 @@ _DESIGN_PARTS = (
 
 
 def _centre_of_mass(parts: Sequence[FootprintPart]) -> tuple[float, float]:
-  """Area centroid of the parts, which is the centre of mass at one density.
-
-  The slab is a single thickness and push_t.xml gives each box a mass in
-  proportion to its area, so area centroid and centre of mass coincide. That is
-  ManiSkill3's own choice -- it sets one total mass on the builder and lets the
-  engine spread it over the collision geometry -- so matching it means keeping
-  the density uniform, not equalising the two boxes.
-  """
   weights = [4.0 * p.half_extents_xy[0] * p.half_extents_xy[1] for p in parts]
   total = sum(weights)
   return tuple(
@@ -50,17 +39,8 @@ def _centre_of_mass(parts: Sequence[FootprintPart]) -> tuple[float, float]:
   )  # type: ignore[return-value]
 
 
-# Origin on the centre of mass, as ManiSkill3 does it ("we have to center tee at
-# its com so rotations are applied to com"). Computed rather than typed so the
-# invariant cannot drift, and so push_t.xml has one place to agree with.
-#
-# Why it matters: the dense reward measures `root_link_pos_w`, which MuJoCo fills
-# from `data.xpos` -- the body frame origin, not `xipos`. With the origin off the
-# centre of mass by 3.21 mm, the point the reward watched orbited the mass centre
-# as the T turned, so a pure rotation in place moved the *position* term: 6.42 mm
-# of apparent displacement for half a turn, costing 0.063 of the position factor
-# right where that factor is steepest. Re-centring removes the coupling and makes
-# `xpos` the centre of mass, so the reward needs no change to match ManiSkill.
+# Origin on the centre of mass, as ManiSkill3 does it, computed so push_t.xml has one
+# place to agree with.
 CENTRE_OF_MASS_OFFSET = _centre_of_mass(_DESIGN_PARTS)
 FOOTPRINT_PARTS = tuple(
   FootprintPart(
@@ -106,14 +86,6 @@ def _part_tensors(
 
 
 class FootprintRasterizer:
-  """GPU-vectorized 64x64 target-frame footprint overlap calculator.
-
-  Pixel centers are defined deterministically in the goal frame. The same
-  registered rectangle metadata creates the goal mask and tests membership in
-  the transformed object mask, so geometry, visualization, and success cannot
-  drift apart.
-  """
-
   def __init__(
     self,
     footprint_parts: Sequence[FootprintPart],
@@ -150,9 +122,6 @@ class FootprintRasterizer:
     grid_y, grid_x = torch.meshgrid(axis, axis, indexing="ij")
     all_goal_points = torch.stack((grid_x, grid_y), dim=-1).reshape(-1, 2)
     goal_mask = self._inside_footprint(all_goal_points)
-    # Only goal-occupied pixels can contribute to intersection-over-goal-area.
-    # Prefiltering retains the exact deterministic 64x64 mask while avoiding
-    # per-environment transforms for the large empty background.
     self.goal_points = all_goal_points[goal_mask]
     self.goal_area = self.goal_points.shape[0]
     if self.goal_area == 0:
@@ -170,7 +139,6 @@ class FootprintRasterizer:
     target_xy: torch.Tensor,
     target_yaw: torch.Tensor,
   ) -> torch.Tensor:
-    """Return intersection-over-goal-area for each batched planar pose."""
     batch_size = object_xy.shape[0]
     if object_xy.shape != target_xy.shape or object_xy.shape[-1] != 2:
       raise ValueError("Object and target XY tensors must both have shape (N, 2).")
@@ -182,8 +150,6 @@ class FootprintRasterizer:
     target_cos = torch.cos(target_yaw).unsqueeze(-1)
     target_sin = torch.sin(target_yaw).unsqueeze(-1)
 
-    # Transform goal-frame pixel centers into world-space displacements from
-    # the current object center.
     delta_x = (
       target_cos * goal_x
       - target_sin * goal_y
@@ -195,7 +161,6 @@ class FootprintRasterizer:
       + (target_xy[:, 1] - object_xy[:, 1]).unsqueeze(-1)
     )
 
-    # Apply the inverse object rotation to obtain local object coordinates.
     object_cos = torch.cos(object_yaw).unsqueeze(-1)
     object_sin = torch.sin(object_yaw).unsqueeze(-1)
     local_x = object_cos * delta_x + object_sin * delta_y
@@ -217,7 +182,6 @@ def footprint_overlap_from_pose(
   resolution: int = 64,
   half_width: float = MASK_HALF_WIDTH,
 ) -> torch.Tensor:
-  """Convenience wrapper for testing or one-off batched overlap evaluation."""
   rasterizer = FootprintRasterizer(
     footprint_parts,
     device=object_xy.device,

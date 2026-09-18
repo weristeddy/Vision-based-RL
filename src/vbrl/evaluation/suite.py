@@ -1,10 +1,8 @@
-"""Load and execute a YAML-defined model × scene × seed evaluation suite."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from itertools import product
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -15,15 +13,12 @@ from vbrl.runtime import CheckpointRef, read_manifest, required_text
 from .report import write_report
 from .rollout import run_episodes
 
-
 EvaluationTexture = Literal["peacock", "plaster", "wood"]
 EvaluationDr = Literal["fixed", "matched"]
 
 
 @dataclass(frozen=True)
 class Scene:
-  """A complete evaluation scene preset, including its DR mode."""
-
   name: str
   base_scene: EvaluationTexture
   eval_dr: EvaluationDr
@@ -31,8 +26,6 @@ class Scene:
 
 @dataclass(frozen=True)
 class EvaluationModel:
-  """One named checkpoint paired with its registered structural task."""
-
   name: str
   task_id: str
   ref: CheckpointRef
@@ -112,8 +105,6 @@ def _model(value: Any, index: int) -> EvaluationModel:
 
 
 def load_config(path: str | Path) -> EvaluationConfig:
-  """Read the complete evaluation definition from one YAML file."""
-
   raw = read_manifest(
     repository_path(path),
     allowed={"version", "name", "models", "scenes", "episodes", "seeds", "output"},
@@ -143,10 +134,8 @@ def load_config(path: str | Path) -> EvaluationConfig:
   )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _architecture(task_id: str) -> str:
-  """Human-readable encoder+adapter label. Cached: it depends only on the ID,
-  and the evaluation loop asks once per model x scene x seed."""
   from mjlab.rl import RslRlOnPolicyRunnerCfg
   from mjlab.tasks.registry import load_rl_cfg
 
@@ -203,8 +192,6 @@ def _run_case(
 
 
 def run_suite(config: EvaluationConfig, device: str) -> Path:
-  """Run every configured model × scene × seed combination."""
-
   rows = []
   total = len(config.models) * len(config.scenes) * len(config.seeds)
   cases = product(config.models, config.scenes, config.seeds)

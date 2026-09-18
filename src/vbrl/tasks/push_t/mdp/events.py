@@ -1,11 +1,8 @@
-"""Push-T event term functions; ``push_t_env_cfg.py`` wires them up."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, cast
 
 import torch
-
 from mjlab.entity import Entity
 from mjlab.envs.mdp import resolve_env_ids
 from mjlab.managers import SceneEntityCfg
@@ -18,38 +15,8 @@ if TYPE_CHECKING:
 
 # ManiSkill3's vision-based sim-to-real setup.
 ROBOT_JOINT_POSITION_STD_RAD = 0.02
-# The object/table sliding coefficient, retuned to the real rig rather than
-# inherited. ManiSkill3's 0.30 matched one PVC-on-wood measurement (0.296), but
-# the standard reference for plastic on wood is 0.40 sliding (0.50 static) and
-# printed PLA measures 0.38-0.57 -- and the real table here is a bare wood plate,
-# the rougher end of that range. The rig's table is unsanded pine -- not
-# laminate, not planed -- so it is rough and, more importantly, rough
-# *unevenly*: the coefficient varies from spot to spot across the board.
-#
-# 0.55 is set from the literature rather than from this table, which has not
-# been measured:
-#
-#   * generic plastic on wood is quoted at mu_s 0.50 / mu_k 0.40, the most
-#     widely repeated pair, and MuJoCo's geom_friction is a single sliding
-#     coefficient with no static/kinetic split;
-#   * PLA itself sits above generic plastic -- reciprocating tests put neat PLA
-#     at 0.65-0.70, and PLA wear studies span 0.37-0.75;
-#   * print orientation moves it too, transverse higher than longitudinal;
-#   * and an unsanded surface pushes it up again from any planed reference.
-#
-# So the centre belongs above the 0.40 the MJCF carried, which is also what the
-# hardware says: the real T is visibly harder to slide than the simulated one.
-# 0.12 puts two sigma at 0.31-0.79, spanning the whole published range, and
-# three sigma at 0.19-0.91 for the tails.
-#
-# Still a reference value, not a measurement. A tilt test at five or six spots
-# (mu = tan(theta), centre on the median, three sigma over the spread) would
-# replace both numbers with the board's own.
-#
-# Side effect worth naming, since it is not the reason for the change: dragging
-# the T from its top face needs mu_table*mg/(mu_grip - mu_table), so raising the
-# table from 0.40 to 0.55 moves that threshold with it. The fingertip pads run
-# to mu 1.5, and that ratio, not the table, is what makes dragging cheap.
+# Object/table sliding coefficient, set from the literature rather than measured on this
+# rig: printed PLA on unsanded wood spans roughly 0.37-0.75, and the real T is visibly.
 OBJECT_TABLE_FRICTION_MEAN = 0.55
 OBJECT_TABLE_FRICTION_STD = 0.12
 
@@ -68,7 +35,6 @@ def reset_joints_with_gaussian_offset(
   position_std: float,
   asset_cfg: SceneEntityCfg,
 ) -> None:
-  """Reset selected joints around their defaults using Gaussian offsets."""
   if position_std < 0.0:
     raise ValueError("position_std must be non-negative.")
 
@@ -126,14 +92,6 @@ def randomize_object_table_friction(
   object_asset_cfg: SceneEntityCfg,
   table_asset_cfg: SceneEntityCfg,
 ) -> None:
-  """Set one sampled effective sliding coefficient on both contact surfaces.
-
-  MuJoCo takes the maximum sliding-friction coefficient of equal-priority
-  colliding geoms. Sampling only the object would therefore be masked by the
-  table's nominal coefficient of 1.0. Writing the same sample to the T's two
-  collision geoms and the table collision geom makes the effective T-table
-  coefficient equal to the requested sample.
-  """
   if std < 0.0:
     raise ValueError("std must be non-negative.")
 

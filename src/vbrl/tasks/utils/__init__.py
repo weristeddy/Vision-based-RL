@@ -1,8 +1,3 @@
-"""Helpers shared by every task package.
-
-Excluded from ``import_packages`` discovery, so nothing here registers a task.
-"""
-
 from .camera import add_rgb_camera, camera_rgb_uint8
 from .tabletop_env_cfg import (
   EE_GROUND_CONTACT_SENSOR,
@@ -10,7 +5,6 @@ from .tabletop_env_cfg import (
   make_tabletop_env_cfg,
 )
 from .tags import wandb_task_tag
-
 
 __all__ = [
   "EE_GROUND_CONTACT_SENSOR",

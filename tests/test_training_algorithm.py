@@ -55,7 +55,6 @@ def _build_test_ppo(
 def _matching_native_and_visual_ppo(
   accumulation_steps: int,
 ) -> tuple[PPO, VisualPPO]:
-  """Build algorithms with identical deterministic models and rollouts."""
   kwargs = {
     "num_learning_epochs": 2,
     "num_mini_batches": 1,
@@ -118,8 +117,6 @@ def _assert_ppo_parameters_close(
       )
 
 
-# The pre-refactor implementation is the oracle for accumulated updates; see
-# the data file's own comment before touching it.
 _FROZEN = json.loads(
   (Path(__file__).parent / "data" / "visual_ppo_accumulated.json").read_text()
 )
@@ -131,13 +128,6 @@ def test_early_kl_stop_requires_a_target() -> None:
 
 
 def test_opt_in_kl_stop_always_takes_one_update_first() -> None:
-  """The KL stop trims an update; it must never skip one entirely.
-
-  Aborting before any optimizer step is a trap, not a safeguard: the policy does
-  not move, so the next iteration's rollout is equally off-policy and aborts the
-  same way. That deadlock cost one 6,000-iteration cluster run its last 2,950
-  iterations when a curriculum rung widened the goal distribution.
-  """
   algorithm, actor, critic, storage = _build_test_ppo(
     VisualPPO,
     distribution_cfg={
@@ -170,8 +160,6 @@ def test_opt_in_kl_stop_always_takes_one_update_first() -> None:
 
   assert losses["kl_stopped_early"] == 1.0
   assert losses["approx_kl"] > algorithm.desired_kl
-  # Two logical minibatches: the first steps unconditionally, the second is what
-  # the KL stop rejects.
   assert losses["performed_updates"] == 1.0
   assert any(
     not torch.equal(previous, current)

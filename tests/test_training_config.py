@@ -1,19 +1,14 @@
-"""Registered agent configs and the native W&B sweeps that drive them."""
-
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-
 yaml = pytest.importorskip("yaml")
 pytest.importorskip("mjlab")
 
 
 SWEEPS = sorted((Path(__file__).resolve().parents[1] / "configs" / "sweeps").glob("*.yaml"))
-# Sweeps vary run-specific parameters only. Anything structural -- encoder,
-# adapter, camera, robot, scene -- selects a different registered task ID.
 NATIVE_SWEEP_KEYS = {
   "agent.seed",
   "agent.max-iterations",
@@ -43,7 +38,6 @@ def _task_ids() -> set[str]:
 
 
 def test_every_task_logs_to_wandb_under_its_own_id_tag() -> None:
-  """The first tag identifies the task, within W&B's 64-character limit."""
   from mjlab.tasks.registry import load_rl_cfg
 
   from vbrl.tasks.utils import wandb_task_tag
@@ -60,11 +54,6 @@ def test_every_task_logs_to_wandb_under_its_own_id_tag() -> None:
 
 
 def test_every_run_is_named_after_its_task() -> None:
-  """RSL-RL names the W&B run after the log directory, which ends in run_name.
-
-  Without this the runs show up as bare timestamps, and several architectures
-  share one experiment_name, so nothing in the W&B list tells them apart.
-  """
   from mjlab.tasks.registry import load_rl_cfg
 
   from vbrl.tasks.utils import wandb_task_tag
@@ -74,7 +63,6 @@ def test_every_run_is_named_after_its_task() -> None:
 
 
 def test_wandb_tags_never_exceed_the_limit_wandb_enforces() -> None:
-  """W&B rejects a run whose tag is over 64 characters, mid-training."""
   from mjlab.tasks.registry import load_rl_cfg
 
   from vbrl.tasks.utils.tags import WANDB_TAG_MAX_LENGTH, wandb_task_tag
@@ -93,7 +81,7 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   from vbrl.training.ppo import VisualPpoCfg
 
   agent = load_rl_cfg(
-    "Mjlab-PushT-SlowGoal-DinoV2ViTS14-LocalGrid16-TrossenRealistic"
+    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic"
   )
 
   assert agent.actor.hidden_dims == (256, 256, 128)
@@ -116,7 +104,7 @@ def test_state_tasks_keep_native_ppo() -> None:
   from mjlab.rl import RslRlPpoAlgorithmCfg
   from mjlab.tasks.registry import load_rl_cfg
 
-  for task_id in ("Mjlab-PushCube-State-Trossen", "Mjlab-PushT-State-TrossenRealistic"):
+  for task_id in ("Mjlab-PushT-State-TrossenRealistic",):
     agent = load_rl_cfg(task_id)
     assert type(agent.algorithm) is RslRlPpoAlgorithmCfg
     assert agent.actor.hidden_dims == (512, 256, 128)
@@ -134,7 +122,6 @@ def test_every_sweep_fixes_one_registered_task_and_varies_native_keys_only() -> 
     assert len([t for t in command if str(t) in task_ids]) == 1, name
     assert set(sweep.get("parameters", {})) <= NATIVE_SWEEP_KEYS, name
 
-    # W&B renders booleans unreliably, so they stay literal command entries.
     for index, value in enumerate(command[:-1]):
       if value in {"--video", "--headless"}:
         assert command[index + 1] in {"True", "False"}, name
@@ -144,7 +131,6 @@ def test_every_sweep_fixes_one_registered_task_and_varies_native_keys_only() -> 
 
 
 def test_every_sweep_flag_path_parses_against_the_train_cli() -> None:
-  """Each sweep must resolve against the CLI it actually launches."""
   import mjlab
   import tyro
 

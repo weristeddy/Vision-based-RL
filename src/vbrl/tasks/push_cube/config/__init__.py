@@ -1,1 +1,0 @@
-"""Push-Cube robot configurations."""

@@ -1,5 +1,3 @@
-"""Run a YAML evaluation suite: ``vbrl-evaluate configs/evaluation/....yaml``."""
-
 from __future__ import annotations
 
 import argparse

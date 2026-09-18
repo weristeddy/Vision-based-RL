@@ -6,17 +6,6 @@ import torch.nn.functional as F
 
 
 class FlattenAdapter(nn.Module):
-  """The plain Nature-CNN head: flatten the whole feature map, project once.
-
-  This is what "no adapter" means for a trainable encoder. Nothing is pooled,
-  projected, or attended to first -- and nothing can be, because a policy MLP
-  needs a vector. Removing this layer would only move the same
-  ``channels x grid^2 -> output_dim`` matrix into the MLP's first layer.
-
-  Unlike :class:`LocalGridAdapter` it never resamples: a map of the wrong size
-  is a configuration error, not something to average away.
-  """
-
   def __init__(
     self,
     input_channels: int,
@@ -43,21 +32,6 @@ class FlattenAdapter(nn.Module):
 
 
 class FlattenReluAdapter(nn.Module):
-  """ManiSkill3's Nature-CNN head: flatten, project once, rectify.
-
-  Identical to :class:`FlattenAdapter` in shape and parameter count; the only
-  difference is that the projection is followed by a ReLU rather than a
-  LayerNorm, which is what ``ppo_rgb.py`` does. Kept as a separate class rather
-  than a flag because the module tree is checkpoint format -- swapping the
-  normalisation inside ``FlattenAdapter`` would invalidate every retained
-  ``*-Flatten-*`` checkpoint.
-
-  A ReLU here is safe only because the flattened map is already non-negative
-  post-ReLU conv output. The same substitution on a coordinate readout would be
-  destructive: spatial softmax emits expected x/y in roughly [-1, 1], and a
-  rectifier would collapse half the image plane onto zero.
-  """
-
   def __init__(
     self,
     input_channels: int,
@@ -85,8 +59,6 @@ class FlattenReluAdapter(nn.Module):
 
 
 class LocalGridAdapter(nn.Module):
-  """Compress an ordered feature grid into one policy vector."""
-
   def __init__(
     self,
     input_channels: int,
@@ -119,8 +91,6 @@ class LocalGridAdapter(nn.Module):
 
 
 class SpatialSoftmaxAdapter(nn.Module):
-  """Convert spatial heatmaps to interleaved expected x/y coordinates."""
-
   def __init__(self, input_channels: int, output_channels: int = 128) -> None:
     super().__init__()
     if input_channels <= 0 or output_channels <= 0:
@@ -166,8 +136,6 @@ class SpatialSoftmaxAdapter(nn.Module):
 
 
 class AttentionPoolLatent(nn.Module):
-  """Attention pooling with the trainable latent-query layout used by PV-Robo."""
-
   def __init__(self, features: int, num_heads: int) -> None:
     super().__init__()
     if features % num_heads:

@@ -1,5 +1,3 @@
-"""State and RGB Push-T configuration shared by every robot and scene."""
-
 from __future__ import annotations
 
 import math
@@ -27,208 +25,46 @@ from . import mdp
 from .geometry import HALF_HEIGHT, REST_HEIGHT
 from .goal_marker import GOAL_ENTITY_NAME
 
-
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
 _ACTION_DELTA = 0.1
-# A smaller per-step delta, for training a policy that is already slow enough to
-# deploy raw. Scale and clip move together: the task is built with the two equal,
-# so `|action| <= 1` spans exactly the full displacement.
-#
-# Scaling rather than clipping alone. A clip past the scale is a dead zone in
-# the gradient -- beyond it the action changes nothing, so nothing teaches the
-# policy to stay inside, and its output drifts: this one reaches |a| = 4.25 in
-# sim and 5.16 on hardware against the +-1 the network should be using. Halving
-# the clip alone would leave the usable range at |a| <= 0.5 and the rest dead.
-#
-# It reaches hardware on its own. `vbrl-export-onnx` writes both scale and clip
-# into the ONNX metadata and `deployment.policy` applies them, so a policy
-# trained here deploys at this speed from raw output with no clamp in the
-# manifest -- which is the point, because every manifest clamp tried by hand
-# distorted either the transport or the fine corrections and none did neither.
-_SLOW_ACTION_DELTA = 0.05
-# The fingertip height ceiling: the soft form of the planar constraint every
-# published Push-T imposes in its action space. Both numbers are the object's
-# own height rather than free parameters -- the fingertip should be no higher
-# than the thing it is pushing -- so they follow the T if its geometry changes.
-#
-# Measured on a trained policy: the lowest fingertip sits at a median of 47 mm
-# above a 24 mm object and 65% of steps are above 40 mm, so there is roughly
-# 20 mm of pure headroom before this can cost the task anything. Linear rather
-# than quadratic: a constant gradient keeps pulling the arm down from any height,
-# where a quadratic is weakest exactly at the ceiling and explodes at the reset
-# pose, which starts 243 mm up.
-#
-# `vertical_contact_force` used to sit here and was removed: at -0.05 it left
-# top-face contact at 0.105 against the no-penalty baseline's 0.107 -- no effect
-# at all -- and every weight that did move it (-0.10, -0.15, -0.25) cost 73-93%
-# of episode success. It penalised an emergent contact normal; this penalises a
-# height the policy chooses directly.
+DEPLOYABLE_ACTION_DELTA = 0.03
+# The object's own height, so it follows the T. Linear, not quadratic: a constant
+# gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
-# -0.02, and the attempt to raise it is measured and reverted. At -0.1 the term
-# binds and takes episode success to 0.008; -0.05 was tried on the theory that
-# `side_contact_align` had given descending a payoff it never had before, and it
-# did not work: runs 1hjlufwr and n5sgh8g3 moved the lowest pad from 27.6 mm to
-# 26.2 mm -- 1.4 mm for double the weight, never reaching the ~24.4 mm where a
-# side contact happens -- left `top_contact_share` unchanged at 0.192/0.202
-# against 0.189, and cost 8-19% of overlap. It is not a useless term at -0.02
-# (it is what holds the arm at 27 mm rather than the 46 mm earlier generations
-# sat at) but it cannot reach the last 3 mm at any weight that leaves the task
-# intact.
+# Raising it is measured and reverted: -0.1 takes success to 0.008, and -0.05
+# moved the lowest pad only 27.6 -> 26.2 mm for 8-19% of overlap.
 EE_HEIGHT_WEIGHT = -0.02
-# The one *positive* shaping term, and the replacement for the whole family of
-# top-contact penalties: `vertical_contact_force` at four weights, the
-# exponential force barrier, the height ceiling and the no-fly cylinder are all
-# gone. See `mdp.side_contact_align` for why the sign is the argument.
-#
-# 0.05 is a starting size, not a measured one. The entire penalty family costs
-# about 3% of task reward, so this puts the bonus on the same scale -- large
-# enough to choose between two contact geometries, too small to outrank placing
-# the T. Read `Episode_Reward/side_contact_align` against
-# `Episode_Reward/maniskill_dense` at iteration ~50 and adjust once if it is not
-# near 5%.
+# A starting size, not a measured one: the penalties cost ~3% of task reward, so this
+# puts the bonus on the same scale.
 SIDE_CONTACT_ALIGN_WEIGHT = 0.05
-# Table contact, targeted at zero. No onset: any contact is charged, because the
-# T stands 24 mm tall and the gripper has that much clearance to push a side face
-# without ever reaching the surface -- so "do not touch the table" is a small
-# height adjustment, not a change of strategy. That is what separates this from
-# the top-contact term: a penalty the policy can satisfy by lifting the wrist is
-# safe to apply hard, while one it can only satisfy by abandoning contact is not.
-#
-# Quadratic, so a numerical graze is nearly free (1 N costs 0.0008 per step) and
-# a real press is not (10 N costs 0.04, 16 N costs 0.10). The weight is halved
-# against the old 5 N-onset version to offset removing the onset; measured peak
-# table force during healthy pushing was 9.7-16.4 N.
+# No onset: the T is 24 mm tall, so avoiding the table is a height adjustment rather
+# than a change of strategy, which is what makes it safe to apply hard.
 TABLE_CONTACT_ONSET_N = 0.0
 TABLE_CONTACT_SCALE_N = 5.0
 TABLE_CONTACT_WEIGHT = -0.01
-# The downward load the gripper drives through the T into the table, and the
-# first penalty against dragging whose zero-set is the behaviour we want rather
-# than the absence of the task.
-#
-# Six attempts have now failed and they failed the same way: `vertical_contact_
-# force` at four weights, `contact_force_barrier`, the height ceiling at -0.05
-# and -0.1, the no-fly cylinder, and `forceful_top_contact`. Every one measured
-# something at the *gripper-object* contact, so "stop touching" always satisfied
-# them, and that is what the policy did -- run 4fmml3fl held 0.86 N of peak
-# object force for 160 iterations and finished at 0.000 success.
-#
-# This measures the *object-table* interface instead, through a netforce sensor.
-# Vertical equilibrium makes the reading exact: the table carries the object's
-# weight plus whatever the gripper adds, and a horizontal push adds nothing at
-# any magnitude. So pushing is free, pushing hard is free, and only pressing
-# costs -- which is also the mechanism that makes dragging possible at all
-# (sliding the T under a pad needs mu_g*N > mu_t*(mg + N), unreachable at N=0).
-#
-# The T's own weight plus headroom for the transients of a shove. The weight is
-# 0.497 N: the printed object was weighed at 50.7 g, against the 172.8 g the
-# MJCF carried before. Sliding distance goes as 1/m^2 for a given push impulse,
-# so the old mass made the simulated T travel 11.6x less than the real one for
-# the same push -- which is what a policy trained on it then overshoots by.
-#
-# The headroom is 1.0 N rather than the 2.0 it was at the heavier mass: it is
-# there for shove transients, not as a budget, and 2.0 N on a 0.497 N object is
-# four times its own weight. Re-measure the press distribution after the first
-# run at this mass; the numbers quoted elsewhere here are from the old one.
+# The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
+# distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
 OBJECT_WEIGHT_N = 0.497
 OBJECT_PRESS_ONSET_N = OBJECT_WEIGHT_N + 1.0
 OBJECT_PRESS_SCALE_N = 5.0
-# Sized by rolling zbbiq2ts's policy through this exact term: -0.002 came to
-# 1.07% of its task reward, so -0.01 is 5.4%. That makes it the largest penalty
-# in the config -- `ee_height_ceiling` is next at 3.4% -- which is intended,
-# because it is the only one the policy can zero out without giving up the task.
-# It is still far below what broke the runs that collapsed: the exponential
-# barrier reached 26-53% and took 82% of episode success with it.
-#
-# Quadratic and uncapped. The measured worst case (135 N of press) costs 6.8 per
-# step against a 0.37 per-step task reward, which is meant to be unaffordable;
-# unlike `contact_force_barrier`'s exp() there is no value here large enough to
-# wreck the critic.
+# 5.4% of task reward on the behaviour it corrects -- the largest penalty here,
+# intended: it is the only one the policy can zero out without giving up the task.
 OBJECT_PRESS_WEIGHT = -0.01
-# Total commanded travel (L1) and MJLab's own action-rate term. `action_rate_l2`
-# is upstream Lift-Cube's, at -0.01; it is kept here at a fifth of that because
-# for a Gaussian policy whose mean never changes consecutive actions still differ
-# by 2*sigma^2 per joint, so at the initial sigma of 0.975 it charges pure
-# exploration noise -- 0.023 per step at this weight, against 0.114 at upstream's.
-# The L1 travel term has no such problem: it scales as sigma rather than sigma^2,
-# so it stays meaningful once the policy converges instead of vanishing.
-# `action_acc_l2` is deliberately absent: it is not an upstream term, it is the
-# sharpest sigma^2 penalty of the three, and it duplicates the rate term.
+# `action_rate_l2` is upstream Lift-Cube's -0.01 at a fifth, because for a Gaussian
+# policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
 ACTION_PATH_LENGTH_WEIGHT = -0.002
 ACTION_RATE_WEIGHT = -0.002
-# Motion charged only once the object is at its goal, where ManiSkill's reward
-# has gone flat and the task offers no gradient at all. 25x the travel weight
-# above, and affordable precisely because it applies nowhere else: at goal the
-# task pays a constant 1.0 per step, so 1.75 of L1 action costs 0.088 -- about
-# a tenth of what being at goal is worth -- and cannot make the goal unattractive.
-# -0.05 is the value with a measurement behind it: it cut post-success drift 55%
-# (2.33 -> 1.05 mm per step). It was briefly -0.2 on the theory that the flat
-# task reward made it free. That was wrong in the way that matters -- the
-# gradient is flat at goal, so the term cannot distort behaviour *there*, but it
-# lowers the value of the goal state and gamma carries that backwards into every
-# state leading to it. Measured on the best policy under the current rewards,
-# -0.2 costs 0.166 per step at goal, 17% of the at-goal reward and the largest
-# single penalty in the config; the margin for being at goal fell from 0.72 to
-# 0.56 per step.
+# Cut post-success drift 55% (2.33 -> 1.05 mm per step). -0.2 was tried and is wrong:
+# the term cannot distort behaviour *at* goal, but it lowers the goal state's value.
 AT_GOAL_ACTION_WEIGHT = -0.05
-# `forceful_top_contact` used to be wired in here and is deliberately not any
-# more. It is retained in `mdp.terminations` because the measurement is worth
-# keeping reachable, but no task installs it.
-#
-# It was the last untried mechanism against dragging, on the argument that a
-# penalty is a price the task reward can pay while a termination is not. That
-# argument was right and the mechanism still failed, for a reason force cannot
-# fix. Run 4fmml3fl at 5 N against its control 2458edlt: identical to iteration
-# 25, then at iteration 50 the control's peak object force jumps 3.6 -> 20.1 N
-# and its task reward 4.78 -> 6.04, which is a policy discovering that touching
-# the T pays. The first contacts it discovers are hard top-face presses, so
-# under a 5 N rule every one of those discoveries is an episode ending. The
-# terminated run stayed at 0.86 N of peak object force for iterations 40-200 --
-# not touching the object at all -- and sigma decayed against that flat reward
-# from 0.44 to 0.097, which PPO cannot undo. It reached at iteration 425 what
-# the control had at 75, and finished at 0.000 success against 0.626.
-#
-# Note the firing rate through the dead phase was only 3.2%: the collapse was
-# not the termination firing, it was the policy having already learned to avoid
-# it. The pressure also moved rather than disappearing -- with the top face
-# closed, peak *table* force finished at 32.4 N against the control's 5.1.
-#
-# No threshold separates the two cases. Dragging runs 17-78 N (p50 17.4) and
-# learning to push peaks at ~20 N, so they are the same forces; above the
-# converged plateau of 39.8 N the term stops binding at all. What does separate
-# them is time, not force -- discovery is at iteration 50, dragging is converged
-# behaviour -- so this would need constraint annealing, and this task carries no
-# curriculum. `side_contact_align` is the mechanism instead, and it cannot fail
-# this way: it never removes reward from contact, so its worst case is being
-# ignored.
+# Terminating on forceful top contact is deliberately not wired in, though
+# `mdp.forceful_top_contact` stays reachable.
 JOINT_SPEED_LIMIT_RAD_S = 5.0
-# Goal-yaw schedule, in environment steps. A 3000-iteration run at
-# num_steps_per_env=16 covers 48,000 steps, so the goal is fixed for the first
-# 500 iterations and fully random for the last 1,000.
-GOAL_YAW_CURRICULUM_STAGES = (
-  {"step": 0, "half_range": 0.0},
-  {"step": 8_000, "half_range": math.pi / 4},
-  {"step": 16_000, "half_range": math.pi / 2},
-  {"step": 24_000, "half_range": 3 * math.pi / 4},
-  {"step": 32_000, "half_range": math.pi},
-)
-# The same idea, but the goal stays fixed for 3,000 iterations rather than 500,
-# and then widens in 22.5-degree steps instead of 45.
-#
-# Both numbers are measured, not chosen. The long fixed phase is necessary: under
-# the 500-iteration schedule every architecture except DINOv2 was still at
-# 1.44-1.48 rad when widening began, so the fixed phase never did its job. But
-# 45-degree rungs then undid it. Across the 15 runs trained on the coarse
-# version, yaw error between the end of the fixed phase and the end of training
-# got *worse* in 8, stayed level in 6, and improved in 1. DinoV2-Afa6 is the
-# clearest loss: 0.155 rad on the fixed goal -- 9 degrees, essentially solved --
-# collapsing to 1.510 by the end.
-#
-# Halving the step doubles the number of transitions but makes each a smaller
-# distribution shift, and the full circle still arrives at iteration 4,750,
-# leaving 1,250 of a 6,000-iteration run to consolidate.
-GOAL_YAW_SLOW_STAGES = (
+# In environment steps: fixed for 3,000 iterations at num_steps_per_env=16, then eight
+# 22.5-degree rungs, full circle at 4,750.
+GOAL_YAW_STAGES = (
   {"step": 0, "half_range": 0.0},
   {"step": 48_000, "half_range": math.pi / 8},
   {"step": 52_000, "half_range": math.pi / 4},
@@ -247,51 +83,19 @@ _PRIVILEGED_ACTOR_TERMS = (
 )
 
 
-# Object and goal are drawn from offset x ranges and held 15 cm apart, so an
-# episode never *starts* near the goal. Since reaching 0.90 overlap requires fine
-# adjustment at close range, the policy only meets those states after already
-# transporting the T there -- and the sparse at-goal bonus, which replaces the
-# whole reward with 3.0, therefore never fires early in training.
-#
-# `FREE_START_*` is the alternative: the object is drawn uniformly over one
-# rectangle and the goal on a radius about it, redrawn whenever it lands off the
-# rectangle. The floor is derived, not chosen -- at 1 cm the worst-case initial
-# overlap is 0.834 against the 0.90 threshold, so no episode can begin already
-# solved at any yaw, while 0 cm would begin at exactly 1.0. Drawing the radius
-# uniformly puts more mass near the object than a uniform goal position would
-# (area grows with the radius, so a uniform radius has density proportional to
-# 1/r): 29% of episodes start inside 5 cm against 8% for a uniform goal. That is
-# a smooth continuum, not the bimodal split a mixture or a schedule imposes, and
-# it is the *same* mechanism the other two variants use -- they differ from this
-# one only in the radius band.
-WORKSPACE_X = (0.25, 0.45)
+# Offset x ranges held 15 cm apart, so an episode never starts near the goal.
 WORKSPACE_Y = (-0.2, 0.2)
-FREE_START_X = WORKSPACE_X
-FREE_START_MIN_SEPARATION = 0.01
-# The rectangle's diagonal: the widest separation the workspace can hold. It is
-# what an unbounded ceiling resolves to, and where the GrowStart ramp ends -- so
-# GrowStart's final stretch is FreeStart itself rather than an approximation.
-FREE_START_MAX_SEPARATION = math.hypot(
-  WORKSPACE_X[1] - WORKSPACE_X[0], WORKSPACE_Y[1] - WORKSPACE_Y[0]
-)
-# Just short of the 0.90 overlap threshold, which needs roughly 5 mm and 5
-# degrees together: at 6 mm and perfect alignment overlap is 0.891.
-NEAR_GOAL_SEPARATION_RANGE = (0.006, 0.015)
-NEAR_GOAL_YAW_RANGE = (math.radians(5.0), math.radians(20.0))
-SEPARATION_CURRICULUM_ITERATIONS = 4000
+OBJECT_X = (0.2, 0.4)
+TARGET_X = (0.3, 0.5)
+MIN_XY_SEPARATION = 0.15
 
 
 def _command(
   object_name: str,
   success_threshold: float,
   goal_marker_name: str | None = None,
-  free_start: bool = False,
-  near_goal_probability: float = 0.0,
   fixed_target: tuple[float, float, float] | None = None,
 ) -> mdp.PushTCommandCfg:
-  object_x = FREE_START_X if free_start else (0.2, 0.4)
-  target_x = FREE_START_X if free_start else (0.3, 0.5)
-  separation = FREE_START_MIN_SEPARATION if free_start else 0.15
   return mdp.PushTCommandCfg(
     goal_marker_name=goal_marker_name,
     entity_name=object_name,
@@ -300,21 +104,18 @@ def _command(
     debug_vis=True,
     success_threshold=success_threshold,
     object_pose_range=mdp.PushTCommandCfg.ObjectPoseRangeCfg(
-      x=object_x,
+      x=OBJECT_X,
       y=WORKSPACE_Y,
       z=(REST_HEIGHT, REST_HEIGHT),
       yaw=(-math.pi, math.pi),
     ),
     target_position_range=mdp.PushTCommandCfg.TargetPositionRangeCfg(
-      x=target_x,
+      x=TARGET_X,
       y=WORKSPACE_Y,
       z=(HALF_HEIGHT, HALF_HEIGHT),
     ),
     target_yaw_range=(-math.pi, math.pi),
-    min_xy_separation=separation,
-    near_goal_probability=near_goal_probability,
-    near_goal_separation_range=NEAR_GOAL_SEPARATION_RANGE,
-    near_goal_yaw_range=NEAR_GOAL_YAW_RANGE,
+    min_xy_separation=MIN_XY_SEPARATION,
     fixed_target=fixed_target,
   )
 
@@ -327,27 +128,16 @@ def build_env_cfg(
   play: bool = False,
   success_threshold: float = 0.90,
   goal_yaw_stages: Sequence[Mapping[str, float]] | None = None,
-  quadratic_orientation: bool = False,
   visual_goal: bool = False,
-  free_start: bool = False,
-  near_goal_probability: float = 0.0,
-  separation_curriculum: bool = False,
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   action_delta: float = _ACTION_DELTA,
 ) -> ManagerBasedRlEnvCfg:
-  """Build the ManiSkill3-inspired Push-T MDP.
-
-  ``quadratic_orientation`` swaps only the orientation factor of the dense
-  reward, for the variants that drop the goal-yaw curriculum and therefore start
-  episodes anywhere on the circle.
-  """
   cfg = make_tabletop_env_cfg(
     robot, action_delay=True, fixed_closed_gripper=True
   )
   robot_ee = SceneEntityCfg("robot", site_names=(robot.ee_site,))
   common = {"command_name": _COMMAND, "object_name": object_name}
-  # The gripper is held closed, so the safety terms watch the arm joints only.
   arm_joints = robot.arm_actuator_names
 
   base_terms = cfg.observations["actor"].terms
@@ -396,54 +186,38 @@ def build_env_cfg(
       preserve_order=True,
     )
   }
-  # Drawing the target is what every published Push-T does; VBRL's default of
-  # numbers-only is the deviation. The entity itself is installed by the caller,
-  # which owns the scene.
   cfg.commands = {
     _COMMAND: _command(
       object_name,
       success_threshold,
       goal_marker_name=GOAL_ENTITY_NAME if visual_goal else None,
-      free_start=free_start,
-      near_goal_probability=near_goal_probability,
       fixed_target=fixed_target,
     )
   }
   cfg.rewards = {
     "maniskill_dense": RewardTermCfg(
-      func=(
-        mdp.quadratic_orientation_reward
-        if quadratic_orientation
-        else mdp.maniskill_dense_reward
-      ),
+      func=mdp.maniskill_dense_reward,
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
-    # The one positive shaping term: push a side face, not the top face.
-    # See SIDE_CONTACT_ALIGN_WEIGHT and mdp.side_contact_align.
     "side_contact_align": RewardTermCfg(
       func=mdp.side_contact_align,
       weight=SIDE_CONTACT_ALIGN_WEIGHT,
       params={"sensor_name": _CONTACT_SENSOR},
     ),
-    # Total commanded travel: an L1 path penalty, so splitting one motion into
-    # many is never cheaper and a correction cycle costs double.
     "action_path_length": RewardTermCfg(
       func=mdp.action_path_length_l1,
       weight=ACTION_PATH_LENGTH_WEIGHT,
     ),
-    # MJLab's own action-rate term, at a fifth of upstream Lift-Cube's weight.
     "action_rate_l2": RewardTermCfg(
       func=mdp.action_rate_l2,
       weight=ACTION_RATE_WEIGHT,
     ),
-    # Settle once the T is placed; see AT_GOAL_ACTION_WEIGHT.
     "at_goal_action": RewardTermCfg(
       func=mdp.at_goal_action_l1,
       weight=AT_GOAL_ACTION_WEIGHT,
       params={"command_name": _COMMAND},
     ),
-    # Table contact, charged from the first newton -- the goal is zero.
     "table_contact_force": RewardTermCfg(
       func=mdp.contact_force_hinge,
       weight=TABLE_CONTACT_WEIGHT,
@@ -453,8 +227,6 @@ def build_env_cfg(
         "scale": TABLE_CONTACT_SCALE_N,
       },
     ),
-    # Downward load through the T into the table. Zero for any lateral push at
-    # any force; see OBJECT_PRESS_ONSET_N.
     "object_table_press": RewardTermCfg(
       func=mdp.object_table_press,
       weight=OBJECT_PRESS_WEIGHT,
@@ -464,8 +236,6 @@ def build_env_cfg(
         "scale": OBJECT_PRESS_SCALE_N,
       },
     ),
-    # Keep the fingertip in the object's own height band, so a side push is the
-    # only geometry available; see EE_HEIGHT_CEILING_M.
     "ee_height_ceiling": RewardTermCfg(
       func=mdp.fingertip_height_excess,
       weight=EE_HEIGHT_WEIGHT,
@@ -477,14 +247,11 @@ def build_env_cfg(
         "sensor_name": _CONTACT_SENSOR,
       },
     ),
-    # Joint-limit protection for the real arm. A hinge on the *soft* limits, so
-    # it is exactly zero anywhere inside them.
     "joint_pos_limits": RewardTermCfg(
       func=mdp.joint_pos_limits,
       weight=-0.25,
       params={"asset_cfg": SceneEntityCfg("robot", joint_names=arm_joints)},
     ),
-    # Peak joint speed, hinged above anything a decisive push reaches.
     "joint_speed_hinge": RewardTermCfg(
       func=mdp.joint_velocity_hinge_penalty,
       weight=-0.001,
@@ -494,8 +261,7 @@ def build_env_cfg(
       },
     ),
   }
-  # Peak forces in newtons, for judging whether this is safe on hardware.
-  # Metrics carry no weight and never enter the return.
+  # Hardware-safety readouts. Metrics carry no weight and never enter the return.
   cfg.metrics = {
     "peak_table_force": MetricsTermCfg(
       func=mdp.max_contact_force,
@@ -507,12 +273,8 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR},
     ),
-    # Peak force split by contact geometry, because the two are not comparable:
-    # a lateral push is bounded by the task (the T slides at ~0.7 N, so anything
-    # beyond that only accelerates it) while a press into the top face is
-    # bounded by nothing and is what scratches. `peak_object_force` above sums
-    # both and so cannot say whether 45 N was harmless impulse or leaning on the
-    # object.
+    # A lateral push is bounded by the task (the T slides at ~0.7 N); a press
+    # into the top face is bounded only by the arm. `peak_object_force` sums both.
     "peak_top_face_force": MetricsTermCfg(
       func=mdp.max_contact_force_on_face,
       reduce="max",
@@ -523,8 +285,7 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
     ),
-    # The same press in newtons, weight subtracted so 0.0 means "not pressing".
-    # 56 N median episode peak on zbbiq2ts's policy, at the old 1.70 N mass.
+    # Weight subtracted, so 0.0 means "not pressing".
     "peak_object_press": MetricsTermCfg(
       func=mdp.peak_object_press,
       reduce="max",
@@ -533,8 +294,6 @@ def build_env_cfg(
         "weight_n": OBJECT_WEIGHT_N,
       },
     ),
-    # Fraction of the episode spent pressing a horizontal face of the T. The
-    # drag-versus-push behaviour measure; 0.134 on run 8z5zwqj8's policy.
     "top_contact_share": MetricsTermCfg(
       func=mdp.top_contact_share,
       reduce="mean",
@@ -553,21 +312,6 @@ def build_env_cfg(
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
   )
   cfg.curriculum = {}
-  if separation_curriculum:
-    cfg.curriculum["separation_range"] = CurriculumTermCfg(
-      func=mdp.separation_curriculum,
-      params={
-        "command_name": _COMMAND,
-        "start": 0.05,
-        "end": FREE_START_MAX_SEPARATION,
-        "iterations": SEPARATION_CURRICULUM_ITERATIONS,
-        # Overwritten from the rollout length at launch; see train.py. A literal
-        # here is only the registered default and mistimes the ramp for any
-        # other `num_steps_per_env`, because the term counts environment steps.
-        "steps_per_iteration": 16,
-        "pin_iterations": 0,
-      },
-    )
   if goal_yaw_stages is not None:
     cfg.curriculum["goal_yaw_range"] = CurriculumTermCfg(
       func=mdp.goal_yaw_curriculum,
@@ -629,11 +373,8 @@ def build_env_cfg(
       reduce="maxforce",
       num_slots=1,
     ),
-    # The object-table interface, as one net wrench in the global frame. This is
-    # the sensor `object_table_press` reads; `netforce` rather than `maxforce`
-    # because the quantity that is physically exact is the *total* vertical load
-    # the table carries, not the largest of the several contact points the T's
-    # footprint makes.
+    # `netforce`: the exact quantity is the *total* vertical load the table
+    # carries, not the largest of the T's several footprint contacts.
     ContactSensorCfg(
       name=_OBJECT_TABLE_SENSOR,
       primary=ContactMatch(mode="body", pattern="push_t", entity=object_name),
@@ -642,23 +383,13 @@ def build_env_cfg(
       reduce="netforce",
     ),
   )
-  # The table term bounds peak force, so the one retained contact has to be the
-  # strongest rather than an arbitrary one. Inherited from Lift-Cube as "none".
   for sensor in cfg.scene.sensors:
     if sensor.name == EE_GROUND_CONTACT_SENSOR:
       sensor.reduce = "maxforce"
   cfg.episode_length_s = 5.0
   cfg.scale_rewards_by_dt = False
-  # Framing for the recorded training video and the Viser view, which share
-  # `cfg.viewer`. Lift-Cube looks along the table at -5 degrees from 1.5 m,
-  # which hides the T behind the arm and draws two neighbouring envs. Look down
-  # on the workspace from the front instead -- azimuth 180 is the +x side the
-  # robot faces -- and render the tracked env alone. Verified to show the robot,
-  # the tabletop, the red T and the goal overlay together.
-  # ASSET_ROOT rather than the robot's declared `viewer_body`: that body is the
-  # gripper, so the view swings with the arm and the goal leaves frame. The
-  # root is the fixed base, which keeps the whole workspace steady, and naming
-  # the entity rather than a body keeps this robot-agnostic.
+  # Azimuth 180 is the +x side the robot faces. ASSET_ROOT, not the robot's
+  # `viewer_body`: that body is the gripper, so the view would swing with the arm.
   cfg.viewer.origin_type = ViewerConfig.OriginType.ASSET_ROOT
   cfg.viewer.entity_name = "robot"
   cfg.viewer.max_extra_envs = 0
@@ -680,12 +411,6 @@ def build_env_cfg(
       },
       clip=(-2.0, 2.0),
     )
-    # The critic keeps it either way. Withholding the goal from the *actor* is
-    # the experiment -- it then has only the marker drawn on the table, which is
-    # what a real deployment can supply without measuring anything. Withholding
-    # it from the critic as well would only make the value function worse at
-    # judging states it can already see, and asymmetric actor-critic is already
-    # how `ee_to_object` and the rest are handled here.
     cfg.observations["critic"].terms["target_pose"] = target_pose_term
     if goal_in_observation:
       actor.terms["target_pose"] = target_pose_term

@@ -1,5 +1,3 @@
-"""Episode-level object and goal sampling for Push-T."""
-
 from __future__ import annotations
 
 import math
@@ -8,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-
 from mjlab.tasks.manipulation.mdp import LiftingCommand, LiftingCommandCfg
 from mjlab.utils.lab_api.math import (
   euler_xyz_from_quat,
@@ -34,8 +31,6 @@ _MAX_GOAL_DRAWS = 512
 
 
 class PushTCommand(LiftingCommand):
-  """MJLab lifting command extended with a planar pose and overlap goal."""
-
   cfg: PushTCommandCfg
   episode_success: torch.Tensor
 
@@ -49,9 +44,6 @@ class PushTCommand(LiftingCommand):
       resolution=cfg.mask_resolution,
       half_width=cfg.mask_half_width,
     )
-    # The drawn target, when the task registers one. Held here rather than in an
-    # event so it cannot be posed from a stale command: the marker is written in
-    # the same call that samples the pose it represents.
     self._goal_marker = (
       env.scene[cfg.goal_marker_name] if cfg.goal_marker_name else None
     )
@@ -80,7 +72,6 @@ class PushTCommand(LiftingCommand):
     )
 
   def get_overlap(self, *, force_refresh: bool = False) -> torch.Tensor:
-    """Evaluate the GPU mask at most once per environment step."""
     step = int(getattr(self._env, "common_step_counter", -1))
     if force_refresh or self._overlap_cache_step != step:
       self._overlap_cache = self._compute_overlap()
@@ -139,31 +130,11 @@ class PushTCommand(LiftingCommand):
     lower = target_pos.new_tensor([target_range.x[0], target_range.y[0]])
     upper = target_pos.new_tensor([target_range.x[1], target_range.y[1]])
 
-    # The goal is drawn on a radius about the object: a bearing, and a separation
-    # inside the band this variant allows. The band is the *only* thing the three
-    # start-state variants differ by -- a floor alone leaves the goal unbounded,
-    # a ceiling grown over training is a reverse curriculum, and a tight band
-    # drawn for a fraction of episodes is a near-goal mixture. An unbounded
-    # ceiling means the rectangle's diagonal, the widest separation it holds.
     floor = target_pos.new_full((n,), self.cfg.min_xy_separation)
     ceiling = target_pos.new_full(
-      (n,),
-      float(torch.linalg.vector_norm(upper - lower))
-      if self.cfg.max_xy_separation is None
-      else self.cfg.max_xy_separation,
+      (n,), float(torch.linalg.vector_norm(upper - lower))
     )
-    near = torch.zeros(n, dtype=torch.bool, device=self.device)
-    if self.cfg.near_goal_probability > 0.0:
-      near = torch.rand(n, device=self.device) < self.cfg.near_goal_probability
-      low, high = self.cfg.near_goal_separation_range
-      floor = torch.where(near, floor.new_full((n,), low), floor)
-      ceiling = torch.where(near, ceiling.new_full((n,), high), ceiling)
 
-    # Draw, and redraw whatever landed off the table. Every object position has
-    # admissible bearings -- the rectangle is 20 cm across its short side and the
-    # floor is 1 cm, so aiming inward always fits -- which is why this terminates
-    # and needs no fallback. Only the environments that missed are redrawn, and
-    # the acceptance rate is high enough that it is a handful of passes.
     pending = torch.ones(n, dtype=torch.bool, device=self.device)
     for _ in range(_MAX_GOAL_DRAWS):
       if not bool(pending.any()):
@@ -186,9 +157,6 @@ class PushTCommand(LiftingCommand):
 
     origins = self._env.scene.env_origins[env_ids]
     if self.cfg.fixed_target is not None:
-      # Overwrite the ring draw rather than narrowing its ranges: the goal is
-      # sampled on a circle around the object and rejected outside the
-      # rectangle, so a rectangle collapsed to a point never converges.
       target_pos[:, 0] = self.cfg.fixed_target[0]
       target_pos[:, 1] = self.cfg.fixed_target[1]
     self.target_pos[env_ids] = target_pos + origins
@@ -206,25 +174,6 @@ class PushTCommand(LiftingCommand):
     )
     if self.cfg.fixed_target is not None:
       target_yaw = torch.full_like(target_yaw, self.cfg.fixed_target[2])
-    levels = self.cfg.target_yaw_levels
-    if levels is not None and levels > 0:
-      # Round onto `levels` evenly spaced angles spanning the full circle. The
-      # support stays the whole range; only its cardinality shrinks.
-      spacing = 2.0 * math.pi / levels
-      target_yaw = wrap_to_pi(torch.round(target_yaw / spacing) * spacing)
-    self.target_yaw[env_ids] = target_yaw
-    if bool(near.any()):
-      # Near episodes get a bounded yaw error instead of a uniform one: the
-      # bonus needs orientation as well as position, and a uniform draw leaves
-      # it out of reach even at 6 mm.
-      low, high = self.cfg.near_goal_yaw_range
-      offset = sample_uniform(low, high, (n,), device=self.device)
-      sign = torch.where(
-        torch.rand(n, device=self.device) < 0.5, -1.0, 1.0
-      )
-      object_yaw = torch.where(
-        near, wrap_to_pi(self.target_yaw[env_ids] + sign * offset), object_yaw
-      )
     zeros = torch.zeros(n, device=self.device)
     pose = torch.cat(
       (
@@ -238,8 +187,6 @@ class PushTCommand(LiftingCommand):
       torch.zeros(n, 6, device=self.device), env_ids=env_ids
     )
     if self._goal_marker is not None:
-      # Flat on the table at the goal pose. `target_pos` already carries
-      # `env_origins`, so the marker lands in its own env like everything else.
       marker_pos = self.target_pos[env_ids].clone()
       marker_pos[:, 2] = origins[:, 2]
       marker_pose = torch.cat(
@@ -252,9 +199,6 @@ class PushTCommand(LiftingCommand):
       self._goal_marker.write_mocap_pose_to_sim(marker_pose, env_ids=env_ids)
 
   def _update_command(self, env_ids: torch.Tensor | None) -> None:
-    # The command is a pure function of the state written by
-    # `_resample_command`, so there is no per-step state to advance and
-    # nothing to scope to `env_ids`.
     del env_ids
 
   def _debug_vis_impl(self, visualizer: DebugVisualizer) -> None:
@@ -288,95 +232,25 @@ class PushTCommand(LiftingCommand):
 
 @dataclass(kw_only=True)
 class PushTCommandCfg(LiftingCommandCfg):
-  """Configuration for the planar Push-T pose command."""
-
   fixed_target: tuple[float, float, float] | None = None
-  """Pin every episode's goal to one ``(x, y, yaw)`` in the robot base frame.
-
-  For a policy that reads the goal only from the drawn marker, a fixed target
-  is the easier half of the problem: the marker is always in the same place, so
-  the policy may key on position rather than on the shape it sees. Paired
-  against the sampled goal it says how much of the difficulty is finding the
-  target versus reaching it.
-
-  ``min_xy_separation`` is not enforced against it -- that floor is applied by
-  redrawing the *goal* until it clears the object, which cannot converge once
-  the goal is a single point, so the object keeps its own distribution instead.
-  """
   min_xy_separation: float = 0.15
-  max_xy_separation: float | None = None
-  """Upper bound on object-goal separation, applied to every episode.
-
-  ``None`` leaves the goal unbounded. A reverse curriculum writes this field,
-  growing it until it exceeds the largest separation the target range allows, at
-  which point the distribution is exactly the unbounded one.
-  """
-  near_goal_probability: float = 0.0
-  """Fraction of episodes started just short of the success threshold.
-
-  A stationary mixture rather than a schedule: the state distribution never
-  changes, so there is no handover for a converged policy to fall off.
-  """
-  near_goal_separation_range: tuple[float, float] = (0.006, 0.015)
-  """Separation band for those episodes, in metres.
-
-  Overlap reaches the 0.90 threshold only inside roughly 5 mm and 5 degrees, so a
-  wider band leaves the sparse at-goal bonus -- which replaces the whole reward
-  with 3.0 -- just as unreachable as it is from across the table. At 6 mm and
-  perfect alignment overlap is 0.891, immediately below the threshold, which is
-  the point of the lower bound: close enough that one correction earns the bonus,
-  never so close that the episode begins already solved.
-  """
-  near_goal_yaw_range: tuple[float, float] = (0.087, 0.349)
-  """Absolute yaw error for those episodes, in radians (5 to 20 degrees).
-
-  Bounded away from zero deliberately. A relative-yaw curriculum that started the
-  object *at* the goal orientation was tried and removed: with every reward term
-  decreasing in yaw error, leaving the object alone was optimal. The floor keeps
-  these episodes clear of that, and the ceiling keeps them inside the range a
-  single correction can close.
-  """
   target_yaw_range: tuple[float, float] = (-math.pi, math.pi)
-  target_yaw_levels: int | None = None
-  """Quantize the goal yaw to this many evenly spaced angles, or ``None``.
-
-  A curriculum on the goal's *resolution* rather than its range. The goal still
-  covers the full circle from the first episode and the object's yaw stays
-  uniform, so nothing here makes the starting state easier -- which is what
-  every distance-based curriculum did before collapsing into a do-nothing
-  policy. What it reduces is how many distinct goal orientations the policy has
-  to hold at once, which is the axis the goal-yaw curriculum also moves along,
-  by pinning to one.
-  """
   orientation_weight: float = 0.5
-  """Share of the dense reward's shaped half that scores orientation.
-
-  ``0.5`` is ManiSkill's split and reproduces it exactly. Raising it makes
-  rotation the thing worth doing while the object still starts far from the
-  goal, so contact still pays and no do-nothing attractor appears.
-  """
   footprint_parts: tuple[FootprintPart, ...] = FOOTPRINT_PARTS
   mask_resolution: int = 64
   mask_half_width: float = MASK_HALF_WIDTH
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
-  """Scene entity to pose at the goal, drawing the target into the camera.
-
-  ``None`` keeps VBRL's original setup, where the goal reaches the policy only
-  as numbers. Naming an entity restores what every published Push-T does.
-  """
 
   def build(self, env: ManagerBasedRlEnv) -> PushTCommand:
     return PushTCommand(self, env)
 
 
-def push_t_command(env, name: str) -> "PushTCommand":
-  """Resolve one command term, asserting it is the Push-T sampler."""
+def push_t_command(env, name: str) -> PushTCommand:
   command = env.command_manager.get_term(name)
   if not isinstance(command, PushTCommand):
     raise TypeError(f"Command {name!r} must be a PushTCommand.")
   return command
 
 
-__all__ = [
-  "push_t_command","PushTCommand", "PushTCommandCfg"]
+__all__ = ["PushTCommand", "PushTCommandCfg", "push_t_command"]

@@ -1,5 +1,3 @@
-"""Aggregate completed evaluation episodes and write presentation outputs."""
-
 from __future__ import annotations
 
 import csv
@@ -14,8 +12,6 @@ def _sample_std(values: Sequence[float]) -> float:
 
 
 def summarize(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-  """Aggregate each named checkpoint and scene from equal-weighted seed means."""
-
   grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
   for row in rows:
     key = (str(row["name"]), str(row["scene"]))
@@ -28,10 +24,10 @@ def summarize(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     for row in group:
       by_seed.setdefault(int(row["seed"]), []).append(row)
 
-    def seed_means(key: str) -> list[float]:
+    def seed_means(key: str, seeds=by_seed) -> list[float]:
       return [
         statistics.fmean(float(row[key]) for row in seed_rows)
-        for seed_rows in by_seed.values()
+        for seed_rows in seeds.values()
       ]
 
     reward_means = seed_means("reward")
@@ -76,7 +72,6 @@ def plot(
   *,
   title: str,
 ) -> None:
-  """Plot reward and success in model and scene order."""
 
   import matplotlib.pyplot as plt
 
@@ -150,7 +145,6 @@ def write_report(
   output: Path,
   title: str,
 ) -> Path:
-  """Write raw episodes, aggregate metrics, and the comparison figure."""
 
   output.mkdir(parents=True, exist_ok=True)
   summaries = summarize(episodes)

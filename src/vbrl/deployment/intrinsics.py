@@ -1,24 +1,3 @@
-"""Per-unit colour intrinsics of every connected RealSense, and one frame each.
-
-Two things this exists for.
-
-The hardcoded ``D405_FX_424``/``D405_FY_424`` in :mod:`vbrl.deployment.calibration`
-came from one datasheet-ish reading and assume the principal point is the image
-centre. It is not: this unit reports ``cx = 208.04`` against a centre of 212.0,
-four pixels out, which biases any extrinsic solve that trusts the centre. Every
-unit differs, and both cameras on this rig are D405s, so they need separate
-numbers rather than one shared constant.
-
-And the 224x224 centre crop the policy sees is *not* a scaled image: cropping
-moves the principal point by the crop offset while leaving the focal lengths
-alone. The crop's own intrinsics are what a calibration against policy-resolution
-images must use, so they are derived here rather than re-derived at each call
-site.
-
-    python -m vbrl.deployment.intrinsics
-    python -m vbrl.deployment.intrinsics --save artifacts/deployment/intrinsics
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -30,14 +9,10 @@ from typing import Any
 
 import numpy as np
 
-# The modes that matter: the deployed stream, and the highest-density colour
-# mode, which is what a calibration board should be photographed in.
 MODES = ((424, 240), (848, 480), (1280, 720))
 CROP = 224
-# Both cameras advertise 30 fps at every mode, but two D405s on one bus do not
-# always deliver the high-resolution ones there. Ask for the slowest useful rate
-# first: a calibration frame does not need throughput, and a mode that starts is
-# worth more than a fast one that times out.
+# Both cameras advertise 30 fps at every mode, but two D405s on one bus do not always
+# deliver the high-resolution ones there.
 FPS_CANDIDATES = (5, 15, 30)
 
 
@@ -49,12 +24,6 @@ def _distortion(intrinsics: Any) -> dict[str, Any]:
 
 
 def crop_intrinsics(values: dict[str, float], size: int = CROP) -> dict[str, float]:
-  """Intrinsics of a centred ``size`` x ``size`` crop of this mode.
-
-  A crop keeps fx and fy and shifts the principal point by the crop's own
-  offset. Treating the crop as if its principal point were its centre is the
-  mistake this function exists to avoid.
-  """
   left = (values["width"] - size) / 2.0
   top = (values["height"] - size) / 2.0
   return {
@@ -68,7 +37,6 @@ def crop_intrinsics(values: dict[str, float], size: int = CROP) -> dict[str, flo
 
 
 def field_of_view_deg(values: dict[str, float]) -> tuple[float, float]:
-  """Horizontal and vertical FOV, from the focal lengths and the frame size."""
   return (
     2.0 * math.degrees(math.atan(values["width"] / (2.0 * values["fx"]))),
     2.0 * math.degrees(math.atan(values["height"] / (2.0 * values["fy"]))),
@@ -76,14 +44,6 @@ def field_of_view_deg(values: dict[str, float]) -> tuple[float, float]:
 
 
 def open_stream(serial: str, width: int, height: int) -> tuple[Any, int]:
-  """A pipeline that has actually delivered a frame, and the rate it runs at.
-
-  Starting a pipeline proves nothing: two D405s on this bus accept 30 fps at
-  848x480 and then never produce a frame, so ``wait_for_frames`` times out well
-  after ``start`` returned happily. Every candidate rate is therefore proven by
-  pulling one frame before it is accepted, slowest first -- a calibration frame
-  needs no throughput.
-  """
   import pyrealsense2 as rs
 
   errors = []
@@ -109,11 +69,6 @@ def open_stream(serial: str, width: int, height: int) -> tuple[Any, int]:
 
 
 def _exposure_sensor(pipeline: Any) -> Any:
-  """The sensor carrying the colour exposure control, or None.
-
-  On a D405 the colour image comes off the *Stereo Module*, not a separate RGB
-  sensor, so this is not simply "the colour sensor".
-  """
   import pyrealsense2 as rs
 
   for sensor in pipeline.get_active_profile().get_device().query_sensors():
@@ -131,16 +86,6 @@ def saturated_fraction(image: Any) -> float:
 def grab_settled(
   pipeline: Any, seconds: float = 3.0, max_saturated: float = 0.02
 ) -> tuple[Any, dict[str, Any]]:
-  """One frame, exposed so the highlights are not clipped.
-
-  Auto-exposure on a D405 is tuned for depth, not for a legible picture: on this
-  rig it settles around 33 ms and washes the external view out completely, and
-  no amount of extra settling time changes that -- it has converged, just to the
-  wrong thing. So auto-exposure gets its chance first, and if the result still
-  clips more than ``max_saturated`` of the frame the exposure is taken over and
-  walked down until it does not. Deterministic exposure is better for
-  calibration anyway: every view is then exposed alike.
-  """
   import pyrealsense2 as rs
 
   deadline = time.monotonic() + seconds
@@ -167,7 +112,6 @@ def grab_settled(
   for _ in range(12):
     exposure = max(low, exposure * 0.55)
     sensor.set_option(rs.option.exposure, exposure)
-    # A few frames for the new exposure to take effect in the pipeline.
     for _ in range(6):
       frame = pipeline.wait_for_frames(timeout_ms=10000).get_color_frame()
     image = np.asanyarray(frame.get_data())
@@ -182,7 +126,6 @@ def grab_settled(
 def read_cameras(
   save: Path | None = None, settle: float = 3.0
 ) -> list[dict[str, Any]]:
-  """Factory intrinsics per device per mode, plus one saved frame per mode."""
   import pyrealsense2 as rs
 
   devices = list(rs.context().devices)
@@ -289,7 +232,7 @@ def report(cameras: list[dict[str, Any]]) -> None:
 
 
 def main(argv: Any = None) -> int:
-  parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+  parser = argparse.ArgumentParser(description="Per-unit colour intrinsics of every connected RealSense.")
   parser.add_argument(
     "--settle",
     type=float,

@@ -1,26 +1,3 @@
-"""What has to hold here before code is pushed to the cluster.
-
-The rest of the suite checks *contracts*: registered IDs, observation groups,
-module layouts, config wire formats. None of it constructs a simulator, so a
-task whose configuration is well-formed but whose environment cannot reset, or
-whose encoder cannot backpropagate, passes everything and then fails on a GPU
-node. This module closes that gap by actually running things.
-
-Three layers, cheapest first:
-
-1. Every visual architecture any task registers forward- and
-   backward-propagates and takes an optimizer step, with the real pretrained
-   weights.
-2. Every task family's environment builds, resets, and steps, with observations
-   matching what the registered config declares.
-3. The exact runner ``vbrl-train`` uses completes a learning iteration, moves
-   the policy, and writes a checkpoint that reloads with ``strict=True``.
-
-What this deliberately cannot cover: the four-rank TorchrunX launch, Slurm
-submission, and W&B online logging. One short job on the ``testing`` profile
-remains the final gate -- but it should be a formality, not a discovery.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -28,7 +5,6 @@ import functools
 from pathlib import Path
 
 import pytest
-
 
 pytest.importorskip("mjlab")
 torch = pytest.importorskip("torch")
@@ -42,25 +18,13 @@ from vbrl.vision.registry import ENCODERS, build_encoder  # noqa: E402
 _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 
 
-# One representative ID per axis that could plausibly differ between a
-# workstation and a cluster node: both robots, both state tasks, a frozen
-# pretrained encoder (which takes the cached-feature path) and a trainable
-# scratch encoder (which does not).
-# Stack-Cubes is here in full rather than by representative: it is the only
-# task with four manipulated entities, a finer simulation substep, and three
-# interval events that teleport bodies mid-episode, and none of that is
-# exercised anywhere else in the suite.
 TASK_IDS = (
-  "Mjlab-PushCube-State-Trossen",
   "Mjlab-PushT-State-TrossenRealistic",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-SlowGoal-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "Mjlab-StackCubes-State-TrossenRealistic",
-  "Mjlab-StackCubes-Ext-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "Mjlab-StackCubes-Wrist-NatureCnn-SpatialSoftmax-TrossenRealistic",
+  "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
-STATE_TASK_ID = "Mjlab-PushCube-State-Trossen"
+STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
 
 NUM_ENVS = 8
 IMAGE_SIZE = (224, 224)
@@ -68,10 +32,12 @@ DEVICE = "cuda:0"
 
 
 def _weights_available() -> bool:
+  from vbrl.vision.backbones.weights import huggingface_cache, r3m_files
+
   root = model_root()
-  return (root / "dinov2-small" / "model.safetensors").is_file() and (
-    root / "r3m" / "r3m_50" / "model.pt"
-  ).is_file()
+  return huggingface_cache(root).is_dir() and all(
+    f.is_file() for f in r3m_files(root)
+  )
 
 
 requires_weights = pytest.mark.skipif(
@@ -84,28 +50,13 @@ requires_cuda = pytest.mark.skipif(
 )
 
 
-# --- 1. every encoder x adapter, end to end ----------------------------------
-
-
 @functools.cache
 def _shared_backbone(encoder: str):
-  """Load one pretrained backbone per encoder instead of once per combination.
-
-  The loaders are captured at import time: the fixture below replaces
-  ``dinov2.load``/``r3m.load``, and reading them through the module here would
-  make this call itself.
-  """
   return _LOADERS[encoder]()
 
 
 @pytest.fixture
 def _cached_pretrained_backbones(monkeypatch: pytest.MonkeyPatch) -> None:
-  """Serve real weights from a per-encoder cache, deep-copied per build.
-
-  The weights are what make this test meaningful, and loading DINOv2 and
-  ResNet50 thirty times over is what would make it too slow to run. Copying
-  keeps each combination's parameters independent.
-  """
   import copy
 
   monkeypatch.setattr(_dinov2, "load", lambda: copy.deepcopy(_shared_backbone("dinov2")))
@@ -114,18 +65,6 @@ def _cached_pretrained_backbones(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @functools.cache
 def _registered_architectures() -> tuple[tuple[str, dict], ...]:
-  """Every distinct visual architecture any registered task actually uses.
-
-  Sweeping the registry's encoders against its adapters would invent
-  combinations no task registers and that cannot work: ``flatten`` reads the
-  backbone's *native* grid, so its ``target_grid_size`` is 24 for NatureCNN and
-  14 for CompactViT, not a free parameter. Taking the configurations from the
-  task registry tests the architectures that exist, at the settings they run
-  with, and picks up a new one automatically when a task is registered.
-
-  ``global`` is appended per encoder because it is a registered adapter that no
-  task currently selects, so nothing else would notice if it rotted.
-  """
   from mjlab.tasks.registry import list_tasks, load_rl_cfg
 
   import vbrl.tasks  # noqa: F401
@@ -170,20 +109,8 @@ _VISION_CONFIGS, _VISION_LABELS = _architecture_cases()
 @pytest.mark.usefixtures("_cached_pretrained_backbones")
 @pytest.mark.parametrize("vision", _VISION_CONFIGS, ids=_VISION_LABELS)
 def test_every_registered_architecture_trains_end_to_end(vision: dict) -> None:
-  """Builds, forwards, backpropagates, and takes an optimizer step.
-
-  ``test_vision_checkpoint_layout`` pins what these modules *are*; this pins
-  that they *work*. A frozen backbone must additionally stay frozen, which is
-  the premise the whole cached-feature rollout path is built on.
-
-  Not every parameter is expected to receive a gradient: the AFA pool carries a
-  ``norm`` its forward never applies, kept only so the published PV-Robo
-  state-dict layout matches. So the assertion is that learning happens, not
-  that every tensor participates.
-  """
-  # R3M's upstream model class moves itself to CUDA while being constructed, so
-  # a freshly built encoder can straddle two devices. Training always moves the
-  # whole model to the run device, and so must this.
+  # R3M's model class moves itself to CUDA during construction, so a fresh
+  # encoder can straddle two devices.
   device = torch.device(DEVICE if torch.cuda.is_available() else "cpu")
   encoder_module = build_encoder(
     VisionConfig.from_mapping(vision), input_dim=IMAGE_SIZE
@@ -201,8 +128,6 @@ def test_every_registered_architecture_trains_end_to_end(vision: dict) -> None:
 
   trainable = [p for p in encoder_module.parameters() if p.requires_grad]
   if not trainable:
-    # A frozen backbone behind a parameterless adapter is a pure feature
-    # extractor. Nothing to optimize is correct, not a failure.
     assert features.grad_fn is None
     return
 
@@ -219,16 +144,12 @@ def test_every_registered_architecture_trains_end_to_end(vision: dict) -> None:
   ), "an optimizer step changed nothing"
 
 
-# --- 2. every task family's environment builds, resets, and steps ------------
-
-
 @pytest.mark.sim
 @pytest.mark.gpu
 @requires_cuda
 @requires_weights
 @pytest.mark.parametrize("task_id", TASK_IDS)
 def test_registered_task_resets_and_steps(task_id: str) -> None:
-  """The gap between "the config is well-formed" and "the task runs"."""
   from mjlab.tasks.registry import load_env_cfg
 
   from vbrl.runtime import build_env
@@ -265,20 +186,11 @@ def test_registered_task_resets_and_steps(task_id: str) -> None:
 @requires_cuda
 @requires_weights
 def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
-  """Spreading the envs out must be a pure translation of each world.
-
-  Every env is laid out at its own origin so a multi-env view or video does not
-  stack robots on top of each other. That is only free if each env is the same
-  scene moved: the camera rides the robot's base body and the lights ride the
-  table's, so translating both mocap poses and the object's root back to the
-  world origin has to reproduce the very same pixels. Anything left behind --
-  a light, a prop, a world-frame camera -- shows up here as a non-zero delta.
-  """
   import mujoco
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-SlowGoal-NatureCnn-SpatialSoftmax-TrossenRealistic"
+  task_id = "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model
@@ -311,16 +223,8 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
     env.close()
 
 
-# --- 3. the runner vbrl-train uses completes an iteration -------------------
-
-
 @contextlib.contextmanager
 def _training_stack(task_id: str, log_dir: Path):
-  """Yield ``(make_runner, environment)`` off the same path ``train.py`` takes.
-
-  The environment is the expensive part, so it is built once and handed back:
-  a resume test needs a *second* runner over the same environment.
-  """
   from dataclasses import asdict
 
   from mjlab.envs import ManagerBasedRlEnv
@@ -366,7 +270,6 @@ def _float_state(module) -> dict:
 def test_one_learning_iteration_updates_the_policy(
   task_id: str, tmp_path: Path
 ) -> None:
-  """A rollout, an update, and a checkpoint -- the whole training path."""
   with _training_stack(task_id, tmp_path) as (make_runner, _):
     runner = make_runner()
     before = _float_state(runner.alg.actor)
@@ -384,10 +287,6 @@ def test_one_learning_iteration_updates_the_policy(
       saved
     )
 
-    # The strict=True contract a resume depends on, checked by comparison rather
-    # than by loading: after a rollout the live normalizer buffers are inference
-    # tensors, which cannot be updated in place. Loading into a fresh runner is
-    # what a real resume does, and is covered below.
     for role, module in (("actor", runner.alg.actor), ("critic", runner.alg.critic)):
       expected = {name: tuple(v.shape) for name, v in module.state_dict().items()}
       stored = {name: tuple(v.shape) for name, v in saved[f"{role}_state_dict"].items()}
@@ -401,11 +300,6 @@ def test_one_learning_iteration_updates_the_policy(
 @requires_cuda
 @requires_weights
 def test_a_checkpoint_resumes_into_a_fresh_runner(tmp_path: Path) -> None:
-  """Jobs hit the three-day wall and requeue, so resume is a production path.
-
-  Uses the visual task: its checkpoint carries the encoder and adapter subtrees,
-  which is where a layout change would break a resume.
-  """
   with _training_stack(VISUAL_TASK_ID, tmp_path) as (make_runner, _):
     trained = make_runner()
     trained.learn(num_learning_iterations=1, init_at_random_ep_len=True)
@@ -427,13 +321,6 @@ def test_a_checkpoint_resumes_into_a_fresh_runner(tmp_path: Path) -> None:
 @requires_cuda
 @requires_weights
 def test_frozen_visual_features_are_cached_during_rollout(tmp_path: Path) -> None:
-  """The cached-feature path is what makes visual training affordable.
-
-  A frozen encoder must land in rollout storage as features, with the raw images
-  dropped; silently falling back to storing images still trains, just far slower
-  and at many times the memory -- exactly the kind of regression that only shows
-  up as a cluster job dying on memory.
-  """
   with _training_stack(VISUAL_TASK_ID, tmp_path) as (make_runner, _):
     runner = make_runner()
     runner.learn(num_learning_iterations=1, init_at_random_ep_len=True)

@@ -1,5 +1,3 @@
-"""Trainable scratch visual backbones."""
-
 from __future__ import annotations
 
 from typing import cast
@@ -9,7 +7,6 @@ import torch.nn as nn
 
 
 class NatureCNNBackbone(nn.Module):
-  """The three-layer Nature DQN trunk used by scratch policies."""
 
 
   def __init__(self) -> None:
@@ -50,7 +47,6 @@ class CompactViTBlock(nn.Module):
 
 
 class CompactViTBackbone(nn.Module):
-  """Four-block, 128-wide ViT with a 16-pixel patch embedding."""
 
 
   def __init__(self, image_size: int = 224) -> None:
@@ -116,12 +112,10 @@ def compact_vit_features(backbone: nn.Module, images: torch.Tensor) -> torch.Ten
 
 
 def nature_extractor(_request: str, _grid: int):
-  """Nature CNN returns spatial maps for every request."""
   return nature_features
 
 
 def compact_vit_extractor(_request: str, _grid: int):
-  """Compact ViT returns spatial maps for every request."""
   return compact_vit_features
 
 

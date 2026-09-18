@@ -1,26 +1,3 @@
-"""Solve ``external_cam``'s pose from a capture_board run.
-
-The chain, all in OpenCV axes until the last step:
-
-    T_base_board  = T_base_wristcam(joints_i) @ T_wristcam_board(image_i)
-    T_base_extcam = T_base_board @ inv(T_extcam_board)
-
-The first line is evaluated once per wrist view. The board does not move, so the
-views must agree; their spread is the error bar, and it is reported rather than
-hidden. The combined estimate uses the geometric median of the translations and
-the chordal mean of the rotations, so one view that lost half its corners cannot
-drag the answer.
-
-The result is expressed in the BASE frame, which is exactly the frame an MJCF
-``<camera>`` inside ``base_link`` is written in -- every external camera in this
-robot is parented there. So it is written to the XML unchanged. In particular the
-5 mm mounting plate is NOT added: the plate lifts the arm and its cameras
-together in world coordinates, leaving their relative pose untouched, and adding
-it here would move the camera 5 mm relative to the arm it is measured against.
-
-    python -m vbrl.deployment.recalibrate --capture artifacts/deployment/charuco
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -33,9 +10,6 @@ import numpy as np
 from vbrl.deployment import charuco
 from vbrl.deployment.calibration import mjcf_camera, wrist_camera_pose
 
-# Fallback only. Each view records the mode it was shot in, and the intrinsics
-# are looked up per view, so the capture resolution can change without touching
-# this file.
 DEFAULT_MODE = "1280x720"
 
 
@@ -50,13 +24,6 @@ def _camera_matrix(values: dict[str, float]) -> Any:
 
 
 def _chordal_mean_rotation(rotations: list[Any]) -> Any:
-  """The rotation minimising summed squared Frobenius distance to the inputs.
-
-  The arithmetic mean of rotation matrices is not a rotation; projecting it back
-  onto SO(3) through an SVD is, and it is the closed-form L2 mean. Averaging
-  Euler angles or raw quaternion components would both be wrong here -- the
-  former is not even well defined near a gimbal, the latter needs sign handling.
-  """
   average = np.mean(np.stack(rotations), axis=0)
   u, _, vt = np.linalg.svd(average)
   rotation = u @ vt
@@ -67,7 +34,6 @@ def _chordal_mean_rotation(rotations: list[Any]) -> Any:
 
 
 def _geometric_median(points: Any, iterations: int = 128) -> Any:
-  """Weiszfeld's algorithm: robust to a view that is simply wrong."""
   points = np.asarray(points, dtype=np.float64)
   estimate = np.median(points, axis=0)
   for _ in range(iterations):
@@ -275,7 +241,7 @@ def report(result: dict[str, Any]) -> None:
 
 
 def main(argv: Any = None) -> int:
-  parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+  parser = argparse.ArgumentParser(description="Solve external_cam's pose in the base frame from a capture.")
   parser.add_argument("--capture", type=Path, default=Path("artifacts/deployment/charuco"))
   parser.add_argument(
     "--intrinsics",

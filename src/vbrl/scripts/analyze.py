@@ -1,5 +1,3 @@
-"""Run the scripts listed in an analysis YAML file."""
-
 from __future__ import annotations
 
 import argparse
@@ -9,14 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from vbrl.analysis import (
-  attribution,
   capture,
   comparison,
   features,
   occlusion,
   pca,
   probe,
-  report,
 )
 from vbrl.paths import analysis_manifest_path, artifact_path
 from vbrl.runtime import (
@@ -27,7 +23,6 @@ from vbrl.runtime import (
   required_text,
 )
 
-
 STEPS: dict[str, Callable[..., Any]] = {
   "capture": capture.run,
   "features": features.run,
@@ -35,19 +30,15 @@ STEPS: dict[str, Callable[..., Any]] = {
   "pca": pca.run,
   "occlusion": occlusion.run,
   "comparison": comparison.run,
-  "attribution": attribution.run,
-  "report": report.run,
 }
 
 # Steps that read the simulator, so a manifest using none of them never builds
 # an environment.
-_RUNTIME_STEPS = {"capture", "features", "occlusion", "attribution"}
+_RUNTIME_STEPS = {"capture", "features", "occlusion"}
 
 
 @dataclass
 class Context:
-  """Configuration and one shared native runtime for an analysis pipeline."""
-
   path: Path
   task_id: str
   agent: str
@@ -73,7 +64,6 @@ class Context:
     return path
 
   def provenance(self) -> dict[str, Any]:
-    """Where this artifact came from, recorded into every NPZ we write."""
     return {
       "manifest": str(self.path),
       "task_id": self.task_id,
@@ -86,7 +76,6 @@ class Context:
 
 
 def load(path: str | Path, device: str) -> tuple[Context, list[dict[str, Any]]]:
-  """Read one task/checkpoint reference and its ordered analysis steps."""
   path = analysis_manifest_path(path)
   config = read_manifest(
     path,
@@ -117,7 +106,6 @@ def load(path: str | Path, device: str) -> tuple[Context, list[dict[str, Any]]]:
   scene = config.get("scene")
   eval_dr = config.get("eval_dr", "fixed")
   if scene is not None:
-    # Validate here so a typo fails before an environment is built.
     from vbrl.scenes.presets import get_preset
 
     get_preset(required_text(scene, "scene"), eval_dr=eval_dr, require_ood=True)
@@ -185,7 +173,6 @@ def _prepare_runtime(context: Context, steps: list[dict[str, Any]]) -> None:
 
 
 def execute(context: Context, steps: list[dict[str, Any]]) -> list[Path]:
-  """Build at most one runtime and execute the YAML steps in order."""
   generated: list[Path] = []
   try:
     if {step.get("script") for step in steps} & _RUNTIME_STEPS:

@@ -17,7 +17,7 @@ usage() {
   command cat <<'EOF'
 Usage:
   bash cluster/view.sh --profile testing -- \
-    Mjlab-PushCube-State-Trossen --agent zero
+    Mjlab-PushT-State-TrossenRealistic --agent zero
 
   bash cluster/view.sh --profile testing -- \
     Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen \

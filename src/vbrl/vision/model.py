@@ -4,11 +4,11 @@ from typing import Any, cast
 
 import torch
 import torch.nn as nn
-from torch.profiler import record_function
 from rsl_rl.models.cnn_model import CNNModel
 from rsl_rl.models.mlp_model import MLPModel
 from rsl_rl.modules import HiddenState
 from tensordict import TensorDict
+from torch.profiler import record_function
 
 from .config import VisionConfig
 from .encoder import VisualEncoder
@@ -16,8 +16,6 @@ from .registry import build_encoder
 
 
 class VisionModel(CNNModel):
-  """RSL-RL model that joins proprioception with reusable visual features."""
-
   def __init__(
     self,
     obs: TensorDict,
@@ -128,79 +126,4 @@ class VisionModel(CNNModel):
     )
 
 
-class BalancedVisionModel(VisionModel):
-  """VisionModel that gives proprioception its own projection before the concat.
-
-  MJLab's model concatenates the normalised 1D observations at their native
-  width, so Push-T's actor sees 27 proprioceptive dimensions beside 256 visual
-  ones -- 9.5% of the MLP's input, of which the goal pose is five numbers.
-  ManiSkill3's ``ppo_rgb.py`` instead projects the state through its own
-  ``Linear(state_dim, 256)`` and concatenates 256 with 256, so the two streams
-  reach the policy at equal width.
-
-  This subclass is that change and nothing else: same encoders, same adapters,
-  same MLP widths. It exists as a separate class because
-  ``"vbrl.vision.model:VisionModel"`` is a string inside every registered
-  ``rl_cfg`` and inside saved checkpoints, so the behaviour cannot be switched
-  on in place without changing what those checkpoints mean.
-  """
-
-  def __init__(
-    self,
-    obs: TensorDict,
-    obs_groups: dict[str, list[str]],
-    obs_set: str,
-    output_dim: int,
-    hidden_dims: tuple[int, ...] | list[int] = (256, 256, 128),
-    activation: str = "elu",
-    obs_normalization: bool = False,
-    distribution_cfg: dict | None = None,
-    cnn_cfg: dict[str, Any] | None = None,
-    cnns: nn.ModuleDict | dict[str, nn.Module] | None = None,
-    state_latent_dim: int = 256,
-  ) -> None:
-    if state_latent_dim <= 0:
-      raise ValueError(f"state_latent_dim must be positive, got {state_latent_dim}.")
-    # Read by `_get_latent_dim`, which the MLP head calls during construction.
-    self._state_latent_dim = state_latent_dim
-    super().__init__(
-      obs=obs,
-      obs_groups=obs_groups,
-      obs_set=obs_set,
-      output_dim=output_dim,
-      hidden_dims=hidden_dims,
-      activation=activation,
-      obs_normalization=obs_normalization,
-      distribution_cfg=distribution_cfg,
-      cnn_cfg=cnn_cfg,
-      cnns=cnns,
-    )
-    # No activation, matching ManiSkill3: the ReLU that follows belongs to the
-    # policy MLP's first layer, which both streams share.
-    self.state_proj = nn.Linear(self.obs_dim, self._state_latent_dim)
-
-  def _get_latent_dim(self) -> int:
-    return self._state_latent_dim + self.cnn_latent_dim
-
-  def get_latent(
-    self,
-    obs: TensorDict,
-    masks: torch.Tensor | None = None,
-    hidden_state: HiddenState = None,
-  ) -> torch.Tensor:
-    del masks, hidden_state
-    latent_1d = self.state_proj(MLPModel.get_latent(self, obs))
-    visual = []
-    for observation_group in self.obs_groups_2d:
-      encoder = cast(VisualEncoder, self.cnns[observation_group])
-      feature_key = self.feature_key(observation_group)
-      if feature_key in obs.keys():
-        with record_function("visual_adapter"):
-          visual.append(encoder.project_features(obs[feature_key]))
-      else:
-        with record_function("visual_encoder"):
-          visual.append(encoder(obs[observation_group]))
-    return torch.cat([latent_1d, *visual], dim=-1)
-
-
-__all__ = ["VisionModel", "BalancedVisionModel"]
+__all__ = ["VisionModel"]

@@ -1,5 +1,3 @@
-"""MuJoCo material construction for every scene material bank."""
-
 from __future__ import annotations
 
 import random
@@ -20,7 +18,6 @@ from .presets import (
 
 
 def texture_slots(color_texture: str) -> list[str]:
-  """Return MuJoCo's role-indexed texture list with the RGB texture assigned."""
   return [""] + [color_texture] + [""] * 8
 
 
@@ -35,7 +32,6 @@ def add_image_material(
   roughness: float | None = None,
   specular: float | None = None,
 ) -> str:
-  """Add one file-backed RGB texture and its material to ``spec``."""
   spec.add_texture(
     name=texture_name,
     type=mujoco.mjtTexture.mjTEXTURE_2D,
@@ -62,7 +58,6 @@ def add_preset_material(
   prefix: str,
   preset: TexturePreset,
 ) -> str:
-  """Add a catalogued image texture with its rendering metadata."""
   return add_image_material(
     spec,
     material_name=f"{prefix}_material",
@@ -149,7 +144,6 @@ def _add_procedural_material(
 
 
 def _add_procedural_pool(spec: mujoco.MjSpec, bank: MaterialBank) -> tuple[str, ...]:
-  """Bake 32 seeded, full-range two-color variants of every material kind."""
   assert bank.seed is not None
   rng = random.Random(bank.seed)
   for kind in PROCEDURAL_KINDS:
@@ -168,13 +162,6 @@ def _add_procedural_pool(spec: mujoco.MjSpec, bank: MaterialBank) -> tuple[str, 
 
 
 def _add_ambientcg_pool(spec: mujoco.MjSpec, bank: MaterialBank) -> tuple[str, ...]:
-  """Bake the pooled AmbientCG textures behind a single material.
-
-  Every pooled image becomes a texture; one material points its RGB role slot
-  at the first of them, and ``dr.mat_texid`` repoints that slot per
-  environment. The bank costs one material, but textures are still capped --
-  see :func:`ambientcg_pool_paths`.
-  """
   names = ambientcg_texture_names()
   for path, texture_name in zip(ambientcg_pool_paths(), names, strict=True):
     spec.add_texture(
@@ -205,7 +192,6 @@ _BUILDERS = {
 
 
 def add_bank(spec: mujoco.MjSpec, bank: MaterialBank) -> tuple[str, ...]:
-  """Bake one material bank into ``spec`` and return its material names."""
   return _BUILDERS[bank.kind](spec, bank)
 
 

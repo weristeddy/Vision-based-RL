@@ -57,7 +57,6 @@ motion:
   # This is a third of the original cap and 60% of the PixelGoal generation's
   # 0.05, so it should be the slowest of the four Push-T policies at raw output.
   action_smoothing: 1.0
-  response_gain: 1.0
   max_joint_step: null
   max_gripper_step: 0.01   # unused: Push-T drives joint_0..5 only
   # Carried over from the PixelGoal manifests rather than measured for this

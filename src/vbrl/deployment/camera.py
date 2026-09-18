@@ -9,12 +9,6 @@ SIZE = 224
 
 
 def _colour_sensor(device: Any, rs: Any) -> Any:
-  """The sensor carrying the colour stream.
-
-  Not ``first_color_sensor()``: the D405 has no separate RGB module, its colour
-  frames come off the stereo sensor, and that call raises there. Asking which
-  sensor advertises a colour profile works on both layouts.
-  """
   for sensor in device.query_sensors():
     for profile in sensor.get_stream_profiles():
       if profile.stream_type() == rs.stream.color:
@@ -23,14 +17,6 @@ def _colour_sensor(device: Any, rs: Any) -> Any:
 
 
 class RealSenseCamera:
-  """The newest 224x224 RGB frame.
-
-  Capture runs on its own thread, so a sensor slower than the control rate
-  cannot become the loop's clock. Frames are centre cropped rather than
-  resized: on the 424x240 mode that is a 1:1 pixel map, and its 54.49-degree
-  span is the ``fovy`` the simulator renders.
-  """
-
   def __init__(self, config: Any) -> None:
     import pyrealsense2 as rs
 
@@ -48,10 +34,8 @@ class RealSenseCamera:
     if config.camera_exposure_us is None:
       sensor.set_option(rs.option.enable_auto_exposure, 1)
     else:
-      # Manual, because auto meters the whole frame and a pale tabletop filling
-      # it drives the sensor to saturation -- 42% of pixels pinned at 255 on the
-      # first logged run, which is a uniform white field where training had
-      # texture.
+      # Manual, because auto meters the whole frame and a pale tabletop filling it
+      # drives the sensor to saturation -- 42% of pixels pinned at 255 on the first.
       sensor.set_option(rs.option.enable_auto_exposure, 0)
       sensor.set_option(rs.option.exposure, float(config.camera_exposure_us))
 
@@ -62,17 +46,10 @@ class RealSenseCamera:
     self._thread.start()
 
   def frame(self) -> Any:
-    """The newest frame. Never blocks."""
     with self._lock:
       return self._frame
 
   def saturated_fraction(self) -> float:
-    """Share of channels pinned at 255 in the newest frame.
-
-    Printed at startup because a clipped frame is invisible from the numbers
-    the loop otherwise reports: the policy keeps producing plausible actions
-    from an image whose background has been erased.
-    """
     with self._lock:
       return float((self._frame >= 255).mean())
 
@@ -104,20 +81,11 @@ __all__ = ["SIZE", "RealSenseCamera"]
 
 
 def _probe(argv: Any = None) -> int:
-  """Sweep colour exposures and report how much of the frame clips.
-
-      python -m vbrl.deployment.camera
-      python -m vbrl.deployment.camera --width 424 --height 240
-
-  The number to put in a manifest's ``camera_exposure_us`` is the largest one
-  whose clipped share is a few percent: the policy needs the tabletop to carry
-  texture, because that is what every one of the 1203 training tables had.
-  """
   import argparse
 
   import pyrealsense2 as rs
 
-  parser = argparse.ArgumentParser(description=_probe.__doc__.splitlines()[0])
+  parser = argparse.ArgumentParser(description="Sweep colour exposures and report how much of the frame clips.")
   parser.add_argument("--width", type=int, default=424)
   parser.add_argument("--height", type=int, default=240)
   parser.add_argument("--fps", type=int, default=None)
@@ -129,9 +97,8 @@ def _probe(argv: Any = None) -> int:
   )
   arguments = parser.parse_args(argv)
 
-  # Same reason intrinsics.py tries the slow rates first: two D405s on one bus
-  # do not always deliver a mode at its advertised rate, and a probe needs one
-  # frame rather than throughput.
+  # Same reason intrinsics.py tries the slow rates first: two D405s on one bus do not
+  # always deliver a mode at its advertised rate, and a probe needs one frame rather.
   rates = (arguments.fps,) if arguments.fps else (5, 15, 30, 60)
   pipeline = rs.pipeline()
   for rate in rates:
@@ -170,7 +137,6 @@ def _probe(argv: Any = None) -> int:
     sensor.set_option(rs.option.enable_auto_exposure, 0)
     for exposure in arguments.exposures:
       sensor.set_option(rs.option.exposure, float(exposure))
-      # The sensor needs a few frames to apply a new exposure.
       for _ in range(8):
         pipeline.wait_for_frames(timeout_ms=5000)
       image = np.asanyarray(

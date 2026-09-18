@@ -1,5 +1,3 @@
-"""CLI surfaces of the four entry points."""
-
 from __future__ import annotations
 
 import math
@@ -12,17 +10,11 @@ from unittest.mock import ANY
 
 import pytest
 
-
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
 TASK_ID = "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen"
 
 
 def test_scene_and_path_imports_stay_free_of_a_simulator(tmp_path: Path) -> None:
-  """``play.py`` offers ``--scene`` choices without paying a MuJoCo import.
-
-  ``presets.py`` is the module that must stay light; task terminations import
-  its tabletop extents too.
-  """
   script = """
 import sys
 import vbrl
@@ -41,9 +33,6 @@ for heavy in ('viser', 'wandb', 'transformers', 'r3m', 'mujoco', 'mjlab'):
   )
 
 
-# --- vbrl-train --------------------------------------------------------------
-
-
 def test_train_config_exposes_the_flags_sweeps_and_cluster_scripts_use() -> None:
   from vbrl.scripts.train import WORKER_ENV, TrainConfig
 
@@ -51,14 +40,30 @@ def test_train_config_exposes_the_flags_sweeps_and_cluster_scripts_use() -> None
   fields = set(TrainConfig.__dataclass_fields__)
 
   assert {"env", "agent", "video", "gpu_ids", "log_root"} <= fields
+  assert {
+    "label",
+    "min_action_std",
+    "action_path_weight",
+    "action_rate_weight",
+    "object_press_weight",
+    "goal_yaw_rungs",
+  } <= fields
   assert config.gpu_ids == [0]
   assert config.env.scene.num_envs > 0
-  # TorchrunX workers start from a bare environment; these must reach them.
-  assert {"MUJOCO*", "VBRL*", "WANDB*"} <= set(WORKER_ENV)
+  assert {"VBRL*", "WANDB*", "HF*"} <= set(WORKER_ENV)
+
+
+def test_mjlab_still_reads_the_env_var_list_vbrl_appends_to() -> None:
+  import inspect
+
+  import mjlab.scripts.train as upstream
+
+  source = inspect.getsource(upstream.launch_training)
+  assert "torchrunx.DEFAULT_ENV_VARS_FOR_COPY" in source
+  assert '("MUJOCO*",)' in source
 
 
 def test_vbrl_list_prints_every_registry_from_its_own_table(capsys) -> None:
-  """The listing reads live tables, so it cannot drift from what is registered."""
   from vbrl.scripts.list_registries import SECTIONS, main
 
   assert main([]) == 0
@@ -69,7 +74,6 @@ def test_vbrl_list_prints_every_registry_from_its_own_table(capsys) -> None:
     assert source in printed
     rows = read()
     assert rows, section
-    # The first row of each registry is reachable from the printed listing.
     assert str(rows[0]).split()[0] in printed
 
 
@@ -86,7 +90,6 @@ def test_vbrl_list_can_print_one_section(capsys) -> None:
 
 
 def test_bare_train_help_lists_every_registered_task(capsys) -> None:
-  """The two-stage tyro parse swallows a bare --help, so main() answers it."""
   import vbrl.scripts.train as cli
   from vbrl.tasks import vbrl_task_ids
 
@@ -96,9 +99,6 @@ def test_bare_train_help_lists_every_registered_task(capsys) -> None:
   assert "usage: vbrl-train <TASK_ID> [OPTIONS]" in printed
   for task_id in vbrl_task_ids():
     assert task_id in printed
-
-
-# --- vbrl-visualize ----------------------------------------------------------
 
 
 def test_play_parser_accepts_a_local_file_or_a_wandb_run() -> None:
@@ -187,7 +187,6 @@ def test_run_viser_uses_the_official_viewer_and_stops_the_server(
 
 
 def test_record_options_require_a_destination() -> None:
-  """Half a recording request is a typo, not a default."""
   import vbrl.scripts.play as cli
 
   parser = cli._parser()
@@ -200,18 +199,15 @@ def test_record_options_require_a_destination() -> None:
 
 
 def test_a_gif_is_written_smaller_than_a_video() -> None:
-  """A README asset is bounded by what a browser will load, not by the sim."""
   from vbrl.evaluation.recording import GIF_FPS, GIF_SIZE, VIDEO_SIZE, default_output
 
   assert default_output(Path("out.gif")) == (GIF_SIZE, GIF_FPS)
   assert default_output(Path("out.GIF")) == (GIF_SIZE, GIF_FPS)
-  # None defers to the environment's own step rate.
   assert default_output(Path("out.mp4")) == (VIDEO_SIZE, None)
   assert GIF_SIZE < VIDEO_SIZE
 
 
 def test_the_recording_camera_frames_every_env_it_is_given() -> None:
-  """Framing is read off the origins the scene built, not the env count."""
   torch = pytest.importorskip("torch")
   from mjlab.viewer.viewer_config import ViewerConfig
 
@@ -225,8 +221,6 @@ def test_the_recording_camera_frames_every_env_it_is_given() -> None:
   def env(origins: list[list[float]]):
     return SimpleNamespace(
       scene=SimpleNamespace(env_origins=torch.tensor(origins)),
-      # A CollisionCam task records the proxies its policy is fed, so the
-      # task's own geom mask has to survive.
       cfg=SimpleNamespace(viewer=ViewerConfig(geom_group=(1, 0, 0, 1, 0, 0))),
       sim=SimpleNamespace(
         mj_model=SimpleNamespace(vis=SimpleNamespace(global_=SimpleNamespace(fovy=45.0)))
@@ -239,16 +233,12 @@ def test_the_recording_camera_frames_every_env_it_is_given() -> None:
   assert one.lookat == (TABLE_CENTER[0], TABLE_CENTER[1], 0.0)
   assert one.geom_group == (1, 0, 0, 1, 0, 0)
   assert one.max_extra_envs == 0
-  # One env spans nothing but its own padding. The horizontal fit has a closed
-  # form here, since tan(atan(x)) is x: the 16:9 aspect widens the field the
-  # span has to fit inside, and the margin keeps the near row out of the edge.
   assert one.distance == pytest.approx(
     FRAME_MARGIN
     * SCENE_PADDING_M
     / (2.0 * math.tan(math.radians(45.0) / 2.0) * 1280 / 720)
   )
 
-  # A squarer frame has a narrower horizontal field, so it must pull back.
   assert grid_camera(env([[0.0, 0.0, 0.0]]), width=720, height=720).distance > (
     one.distance
   )
@@ -263,19 +253,11 @@ def test_the_recording_camera_frames_every_env_it_is_given() -> None:
   assert grid.max_extra_envs == 3
   assert (grid.width, grid.height) == (640, 360)
 
-  # An off-centre grid is followed rather than assumed to sit at the origin.
   shifted = grid_camera(env([[4.0, 2.0, 0.0], [6.0, 2.0, 0.0]]), width=64, height=64)
   assert shifted.lookat == (5.0 + TABLE_CENTER[0], 2.0 + TABLE_CENTER[1], 0.0)
 
 
 def test_viser_follows_the_appearance_fields_the_scene_banks_vary() -> None:
-  """MJLab compares colour and ignores textures at all three decision points.
-
-  The patch is process-global and idempotent by design -- the viewer wants it
-  for the whole session -- so this asserts the end state rather than restoring
-  anything. Every hook it reaches for is private, so an MJLab upgrade that
-  renames one fails here instead of silently collapsing the view.
-  """
   import numpy as np
   from mjlab.viewer.model_sync import VIEWER_MODEL_FIELDS
   from mjlab.viewer.viser import scene
@@ -283,7 +265,6 @@ def test_viser_follows_the_appearance_fields_the_scene_banks_vary() -> None:
   from vbrl.scripts.play import track_appearance_randomization
 
   banked = {"mat_texid", "geom_matid"}
-  # The fields have to reach the host model MJLab renders from at all.
   assert banked <= VIEWER_MODEL_FIELDS
 
   track_appearance_randomization()

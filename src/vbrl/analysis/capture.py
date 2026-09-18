@@ -1,5 +1,3 @@
-"""Capture reusable RGB observations and aligned task targets."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -11,7 +9,6 @@ import numpy as np
 import torch
 
 from .io import load_npz, prefixed, save_npz, string_list
-
 
 TargetGetter = Callable[[Any, Any, int], Any]
 
@@ -71,7 +68,6 @@ def capture_rollout(
   seed: int | None = None,
   metadata: Mapping[str, Any] | None = None,
 ) -> CaptureBatch:
-  """Capture one environment without coupling analysis to a task implementation."""
   if num_frames <= 0:
     raise ValueError("num_frames must be positive.")
 
@@ -132,12 +128,8 @@ def _goal_position(env: Any, _observation: Any, env_index: int) -> Any:
   return position if origins is None else position - origins[env_index]
 
 
-# --- Push-T ------------------------------------------------------------------
-#
-# Yaw is recorded as (sin, cos) rather than an angle: a probe fitted against a
-# quantity that wraps at +/-pi would be scored on a discontinuity the encoder
-# cannot represent, and a 179-degree error would read as small. The pair is
-# continuous everywhere and its two components are independently decodable.
+# Push-T Yaw is recorded as (sin, cos) rather than an angle: a probe fitted against a
+# quantity that wraps at +/-pi would be scored on a discontinuity the encoder cannot.
 
 
 def _push_t_command(env: Any) -> Any:
@@ -163,12 +155,10 @@ def _goal_yaw(env: Any, _observation: Any, env_index: int) -> Any:
 
 
 def _relative_yaw(env: Any, _observation: Any, env_index: int) -> Any:
-  """The quantity the task is scored on: goal yaw minus object yaw."""
+  import torch
   from mjlab.utils.lab_api.math import wrap_to_pi
 
   from vbrl.tasks.push_t.geometry import yaw_from_quat
-
-  import torch
 
   base = getattr(env, "unwrapped", env)
   command = _push_t_command(env)
@@ -220,7 +210,6 @@ def run(
   image_path: Sequence[str] = ("camera",),
   targets: Sequence[str] = (),
 ) -> Path:
-  """Capture observations from the pipeline's one shared native runtime."""
   del num_envs  # Read by the entry point while it sizes the shared environment.
   names = string_list(targets, "capture.targets")
   try:

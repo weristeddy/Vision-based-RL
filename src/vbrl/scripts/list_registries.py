@@ -1,9 +1,3 @@
-"""Print every VBRL registry, read live from its table.
-
-Each section below reads the same table you would edit to add something, so
-this stays correct without anyone maintaining a second list.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -65,7 +59,6 @@ def _analysis_steps() -> tuple[str, ...]:
   return tuple(sorted(STEPS))
 
 
-# Section name -> (where you add one, how to read what exists).
 SECTIONS: dict[str, tuple[str, Callable[[], Sequence[str]]]] = {
   "tasks": ("tasks/<task>/config/<robot>/__init__.py", _tasks),
   "architectures": ("vision/architectures.py: ARCHITECTURES", _architectures),

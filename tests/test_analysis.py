@@ -1,5 +1,3 @@
-"""Manifest validation, step dispatch, and the numeric analysis primitives."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,7 +26,6 @@ from vbrl.analysis.occlusion import (
 from vbrl.analysis.probe import load_probe, ridge_probe, save_probe
 from vbrl.runtime import CheckpointRef
 from vbrl.scripts.analyze import Context
-
 
 TASK_ID = "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen"
 
@@ -82,9 +79,6 @@ def _write(path: Path, **changes) -> Path:
   document.update(changes)
   path.write_text(yaml.safe_dump(document), encoding="utf-8")
   return path
-
-
-# --- manifest and dispatch ---------------------------------------------------
 
 
 def test_load_reads_only_task_checkpoint_output_and_steps(
@@ -184,16 +178,7 @@ def test_required_num_envs_uses_capture_indices_and_validates_bounds() -> None:
 
 
 def test_steps_table_covers_every_analysis_module() -> None:
-  from vbrl.analysis import (
-    attribution,
-    capture,
-    comparison,
-    features,
-    occlusion,
-    pca,
-    probe,
-    report,
-  )
+  from vbrl.analysis import capture, comparison, features, occlusion, pca, probe
 
   assert analysis.STEPS == {
     "capture": capture.run,
@@ -202,8 +187,6 @@ def test_steps_table_covers_every_analysis_module() -> None:
     "pca": pca.run,
     "occlusion": occlusion.run,
     "comparison": comparison.run,
-    "attribution": attribution.run,
-    "report": report.run,
   }
   assert analysis._RUNTIME_STEPS <= set(analysis.STEPS)
 
@@ -283,9 +266,6 @@ def test_feature_analysis_uses_camera_encoder_from_loaded_actor(
     camera_encoder(context)
 
 
-# --- numeric primitives ------------------------------------------------------
-
-
 def test_capture_is_reusable_and_keeps_targets_aligned(tmp_path) -> None:
   env = _DummyEnv()
   batch = capture_rollout(
@@ -348,7 +328,6 @@ def test_occlusion_scores_every_patch_and_survives_a_round_trip(tmp_path) -> Non
     metadata={"task_id": "test"},
   )
 
-  # 16x16 images with 8px patches tile into a 2x2 grid, one score per patch.
   assert result.scores.shape == (3, 2, 2)
   assert np.isfinite(result.scores).all()
   assert result.metadata["patch_size"] == 8
@@ -386,8 +365,6 @@ def test_compare_features_is_exact_for_identical_and_orthogonal_inputs() -> None
 def test_probe_fits_and_survives_a_save_load_round_trip(tmp_path) -> None:
   rng = np.random.default_rng(0)
   features = rng.normal(size=(40, 6)).astype(np.float32)
-  # A learnable target, so the probe reports a meaningful fit as object-pose
-  # probing does.
   targets = (features[:, :3] * 2.0 - 1.0).astype(np.float32)
   result = ridge_probe(features, targets, train_fraction=0.7, alpha=1.0, seed=0)
 

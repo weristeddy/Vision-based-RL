@@ -1,15 +1,8 @@
-"""The serializable visual-policy configuration.
-
-Free of torch and MJLab imports because task ``rl_cfg`` modules import it at
-module scope. Field names are wire format inside ``cnn_cfg["vision"]`` and in
-W&B run configs: renaming one breaks reading historical runs.
-"""
-
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Literal, Mapping, TypeAlias, cast, get_args
-
+from typing import Any, Literal, TypeAlias, cast, get_args
 
 EncoderName: TypeAlias = Literal[
   "none",
@@ -39,9 +32,6 @@ ENCODER_NAMES: tuple[str, ...] = get_args(EncoderName)
 ADAPTER_NAMES: tuple[str, ...] = get_args(AdapterName)
 FLOAT_DTYPES: frozenset[str] = frozenset(get_args(FloatDType))
 
-# Fields that older W&B run configs and cnn_cfg blobs may still carry. Every
-# one of them only ever held its default, so dropping them cannot change a
-# reconstructed policy -- but the keys must still parse.
 RETIRED_FIELDS: frozenset[str] = frozenset(
   {
     "image_width",
@@ -56,13 +46,6 @@ RETIRED_FIELDS: frozenset[str] = frozenset(
 
 @dataclass
 class VisionConfig:
-  """Complete, serializable visual-policy configuration.
-
-  The four supported encoders deliberately describe the combinations that are
-  trained and checkpointed in this repository. New backbones can be registered
-  without adding robot- or task-specific branches.
-  """
-
   encoder: EncoderName = "none"
   weights: Weights = "scratch"
   train_encoder: bool = False
@@ -76,15 +59,13 @@ class VisionConfig:
   encode_batch_size: int | None = None
 
   @classmethod
-  def from_mapping(cls, value: Mapping[str, Any] | None) -> "VisionConfig":
+  def from_mapping(cls, value: Mapping[str, Any] | None) -> VisionConfig:
     if value is None:
       return cls()
     valid = {field.name for field in fields(cls)}
     unknown = sorted(set(value) - valid - RETIRED_FIELDS)
     if unknown:
       raise ValueError(f"Unknown vision configuration fields: {unknown}.")
-    # Historical W&B run configs still carry the retired fields; drop them so
-    # an old run stays readable instead of raising.
     normalized = {key: item for key, item in value.items() if key in valid}
     if "encoder" in normalized:
       normalized["encoder"] = normalize_encoder_name(str(normalized["encoder"]))
@@ -128,8 +109,6 @@ class VisionConfig:
     if self.adapter == "none":
       raise ValueError("An RGB encoder requires an adapter.")
 
-    # Deferred so this module stays importable without torch: the registry is
-    # authoritative for which backbone/adapter combinations exist.
     from .registry import check_composition
 
     check_composition(self)

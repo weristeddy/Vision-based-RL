@@ -1,5 +1,3 @@
-"""Paired distances and plots for aligned feature artifacts."""
-
 from __future__ import annotations
 
 import csv
@@ -16,8 +14,6 @@ from .io import resolve_outputs, save_figure, string_list
 
 @dataclass(frozen=True)
 class FeatureComparison:
-  """Per-sample cosine similarities and Euclidean distances."""
-
   cosine_similarity: np.ndarray
   euclidean_distance: np.ndarray
 
@@ -26,7 +22,6 @@ def compare_features(
   left: np.ndarray,
   right: np.ndarray,
 ) -> FeatureComparison:
-  """Compare corresponding flattened feature samples."""
   left_flat = flatten_features(np.asarray(left))
   right_flat = flatten_features(np.asarray(right))
   if left_flat.shape != right_flat.shape:
@@ -55,7 +50,6 @@ def save_comparison_csv(
   result: FeatureComparison,
   path: str | Path,
 ) -> Path:
-  """Persist paired comparison metrics as a CSV."""
   destination = Path(path)
   destination.parent.mkdir(parents=True, exist_ok=True)
   with destination.open("w", encoding="utf-8", newline="") as stream:
@@ -77,7 +71,6 @@ def plot_feature_comparison(
   output: str | Path,
   title: str = "Paired feature comparison",
 ) -> Path:
-  """Plot distributions of the paired feature metrics."""
   import matplotlib.pyplot as plt
 
   figure, axes = plt.subplots(1, 2, figsize=(10.0, 4.2), constrained_layout=True)
@@ -98,7 +91,6 @@ def run(
   plot: str,
   stages: Sequence[str],
 ) -> tuple[Path, ...]:
-  """Compare feature files using explicit input and output templates."""
   left_source = context.input(left)
   right_source = context.input(right)
   jobs = resolve_outputs(

@@ -1,5 +1,3 @@
-"""Arrow-key decoding, goal nudging, and the terminal handling in between."""
-
 from __future__ import annotations
 
 import os
@@ -10,12 +8,10 @@ import time
 import numpy as np
 import pytest
 
-
 pytest.importorskip("mjlab")
 
 from vbrl.deployment.config import GOAL_RANGE  # noqa: E402
 from vbrl.deployment.keyboard import STEP, ArrowKeys, decode, nudge_goal  # noqa: E402
-
 
 CSI = {"up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D"}
 SS3 = {"up": "\x1bOA", "down": "\x1bOB", "right": "\x1bOC", "left": "\x1bOD"}
@@ -34,7 +30,6 @@ def test_several_presses_in_one_read_all_count() -> None:
 
 
 def test_a_sequence_split_across_reads_survives() -> None:
-  """A read can land mid-sequence, so the tail is carried to the next one."""
   keys, tail = decode("\x1b")
   assert (keys, tail) == ((), "\x1b")
   keys, tail = decode(tail + "[")
@@ -73,7 +68,6 @@ def test_presses_accumulate() -> None:
 
 
 def test_repeated_presses_reach_the_edge_of_the_range() -> None:
-  """Repeated additions of 0.02 drift, which once put the ceiling out of reach."""
   goal = np.array([0.35, 0.0, FLOOR])
   for _ in range(round((CEILING - FLOOR) / STEP)):
     goal, refused = nudge_goal(goal, ["up"])
@@ -139,8 +133,6 @@ def test_on_a_terminal_it_reads_keys_and_hands_it_back() -> None:
 
 
 def test_it_takes_the_terminal_back_when_something_resets_it() -> None:
-  """What broke on hardware: the drivers left the tty in canonical mode, and
-  the arrows echoed as ^[[D into the step log instead of reaching the policy."""
   master, slave = pty.openpty()
 
   with ArrowKeys(os.fdopen(slave, "r")) as keys:

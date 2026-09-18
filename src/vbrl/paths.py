@@ -1,10 +1,7 @@
-"""Installed-package assets and optional source-checkout locations."""
-
 from __future__ import annotations
 
 import os
 from pathlib import Path
-
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
@@ -23,7 +20,6 @@ def _environment_path(name: str) -> Path | None:
 
 
 def _source_checkout_root() -> Path | None:
-  """Return the checkout containing this package when using ``src`` layout."""
   source_root = PACKAGE_ROOT.parent
   candidate = source_root.parent
   if (
@@ -36,7 +32,6 @@ def _source_checkout_root() -> Path | None:
 
 
 def checkout_root(*, required: bool = True) -> Path | None:
-  """Resolve checkout data without treating installed assets as checkout data."""
   root = _environment_path("VBRL_REPO_ROOT") or _SOURCE_CHECKOUT_ROOT
   if root is None and required:
     raise RuntimeError(
@@ -47,13 +42,6 @@ def checkout_root(*, required: bool = True) -> Path | None:
 
 
 def model_root() -> Path:
-  """Resolve the pretrained-backbone root.
-
-  ``VBRL_MODEL_ROOT`` wins, then a checkout-local ``.models`` directory, then the
-  image path. The middle case is what lets a development host run every command
-  with no environment variable set at all; the cluster image has no such
-  directory in its checkout, so it still resolves to ``/opt/vbrl-models``.
-  """
   requested = _environment_path("VBRL_MODEL_ROOT")
   if requested is not None:
     return requested
@@ -72,11 +60,6 @@ def _under_checkout(
   *,
   required: bool = True,
 ) -> tuple[Path, Path | None]:
-  """Return ``(resolved, checkout_root)``.
-
-  An absolute path never needs a checkout, so it is resolved before one is
-  looked up -- installed mode has no checkout and must still accept one.
-  """
   candidate = Path(path).expanduser()
   if candidate.is_absolute():
     return candidate.resolve(), checkout_root(required=False)
@@ -90,12 +73,10 @@ def _under_checkout(
 
 
 def repository_path(path: str | Path) -> Path:
-  """Resolve a checkout-relative path; absolute paths need no checkout."""
   return _under_checkout(path)[0]
 
 
 def analysis_manifest_path(path: str | Path) -> Path:
-  """Resolve an absolute manifest or a checkout analysis selector."""
   candidate = Path(path).expanduser()
   resolved, root = _under_checkout(candidate)
   if candidate.is_absolute():
@@ -107,7 +88,6 @@ def analysis_manifest_path(path: str | Path) -> Path:
 
 
 def _confined_output(path: str | Path, directory: str, description: str) -> Path:
-  """Resolve an output and refuse anything that escapes ``directory``."""
   resolved, root = _under_checkout(path, required=False)
   if root is None:
     return resolved
@@ -121,16 +101,8 @@ def _confined_output(path: str | Path, directory: str, description: str) -> Path
 
 
 def artifact_path(path: str | Path) -> Path:
-  """Resolve generated output without making installed mode need a checkout."""
   return _confined_output(path, "artifacts", "Generated output")
 
 
 def checkpoint_path(path: str | Path) -> Path:
-  """Resolve a trained-weights destination, confined to ``ckpts/``.
-
-  An exported ONNX graph is the deployable form of a checkpoint, not an
-  analysis output, so it belongs beside the ``.pt`` it came from and under the
-  same ``ckpts/lift_cube/provenance.json``. That is the whole difference from
-  :func:`artifact_path`, which would refuse ``ckpts/`` outright.
-  """
   return _confined_output(path, "ckpts", "Trained weights")

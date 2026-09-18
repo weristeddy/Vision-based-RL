@@ -3,18 +3,11 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-
 _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 _IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 
 def prepare_images(images: torch.Tensor) -> torch.Tensor:
-  """Return canonical BCHW float RGB in ``[0, 1]``.
-
-  Camera captures and analysis artifacts commonly use NHWC uint8, while RSL-RL
-  supplies BCHW observations. Both layouts are accepted and ambiguity is
-  rejected rather than silently transposing the wrong dimension.
-  """
   if images.ndim != 4:
     raise ValueError(f"Expected a four-dimensional image batch, got {tuple(images.shape)}.")
   if images.shape[1] == 3:
@@ -34,9 +27,8 @@ def prepare_images(images: torch.Tensor) -> torch.Tensor:
 
 
 def to_unit_interval(images: torch.Tensor) -> torch.Tensor:
-  # Hot training path: RSL-RL has already established BCHW and camera terms
-  # produce values in [0, 1]. Avoid reduction-based range checks that would
-  # synchronize every GPU rollout step.
+  # Hot training path: RSL-RL has already established BCHW and camera terms produce
+  # values in [0, 1].
   if images.ndim != 4 or images.shape[1] != 3:
     raise ValueError(f"Expected BCHW RGB images, got {tuple(images.shape)}.")
   if images.dtype == torch.uint8:

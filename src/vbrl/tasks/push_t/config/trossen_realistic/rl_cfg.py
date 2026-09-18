@@ -1,5 +1,3 @@
-"""Native RSL-RL configurations for realistic Trossen Push-T."""
-
 from __future__ import annotations
 
 from mjlab.rl import (
@@ -11,7 +9,6 @@ from mjlab.rl import (
 from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
-
 
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
 
@@ -34,7 +31,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       wandb_task_tag(STATE_TASK_ID),
       "push_t",
       "state",
-      "success_98",
+      "success_90",
       "sim2real_dr",
     ),
     clip_actions=1.0,
@@ -79,14 +76,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
 def trossen_realistic_push_t_rgb_ppo_runner_cfg(
   task_id: str,
   vision: VisionConfig,
-  *,
-  scene: str = "real_texture",
-  camera: str = "external_cam",
-  success_tag: str = "success_98",
-  extra_tags: tuple[str, ...] = (),
-  actor_class: str = "vbrl.vision.model:VisionModel",
 ) -> RslRlOnPolicyRunnerCfg:
-  """One RGB Push-T policy. Hyperparameters are shared by every architecture."""
   vision_data = vision.asdict()
   return RslRlOnPolicyRunnerCfg(
     seed=0,
@@ -107,11 +97,12 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "rgb",
       vision.encoder,
       vision.adapter,
-      success_tag,
+      "success_90",
       "sim2real_dr",
-      scene,
-      camera,
-      *extra_tags,
+      "real_texture",
+      "external_cam",
+      "goal_yaw_curriculum",
+      "visual_goal",
     ),
     clip_actions=1.0,
     upload_model=True,
@@ -129,7 +120,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
         "std_type": "log",
         "std_range": (0.15, 1.0),
       },
-      class_name=actor_class,
+      class_name="vbrl.vision.model:VisionModel",
     ),
     critic=RslRlModelCfg(
       hidden_dims=(256, 256, 128),
@@ -153,8 +144,6 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       normalize_advantage_per_mini_batch=True,
       optimizer="adam",
       share_cnn_encoders=False,
-      # Only a frozen backbone may cache its features; the scratch encoders
-      # train theirs and must recompute with gradients every update.
       cache_frozen_features=vision.frozen,
       feature_cache_dtype="bfloat16",
       gradient_accumulation_steps=8,

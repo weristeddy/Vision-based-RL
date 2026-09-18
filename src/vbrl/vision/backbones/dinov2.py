@@ -1,9 +1,6 @@
-"""Pinned DINOv2 loading and feature extraction."""
-
 from __future__ import annotations
 
 from functools import partial
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -12,98 +9,56 @@ import torch.nn.functional as F
 from vbrl.paths import model_root
 
 from ..config import FeatureRequest
-from .weights import DINOV2_DIRECTORY
+from .weights import (
+  DINOV2_REPO,
+  DINOV2_REVISION,
+  huggingface_cache,
+)
 
 
-def load() -> nn.Module:
-  # Transformers may import an ABI-incompatible torchaudio build even though
-  # DINOv2 never uses audio. Mark it unavailable before resolving AutoModel.
-  try:
-    import transformers.utils as transformers_utils
-    from transformers.utils import import_utils
+def load(*, allow_download: bool = False) -> nn.Module:
+  # transformers imports an ABI-incompatible torchaudio; DINOv2 has no audio.
+  import transformers.utils as transformers_utils
+  from transformers.utils import import_utils
 
-    import_utils.is_torchaudio_available = lambda: False
-    transformers_utils.is_torchaudio_available = lambda: False
-    from transformers import AutoModel
-  except ImportError as exc:
-    raise ImportError("DINOv2 requires the pinned transformers dependency.") from exc
-  path = model_root() / DINOV2_DIRECTORY
-  if not (path / "config.json").is_file() or not (
-    path / "model.safetensors"
-  ).is_file():
-    raise FileNotFoundError(
-      f"Pinned DINOv2 assets are missing from {path}. "
-      "Rebuild rl.sif from rl.def."
-    )
-  return AutoModel.from_pretrained(str(path), local_files_only=True)
+  import_utils.is_torchaudio_available = lambda: False
+  transformers_utils.is_torchaudio_available = lambda: False
+  from transformers import AutoModel
+
+  return AutoModel.from_pretrained(
+    DINOV2_REPO,
+    revision=DINOV2_REVISION,
+    cache_dir=huggingface_cache(model_root()),
+    local_files_only=not allow_download,
+  )
 
 
-def _output_tensor(outputs: Any, *names: str) -> torch.Tensor | None:
-  for name in names:
-    value = getattr(outputs, name, None)
-    if isinstance(value, torch.Tensor):
-      return value
-    if isinstance(outputs, dict) and isinstance(outputs.get(name), torch.Tensor):
-      return outputs[name]
-  return None
+def _patch_grid(backbone: nn.Module, images: torch.Tensor) -> tuple[int, int]:
+  patch = int(backbone.config.patch_size)
+  return images.shape[-2] // patch, images.shape[-1] // patch
 
 
 def spatial_features(backbone: nn.Module, images: torch.Tensor) -> torch.Tensor:
-  outputs = backbone(images)
-  patches = _output_tensor(outputs, "x_norm_patchtokens", "patch_tokens")
-  if patches is None:
-    tokens = _output_tensor(outputs, "last_hidden_state", "tokens")
-    if tokens is None or tokens.ndim != 3:
-      raise ValueError("DINOv2 did not return patch tokens.")
-    patch_size = int(getattr(getattr(backbone, "config", None), "patch_size", 14))
-    expected = (images.shape[-2] // patch_size) * (images.shape[-1] // patch_size)
-    register_tokens = int(
-      getattr(getattr(backbone, "config", None), "num_register_tokens", 0) or 0
-    )
-    # int() rather than raw shape arithmetic: under ONNX tracing the shapes are
-    # symbolic, so ``start`` becomes a SymInt whose ``in {...}`` test is not a
-    # Python bool and this check raised on a token count it should have
-    # accepted. mjlab's ManipulationOnPolicyRunner.save swallows that, so the
-    # only symptom was a training run that quietly produced no .onnx.
-    start = int(tokens.shape[1]) - int(expected)
-    if start not in {0, 1, 1 + register_tokens}:
-      raise ValueError(
-        f"DINOv2 returned {int(tokens.shape[1])} tokens for {expected} image patches."
-      )
-    patches = tokens[:, start:]
-  patch_size = int(getattr(getattr(backbone, "config", None), "patch_size", 14))
-  height, width = images.shape[-2] // patch_size, images.shape[-1] // patch_size
-  if int(patches.shape[1]) != height * width:
-    raise ValueError("DINOv2 patch-token count does not match the input image grid.")
-  return patches.transpose(1, 2).reshape(patches.shape[0], patches.shape[-1], height, width)
+  tokens = backbone(images)["last_hidden_state"]
+  height, width = _patch_grid(backbone, images)
+  patches = tokens[:, int(tokens.shape[1]) - height * width :]
+  batch, _, channels = patches.shape
+  return patches.transpose(1, 2).reshape(batch, channels, height, width)
 
 
 def local_grid_features(
-  backbone: nn.Module,
-  images: torch.Tensor,
-  *,
-  target_grid_size: int,
+  backbone: nn.Module, images: torch.Tensor, *, target_grid_size: int
 ) -> torch.Tensor:
-  """Pool before BF16 rollout caching, matching the retained policies."""
   return F.adaptive_avg_pool2d(
-    spatial_features(backbone, images),
-    output_size=(target_grid_size, target_grid_size),
+    spatial_features(backbone, images), (target_grid_size, target_grid_size)
   )
 
 
 def global_features(backbone: nn.Module, images: torch.Tensor) -> torch.Tensor:
-  outputs = backbone(images)
-  pooled = _output_tensor(outputs, "pooler_output", "x_norm_clstoken")
-  if pooled is not None:
-    return pooled
-  tokens = _output_tensor(outputs, "last_hidden_state", "tokens")
-  if tokens is None or tokens.ndim != 3:
-    raise ValueError("DINOv2 did not return a global or CLS feature.")
-  return tokens[:, 0]
+  return backbone(images)["pooler_output"]
 
 
 def build(_input_dim: tuple[int, int]) -> nn.Module:
-  """Uniform backbone constructor; the image size is fixed by the encoder."""
   return load()
 
 
@@ -111,10 +66,7 @@ def make_extractor(request: FeatureRequest, target_grid_size: int):
   return {
     "global": global_features,
     "spatial": spatial_features,
-    "local_grid": partial(
-      local_grid_features,
-      target_grid_size=target_grid_size,
-    ),
+    "local_grid": partial(local_grid_features, target_grid_size=target_grid_size),
   }[request]
 
 

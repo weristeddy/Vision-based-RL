@@ -1,5 +1,3 @@
-"""Extract and persist shared visual-encoder features."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -31,11 +29,6 @@ def encode_stages(
   images: torch.Tensor,
   stages: Sequence[Literal["backbone", "adapter"]],
 ) -> dict[str, torch.Tensor]:
-  """Run the encoder once and return only the requested stages.
-
-  The adapter consumes the backbone output, so a request for both costs one
-  forward pass, not two.
-  """
   backbone = encoder.encode_features(images)
   produced: dict[str, torch.Tensor] = {}
   if "backbone" in stages:
@@ -46,7 +39,6 @@ def encode_stages(
 
 
 def flatten_features(features: np.ndarray) -> np.ndarray:
-  """Flatten any batched global/spatial feature contract to ``(N, D)``."""
   if features.ndim < 2:
     raise ValueError(f"Expected batched features, got shape {features.shape}.")
   return features.reshape(len(features), -1).astype(np.float32, copy=False)
@@ -95,7 +87,6 @@ def load_features(path: str | Path) -> FeatureBatch:
 
 
 def camera_encoder(context: Any) -> Any:
-  """Return the camera encoder from the already strict-loaded actor."""
   policy = context.policy
   if context.agent != "trained" or policy is None:
     raise ValueError("Feature analysis requires agent: trained.")
@@ -113,7 +104,6 @@ def run(
   stages: Sequence[Literal["backbone", "adapter"]] = ("backbone", "adapter"),
   batch_size: int = 64,
 ) -> Path:
-  """Extract stages from a capture using the already-loaded trained actor."""
   from .capture import load_capture
 
   source = context.input(capture)
