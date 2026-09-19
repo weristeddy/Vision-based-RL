@@ -90,7 +90,7 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
     "class_name": "GaussianDistribution",
     "init_std": pytest.approx(0.6065306597),
     "std_type": "log",
-    "std_range": pytest.approx((0.15, 1.0)),
+    "std_range": pytest.approx((0.05, 1.0)),
   }
   assert isinstance(agent.algorithm, VisualPpoCfg)
   assert agent.algorithm.cache_frozen_features is True

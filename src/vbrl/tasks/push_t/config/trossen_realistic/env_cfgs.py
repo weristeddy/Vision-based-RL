@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+
 from mjlab.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 
@@ -10,6 +12,7 @@ from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.push_t.goal_marker import (
   GOAL_COLOUR_EVENT,
   GOAL_ENTITY_NAME,
+  GOAL_REAL_RGBA_RANGE,
   goal_colour_event,
   goal_marker_spec,
 )
@@ -46,6 +49,11 @@ def trossen_realistic_push_t_rgb_env_cfg(
   play: bool = False,
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
+  scene: str = "real_texture",
+  episode_length_s: float = 5.0,
+  goal_outline: bool = False,
+  real_goal_colour: bool = False,
+  goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_realistic()
   cfg = build_env_cfg(
@@ -58,6 +66,9 @@ def trossen_realistic_push_t_rgb_env_cfg(
     goal_in_observation=goal_in_observation,
     fixed_target=fixed_target,
     action_delta=action_delta,
+    episode_length_s=episode_length_s,
+    goal_outline=goal_outline,
+    goal_observation_noise=goal_observation_noise,
   )
   add_rgb_camera(
     cfg,
@@ -69,14 +80,18 @@ def trossen_realistic_push_t_rgb_env_cfg(
   )
   apply_scene(
     cfg,
-    scene="real_texture",
+    scene=scene,
     robot=robot,
     camera_view=_CAMERA,
     object_xml=PUSH_T_XML,
     object_name=_OBJECT_NAME,
   )
-  cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(spec_fn=goal_marker_spec)
-  cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event()
+  cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(
+    spec_fn=partial(goal_marker_spec, goal_outline)
+  )
+  cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(
+    GOAL_REAL_RGBA_RANGE if real_goal_colour else ((0.0, 1.0),) * 3
+  )
   cfg.scene.num_envs = 1 if play else 1024
   cfg.seed = 0
   return cfg

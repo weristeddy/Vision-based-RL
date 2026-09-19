@@ -27,9 +27,11 @@ def target_pose(
   target_position = quat_apply(
     quat_inv(robot.data.root_link_quat_w),
     command.target_pos - robot.data.root_link_pos_w,
-  )
+  ) + command.observation_offset
   target_yaw = wrap_to_pi(
-    command.target_yaw - yaw_from_quat(robot.data.root_link_quat_w)
+    command.target_yaw
+    + command.observation_yaw_offset
+    - yaw_from_quat(robot.data.root_link_quat_w)
   )
   return torch.cat(
     (

@@ -123,6 +123,10 @@ class ScenePreset:
   lights: LightSet = "training"
   wide_lighting: bool = False
   colour_dr: bool = True
+  # Per-channel (low, high) for the object's flat colour. The default spans the
+  # whole RGB cube; the sim2real preset narrows it to the rig's measured
+  # bordeaux (#68392c) so the sampled object stays a plausible real object.
+  object_colour_range: tuple = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
   ood: bool = False
 
 
@@ -196,6 +200,14 @@ _PRESETS: dict[str, ScenePreset] = {
     table=_AMBIENTCG_TABLE,
     colour_dr=False,
     wide_lighting=True,
+  ),
+  # The object stays a real-looking bordeaux instead of any colour in the cube,
+  # measured off the rig at #68392c under matched exposure.
+  "real_texture_bordeaux": ScenePreset(
+    "real_texture_bordeaux",
+    table=_AMBIENTCG_TABLE,
+    wide_lighting=True,
+    object_colour_range=((0.30, 0.52), (0.14, 0.30), (0.10, 0.26)),
   ),
   "wood": ScenePreset(
     "wood", table=_ood_table(WOOD_TABLE), obj=_RED_PLASTIC_OBJECT,

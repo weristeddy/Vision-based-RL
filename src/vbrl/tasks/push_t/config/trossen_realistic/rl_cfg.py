@@ -81,7 +81,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
-    max_iterations=3000,
+    max_iterations=6000,
     obs_groups={
       "actor": ("actor", "camera"),
       "critic": ("critic",),
@@ -118,7 +118,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
         "class_name": "GaussianDistribution",
         "init_std": 0.6065306597,
         "std_type": "log",
-        "std_range": (0.15, 1.0),
+        "std_range": (0.05, 1.0),
       },
       class_name="vbrl.vision.model:VisionModel",
     ),
@@ -133,10 +133,12 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       num_mini_batches=16,
       learning_rate=0.0002,
       schedule="fixed",
-      gamma=0.99,
-      lam=0.9,
+      gamma=0.998,
+      lam=0.95,
       entropy_coef=0.001,
-      desired_kl=0.05,
+      # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations
+      # and threw away 71% of the update budget (36.8 of 128 performed).
+      desired_kl=0.1,
       max_grad_norm=0.5,
       value_loss_coef=0.5,
       use_clipped_value_loss=False,

@@ -43,21 +43,13 @@ def _push_t(*, play: bool = False):
   return trossen_realistic_push_t_state_env_cfg(play=play)
 
 
-def _push_cube(*, play: bool = False):
-  from vbrl.tasks.push_cube.config.trossen.env_cfgs import (
-    trossen_push_cube_env_cfg,
-  )
-
-  return trossen_push_cube_env_cfg(play=play)
-
-
 def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> None:
   from mjlab.tasks.registry import load_rl_cfg
 
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 39
+  assert len(task_ids) == 43
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     visual = agent.actor.cnn_cfg is not None
@@ -590,6 +582,8 @@ def test_push_t_observations_use_mjlab_translation_and_task_yaw_terms() -> None:
   command = object.__new__(PushTCommand)
   command.target_pos = torch.tensor([[0.40, 0.10, 0.02], [0.50, -0.10, 0.02]])
   command.target_yaw = torch.tensor([math.pi / 2, -math.pi])
+  command.observation_offset = torch.zeros(2, 3)
+  command.observation_yaw_offset = torch.zeros(2)
   robot = SimpleNamespace(
     data=SimpleNamespace(
       site_pos_w=torch.tensor([[[0.20, 0.00, 0.10]], [[0.20, 0.00, 0.10]]]),

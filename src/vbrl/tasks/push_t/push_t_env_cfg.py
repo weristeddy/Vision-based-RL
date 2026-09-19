@@ -62,18 +62,21 @@ AT_GOAL_ACTION_WEIGHT = -0.05
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
 JOINT_SPEED_LIMIT_RAD_S = 5.0
-# In environment steps: fixed for 3,000 iterations at num_steps_per_env=16, then eight
-# 22.5-degree rungs, full circle at 4,750.
+# In environment steps at num_steps_per_env=16: pinned for 600 iterations, then
+# 8 rungs of 22.5 degrees every 175, full circle at iteration 1,825.
+# The 3,000-iteration pin this replaces reached 0.52 success at a fixed goal and
+# then lost three quarters of it on the first rung: it had memorised one
+# orientation rather than learning to orient.
 GOAL_YAW_STAGES = (
   {"step": 0, "half_range": 0.0},
-  {"step": 48_000, "half_range": math.pi / 8},
-  {"step": 52_000, "half_range": math.pi / 4},
-  {"step": 56_000, "half_range": 3 * math.pi / 8},
-  {"step": 60_000, "half_range": math.pi / 2},
-  {"step": 64_000, "half_range": 5 * math.pi / 8},
-  {"step": 68_000, "half_range": 3 * math.pi / 4},
-  {"step": 72_000, "half_range": 7 * math.pi / 8},
-  {"step": 76_000, "half_range": math.pi},
+  {"step": 9_600, "half_range": math.pi * 1 / 8},
+  {"step": 12_400, "half_range": math.pi * 2 / 8},
+  {"step": 15_200, "half_range": math.pi * 3 / 8},
+  {"step": 18_000, "half_range": math.pi * 4 / 8},
+  {"step": 20_800, "half_range": math.pi * 5 / 8},
+  {"step": 23_600, "half_range": math.pi * 6 / 8},
+  {"step": 26_400, "half_range": math.pi * 7 / 8},
+  {"step": 29_200, "half_range": math.pi * 8 / 8},
 )
 _PRIVILEGED_ACTOR_TERMS = (
   "ee_to_object",
@@ -95,6 +98,7 @@ def _command(
   success_threshold: float,
   goal_marker_name: str | None = None,
   fixed_target: tuple[float, float, float] | None = None,
+  goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> mdp.PushTCommandCfg:
   return mdp.PushTCommandCfg(
     goal_marker_name=goal_marker_name,
@@ -117,6 +121,8 @@ def _command(
     target_yaw_range=(-math.pi, math.pi),
     min_xy_separation=MIN_XY_SEPARATION,
     fixed_target=fixed_target,
+    observation_position_noise=goal_observation_noise[0],
+    observation_yaw_noise=goal_observation_noise[1],
   )
 
 
@@ -132,6 +138,9 @@ def build_env_cfg(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   action_delta: float = _ACTION_DELTA,
+  episode_length_s: float = 5.0,
+  goal_outline: bool = False,
+  goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> ManagerBasedRlEnvCfg:
   cfg = make_tabletop_env_cfg(
     robot, action_delay=True, fixed_closed_gripper=True
@@ -192,6 +201,7 @@ def build_env_cfg(
       success_threshold,
       goal_marker_name=GOAL_ENTITY_NAME if visual_goal else None,
       fixed_target=fixed_target,
+      goal_observation_noise=goal_observation_noise,
     )
   }
   cfg.rewards = {
@@ -386,7 +396,7 @@ def build_env_cfg(
   for sensor in cfg.scene.sensors:
     if sensor.name == EE_GROUND_CONTACT_SENSOR:
       sensor.reduce = "maxforce"
-  cfg.episode_length_s = 5.0
+  cfg.episode_length_s = episode_length_s
   cfg.scale_rewards_by_dt = False
   # Azimuth 180 is the +x side the robot faces. ASSET_ROOT, not the robot's
   # `viewer_body`: that body is the gripper, so the view would swing with the arm.

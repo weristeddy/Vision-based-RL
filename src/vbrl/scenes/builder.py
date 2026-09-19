@@ -199,7 +199,7 @@ def _colour_event(entity: str, ranges, *, materials=(), shared_random=False):
     "operation": "abs",
     "distribution": "uniform",
     "axes": [0, 1, 2],
-    "ranges": ranges,
+    "ranges": dict(enumerate(ranges)),
   }
   if shared_random:
     params["shared_random"] = True
@@ -318,14 +318,17 @@ def _events(
   matched = preset.ood and eval_dr == "matched"
   if not matched:
     if preset.colour_dr and preset.table is None:
-      events["table_color"] = _colour_event("table", (0.15, 0.85))
+      events["table_color"] = _colour_event("table", ((0.15, 0.85),) * 3)
     if preset.table is not None:
       events.update(
         _bank_events("table", "table", preset.table, (TABLE_VISUAL_GEOM_NAME,))
       )
     if preset.colour_dr and not object_dressed:
       events["object_color"] = _colour_event(
-        object_name, (0.0, 1.0), materials=object_materials, shared_random=True
+        object_name,
+        preset.object_colour_range,
+        materials=object_materials,
+        shared_random=True,
       )
     if object_dressed:
       assert preset.obj is not None

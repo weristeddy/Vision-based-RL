@@ -37,6 +37,8 @@ class PushTCommand(LiftingCommand):
   def __init__(self, cfg: PushTCommandCfg, env: ManagerBasedRlEnv):
     super().__init__(cfg, env)
     self.target_yaw = torch.zeros(self.num_envs, device=self.device)
+    self.observation_offset = torch.zeros(self.num_envs, 3, device=self.device)
+    self.observation_yaw_offset = torch.zeros(self.num_envs, device=self.device)
     self._rasterizer = FootprintRasterizer(
       cfg.footprint_parts,
       device=self.device,
@@ -160,6 +162,17 @@ class PushTCommand(LiftingCommand):
       target_pos[:, 0] = self.cfg.fixed_target[0]
       target_pos[:, 1] = self.cfg.fixed_target[1]
     self.target_pos[env_ids] = target_pos + origins
+    if self.cfg.observation_position_noise > 0.0:
+      bound = self.cfg.observation_position_noise
+      self.observation_offset[env_ids] = sample_uniform(
+        -bound, bound, (n, 3), device=self.device
+      )
+      self.observation_offset[env_ids, 2] = 0.0
+    if self.cfg.observation_yaw_noise > 0.0:
+      bound = self.cfg.observation_yaw_noise
+      self.observation_yaw_offset[env_ids] = sample_uniform(
+        -bound, bound, (n,), device=self.device
+      )
     object_yaw = sample_uniform(
       object_range.yaw[0],
       object_range.yaw[1],
@@ -234,6 +247,13 @@ class PushTCommand(LiftingCommand):
 class PushTCommandCfg(LiftingCommandCfg):
   fixed_target: tuple[float, float, float] | None = None
   min_xy_separation: float = 0.15
+  # A calibration error is a fixed bias for a whole deployment session, not
+  # per-step jitter, so these are drawn once per episode. Measured chain on the
+  # rig: 1.33 mm extrinsic repeatability, ~0.4 mm tag detection, +/-1 mm
+  # hand-measured margin, ~1.5 mm plane and placement -> ~2.3 mm and ~1 deg.
+  # They perturb only what the actor observes; the reward keeps the true goal.
+  observation_position_noise: float = 0.0
+  observation_yaw_noise: float = 0.0
   target_yaw_range: tuple[float, float] = (-math.pi, math.pi)
   orientation_weight: float = 0.5
   footprint_parts: tuple[FootprintPart, ...] = FOOTPRINT_PARTS
