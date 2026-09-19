@@ -11,6 +11,7 @@ from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
+_RGB_MAX_ITERATIONS = 6000
 
 
 def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
@@ -81,12 +82,15 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
-    max_iterations=6000,
+    max_iterations=_RGB_MAX_ITERATIONS,
     obs_groups={
       "actor": ("actor", "camera"),
       "critic": ("critic",),
     },
-    save_interval=3001,
+    # Above max_iterations, so the only checkpoint is the unconditional final
+    # save RSL-RL does after the loop. These runs upload to W&B, where the run
+    # files are what fills the 200 GB quota.
+    save_interval=_RGB_MAX_ITERATIONS + 1,
     experiment_name="push_t_rgb_trossen_realistic_d435",
     run_name=wandb_task_tag(task_id),
     logger="wandb",
@@ -133,8 +137,12 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       num_mini_batches=16,
       learning_rate=0.0002,
       schedule="fixed",
-      gamma=0.998,
-      lam=0.95,
+      # Horizon 1/(1-gamma) = 667 steps against the 800-step episode, the same
+      # 83% the 8 s run had at 0.997. lam stays at 0.9: at 0.95 the GAE window
+      # (1/(1-gamma*lam)) runs past num_steps_per_env, so every advantage leans
+      # on the value bootstrap instead of observed reward.
+      gamma=0.9985,
+      lam=0.9,
       entropy_coef=0.001,
       # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations
       # and threw away 71% of the update budget (36.8 of 128 performed).

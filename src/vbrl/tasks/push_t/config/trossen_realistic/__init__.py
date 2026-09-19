@@ -75,9 +75,11 @@ _register(
 )
 
 # Two independent ways to keep the goal from reading as a second copy of the
-# object, each goal-conditioned and pixel-only. Both run at the 12 s episode the
-# 0.03 cap needs: 0.03 x 600 steps is 18 rad of joint travel, against 12 at 8 s
-# and the 25 the 0.1-cap generation had.
+# object, each goal-conditioned and pixel-only. Both run at the 16 s episode the
+# 0.03 cap needs: 0.03 x 800 steps is 24 rad of joint travel, against 12 at 8 s
+# and the 25 the 0.1-cap generation reached 0.501 success with. An iteration
+# costs num_steps_per_env x num_envs whatever the episode length, so the longer
+# episode is free.
 #
 # The goal-conditioned pair carries a per-episode bias on the observed goal --
 # 3 mm and 1.5 deg -- which is the rig's measured calibration chain (1.33 mm
@@ -88,14 +90,14 @@ _register(
 # over the whole RGB cube for both object and goal, as VisualSlowStep has it.
 _OUTLINE = {
   "action_delta": DEPLOYABLE_ACTION_DELTA,
-  "episode_length_s": 12.0,
+  "episode_length_s": 16.0,
   "goal_outline": True,
 }
 # Separated by colour instead: filled marker, object and goal pinned near the
 # colours the rig actually shows.
 _COLOUR = {
   "action_delta": DEPLOYABLE_ACTION_DELTA,
-  "episode_length_s": 12.0,
+  "episode_length_s": 16.0,
   "real_goal_colour": True,
   "scene": "real_texture_bordeaux",
 }
