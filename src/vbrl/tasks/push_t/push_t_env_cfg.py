@@ -61,7 +61,6 @@ ACTION_RATE_WEIGHT = -0.002
 AT_GOAL_ACTION_WEIGHT = -0.05
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
-JOINT_SPEED_LIMIT_RAD_S = 5.0
 # Environment steps at num_steps_per_env=16: pinned for 1,500 iterations, then 8
 # rungs of 22.5 degrees every 200, full circle at 2,900 with 3,100 left to
 # consolidate. The pin ends where competence appears rather than on a clock --
@@ -258,19 +257,6 @@ def build_env_cfg(
         "sensor_name": _CONTACT_SENSOR,
       },
     ),
-    "joint_pos_limits": RewardTermCfg(
-      func=mdp.joint_pos_limits,
-      weight=-0.25,
-      params={"asset_cfg": SceneEntityCfg("robot", joint_names=arm_joints)},
-    ),
-    "joint_speed_hinge": RewardTermCfg(
-      func=mdp.joint_velocity_hinge_penalty,
-      weight=-0.001,
-      params={
-        "max_vel": JOINT_SPEED_LIMIT_RAD_S,
-        "asset_cfg": SceneEntityCfg("robot", joint_names=arm_joints),
-      },
-    ),
   }
   # Hardware-safety readouts. Metrics carry no weight and never enter the return.
   cfg.metrics = {
@@ -309,6 +295,16 @@ def build_env_cfg(
       func=mdp.top_contact_share,
       reduce="mean",
       params={"sensor_name": _CONTACT_SENSOR},
+    ),
+    "final_overlap": MetricsTermCfg(
+      func=mdp.final_overlap,
+      reduce="last",
+      params={"command_name": _COMMAND},
+    ),
+    "at_goal_share": MetricsTermCfg(
+      func=mdp.at_goal_share,
+      reduce="mean",
+      params={"command_name": _COMMAND},
     ),
   }
   cfg.terminations.update(

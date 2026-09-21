@@ -260,7 +260,7 @@ def test_push_t_goal_sampling_converges_for_a_wide_separation_floor() -> None:
     assert torch.all(goals >= lower - 1e-6) and torch.all(goals <= upper + 1e-6)
 
 
-def test_push_t_reward_exactly_matches_maniskill_normalized_dense_formula() -> None:
+def test_push_t_reward_is_maniskill_dense_with_a_linear_orientation_summand() -> None:
   from mjlab.managers.scene_entity_config import SceneEntityCfg
 
   from vbrl.tasks.push_t.mdp import maniskill_dense_reward
@@ -297,15 +297,14 @@ def test_push_t_reward_exactly_matches_maniskill_normalized_dense_formula() -> N
   distances = torch.tensor([0.20, 0.10])
   ee_distances = torch.tensor([0.10, 0.20])
   yaw_errors = torch.tensor([0.0, math.pi])
-  expected = (
-    ((torch.cos(yaw_errors) + 1.0) / 2.0).square() / 2.0
+  shaped = (
+    (1.0 - yaw_errors.abs() / math.pi) / 2.0
     + (1.0 - torch.tanh(5.0 * distances)).square() / 2.0
     + torch.sqrt(1.0 - torch.tanh(5.0 * ee_distances)) / 20.0
-  ) / 3.0
-
+  )
   assert torch.allclose(
     maniskill_dense_reward(env, "push_t_goal", "object", asset_cfg),
-    expected,
+    shaped / 3.0,
     atol=1.0e-6,
   )
 
@@ -812,10 +811,15 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "peak_side_face_force",
     "peak_object_press",
     "top_contact_share",
+    "final_overlap",
+    "at_goal_share",
   }
   assert cfg.metrics["peak_table_force"].reduce == "max"
   assert cfg.metrics["peak_object_force"].reduce == "max"
   assert cfg.metrics["top_contact_share"].reduce == "mean"
+  # episode_success latches; these report the outcome instead.
+  assert cfg.metrics["final_overlap"].reduce == "last"
+  assert cfg.metrics["at_goal_share"].reduce == "mean"
 
   action = cfg.actions["joint_pos"]
   assert isinstance(action, RelativeJointPositionActionCfg)
@@ -845,8 +849,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "table_contact_force",
     "object_table_press",
     "ee_height_ceiling",
-    "joint_pos_limits",
-    "joint_speed_hinge",
   )
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
   assert cfg.rewards["side_contact_align"].weight == pytest.approx(0.05)
@@ -876,18 +878,10 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert press["onset"] == pytest.approx(1.497) == OBJECT_PRESS_ONSET_N
   assert press["scale"] == pytest.approx(5.0) == OBJECT_PRESS_SCALE_N
   assert cfg.rewards["object_table_press"].weight == pytest.approx(-0.01)
-  assert cfg.rewards["joint_pos_limits"].weight == pytest.approx(-0.25)
-  assert cfg.rewards["joint_speed_hinge"].weight == pytest.approx(-0.001)
 
   table_contact = cfg.rewards["table_contact_force"].params
   assert table_contact["onset"] == pytest.approx(0.0) == TABLE_CONTACT_ONSET_N
   assert table_contact["scale"] == pytest.approx(5.0)
-  assert cfg.rewards["joint_speed_hinge"].params["max_vel"] == pytest.approx(5.0)
-  for name in ("joint_pos_limits", "joint_speed_hinge"):
-    assert (
-      cfg.rewards[name].params["asset_cfg"].joint_names
-      == definition.arm_actuator_names
-    )
 
   assert tuple(cfg.curriculum) == ("goal_yaw_range",)
 

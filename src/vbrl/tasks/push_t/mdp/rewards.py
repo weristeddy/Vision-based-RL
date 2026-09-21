@@ -45,7 +45,7 @@ def maniskill_dense_reward(
   obj: Entity = env.scene[object_name]
   yaw_error = wrap_to_pi(
     command.target_yaw - yaw_from_quat(obj.data.root_link_quat_w)
-  )
+  ).abs()
   goal_distance = torch.linalg.vector_norm(
     command.target_pos[:, :2] - obj.data.root_link_pos_w[:, :2], dim=-1
   )
@@ -53,8 +53,12 @@ def maniskill_dense_reward(
     manipulation_mdp.ee_to_object_distance(env, object_name, asset_cfg), dim=-1
   )
   weight = float(command.cfg.orientation_weight)
+  # Linear, not ManiSkill's ((cos e + 1) / 2)**2: any function of cos e has zero
+  # gradient at 0 and at pi -- 0.302 at 45 degrees, 0.000 at 180 -- so a push
+  # that reduces yaw error is punished by the competing position term wherever
+  # the orientation gradient has decayed. 1 - |e|/pi is 0.159 everywhere.
   reward = (
-    weight * ((torch.cos(yaw_error) + 1.0) / 2.0).square()
+    weight * (1.0 - yaw_error / torch.pi)
     + (1.0 - weight) * (1.0 - torch.tanh(_DISTANCE_SCALE * goal_distance)).square()
     + torch.sqrt((1.0 - torch.tanh(_DISTANCE_SCALE * tcp_distance)).clamp_min(0.0))
     / 20.0
@@ -156,9 +160,22 @@ def contact_force_hinge(
   return (excess / scale).square()
 
 
+# `episode_success` latches on the first at-goal step, so it reports the peak
+# rather than the outcome -- measured 45.3% ever against 28.1% still there at
+# the end. These two report what the arm actually leaves behind.
+def final_overlap(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  return push_t_command(env, command_name).get_overlap()
+
+
+def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+  return push_t_command(env, command_name).get_at_goal().float()
+
+
 __all__ = [
   "action_path_length_l1",
   "at_goal_action_l1",
+  "at_goal_share",
+  "final_overlap",
   "contact_force_hinge",
   "fingertip_height_excess",
   "maniskill_dense_reward",
