@@ -16,7 +16,11 @@ from vbrl.tasks.push_t.goal_marker import (
   goal_colour_event,
   goal_marker_spec,
 )
-from vbrl.tasks.push_t.push_t_env_cfg import GOAL_YAW_STAGES, build_env_cfg
+from vbrl.tasks.push_t.push_t_env_cfg import (
+  DEPLOYABLE_ACTION_DELTA,
+  GOAL_YAW_STAGES,
+  build_env_cfg,
+)
 from vbrl.tasks.utils import add_rgb_camera
 
 _OBJECT_NAME = "object"
@@ -29,7 +33,13 @@ def trossen_realistic_push_t_state_env_cfg(
   *, play: bool = False
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_realistic()
-  cfg = build_env_cfg(robot=robot, object_name=_OBJECT_NAME, play=play)
+  cfg = build_env_cfg(
+    robot=robot,
+    object_name=_OBJECT_NAME,
+    play=play,
+    action_delta=DEPLOYABLE_ACTION_DELTA,
+    goal_yaw_stages=GOAL_YAW_STAGES,
+  )
   apply_scene(
     cfg,
     scene="default",
@@ -50,7 +60,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   scene: str = "real_texture",
-  episode_length_s: float = 5.0,
+  episode_length_s: float = 8.0,
   goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),

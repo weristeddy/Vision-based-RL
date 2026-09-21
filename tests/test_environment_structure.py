@@ -137,7 +137,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   # The two differ by the per-step delta cap alone: the RGB tasks train at the
   # deployable 0.03 so the raw policy output needs no clamp on the arm.
   state_action, rgb_action = state.actions["joint_pos"], rgb.actions["joint_pos"]
-  assert state_action.scale == 0.1 and rgb_action.scale == 0.03
+  assert state_action.scale == rgb_action.scale == 0.03
   assert state_action.actuator_names == rgb_action.actuator_names
   state_goal, rgb_goal = state.commands["push_t_goal"], rgb.commands["push_t_goal"]
   assert state_goal.goal_marker_name is None
@@ -145,11 +145,10 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.min_xy_separation == rgb_goal.min_xy_separation
   assert state_goal.success_threshold == rgb_goal.success_threshold
-  assert state.curriculum == {}
-  assert tuple(rgb.curriculum) == ("goal_yaw_range",)
+  assert tuple(state.curriculum) == tuple(rgb.curriculum) == ("goal_yaw_range",)
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
-  assert state.episode_length_s == rgb.episode_length_s == 5.0
+  assert state.episode_length_s == rgb.episode_length_s == 8.0
 
   camera = _camera(rgb, "external_cam")
   assert camera.camera_name == "robot/external_cam"
@@ -221,7 +220,7 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
     "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
   ):
     train = load_env_cfg(task_id)
     play = load_env_cfg(task_id, play=True)

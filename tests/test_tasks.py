@@ -49,7 +49,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 43
+  assert len(task_ids) == 39
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     visual = agent.actor.cnn_cfg is not None
@@ -801,7 +801,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "force" in sensors["object_table_contact"].fields
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
-  assert cfg.episode_length_s == 5.0
+  assert cfg.episode_length_s == 8.0
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 4
   assert cfg.scale_rewards_by_dt is False
@@ -821,9 +821,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert isinstance(action, RelativeJointPositionActionCfg)
   assert action.actuator_names == definition.arm_actuator_names
   assert len(action.actuator_names) == 6
-  assert action.scale == pytest.approx(0.1)
+  assert action.scale == pytest.approx(0.03)
   assert action.clip == {
-    name: pytest.approx((-0.1, 0.1)) for name in definition.arm_actuator_names
+    name: pytest.approx((-0.03, 0.03)) for name in definition.arm_actuator_names
   }
   assert {
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
@@ -889,7 +889,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
       == definition.arm_actuator_names
     )
 
-  assert cfg.curriculum == {}
+  assert tuple(cfg.curriculum) == ("goal_yaw_range",)
 
 
   assert tuple(cfg.terminations) == (
@@ -924,5 +924,5 @@ def test_push_t_play_only_disables_actor_noise_and_curriculum() -> None:
 
   assert cfg.observations["actor"].enable_corruption is False
   assert cfg.curriculum == {}
-  assert cfg.episode_length_s == 5.0
+  assert cfg.episode_length_s == 8.0
   assert cfg.commands["push_t_goal"].resampling_time_range == (1.0e9, 1.0e9)

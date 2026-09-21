@@ -47,21 +47,17 @@ EXPECTED_TASK_IDS = frozenset(
       for arch in SIM2REAL_ARCHITECTURES
     ),
     "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
-    "Mjlab-PushT-PixelGoalFixed-DinoV2ViTS14-Afa6-TrossenRealistic",
     "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
     "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
-    "Mjlab-PushT-GoalColour-DinoV2ViTS14-Afa6-TrossenRealistic",
-    "Mjlab-PushT-GoalColourPixel-DinoV2ViTS14-Afa6-TrossenRealistic",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_43_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_39_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 43
+  assert len(EXPECTED_TASK_IDS) == 39
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -99,10 +95,10 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     seen_external += bool(external)
 
   # Lift-Cube is a wrist-camera task, so its 36 visual IDs declare `cam` alone.
-  assert seen_external == 6
+  assert seen_external == 2
 
 
-def test_only_the_visual_arms_widen_the_goal_yaw() -> None:
+def test_every_push_t_arm_widens_the_goal_yaw() -> None:
   from mjlab.tasks.registry import load_env_cfg
 
   from vbrl.tasks import vbrl_task_ids
@@ -115,17 +111,18 @@ def test_only_the_visual_arms_widen_the_goal_yaw() -> None:
     cfg = load_env_cfg(task_id)
     command = cfg.commands["push_t_goal"]
     scheduled = "goal_yaw_range" in cfg.curriculum
-    assert scheduled is (task_id != "Mjlab-PushT-State-TrossenRealistic"), task_id
+    assert scheduled, task_id
     assert command.success_threshold == pytest.approx(0.90), task_id
     # The registered range is always the full circle; the curriculum narrows it
     # at runtime and hands it back, so evaluation is never made easier.
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 6
+  assert seen == 3
   assert GOAL_YAW_STAGES[0]["half_range"] == 0.0
   assert GOAL_YAW_STAGES[-1]["half_range"] == pytest.approx(math.pi)
-  assert GOAL_YAW_STAGES[1]["step"] == 9_600
+  assert GOAL_YAW_STAGES[1]["step"] == 24_000
+  assert GOAL_YAW_STAGES[-1]["step"] == 46_400
   assert len(GOAL_YAW_STAGES) == 9
 
 
@@ -201,7 +198,7 @@ print(json.dumps(list(vbrl_task_ids())))
 def test_native_registry_returns_independent_environment_and_agent_copies() -> None:
   from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
-  task_id = "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic"
+  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
   first_env, second_env = load_env_cfg(task_id), load_env_cfg(task_id)
   first_agent, second_agent = load_rl_cfg(task_id), load_rl_cfg(task_id)
 

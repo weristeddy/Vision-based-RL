@@ -81,7 +81,7 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   from vbrl.training.ppo import VisualPpoCfg
 
   agent = load_rl_cfg(
-    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic"
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
   )
 
   assert agent.actor.hidden_dims == (256, 256, 128)

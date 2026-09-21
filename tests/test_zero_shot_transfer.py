@@ -21,7 +21,7 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 TASK_IDS = (
   "Mjlab-PushT-State-TrossenRealistic",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
@@ -190,7 +190,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic"
+  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model
@@ -344,12 +344,16 @@ def test_the_sampled_goal_yaw_reaches_the_command() -> None:
 
   import vbrl.tasks  # noqa: F401
   from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import STATE_TASK_ID
+  from vbrl.tasks.push_t.push_t_env_cfg import GOAL_YAW_STAGES
 
   cfg = load_env_cfg(STATE_TASK_ID, play=False)
   cfg.scene.num_envs = 64
   env = ManagerBasedRlEnv(cfg, device="cuda:0")
   try:
     command = env.command_manager.get_term("push_t_goal")
+    ids = torch.arange(env.num_envs, device=env.device)
+    env.common_step_counter = GOAL_YAW_STAGES[-1]["step"]
+    env.curriculum_manager.compute(env_ids=ids)
     assert float(command.cfg.target_yaw_range[1]) == pytest.approx(torch.pi, abs=1e-3)
     env.reset()
     yaw = command.target_yaw.detach()

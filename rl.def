@@ -87,8 +87,6 @@ expected = {
     "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-VisualSlowStep-DinoV2ViTS14-Afa6-TrossenRealistic",
-    "Mjlab-PushT-PixelGoalFixed-DinoV2ViTS14-Afa6-TrossenRealistic",
 }
 missing = expected - task_ids
 assert not missing, (
