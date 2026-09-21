@@ -60,7 +60,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   scene: str = "real_texture",
-  episode_length_s: float = 8.0,
+  episode_length_s: float = 16.0,
   goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),

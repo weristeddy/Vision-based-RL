@@ -59,7 +59,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       num_mini_batches=32,
       learning_rate=0.0003,
       schedule="fixed",
-      gamma=0.9975,
+      gamma=0.9985,
       lam=0.9,
       entropy_coef=0.0,
       desired_kl=0.01,
@@ -137,10 +137,11 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       num_mini_batches=16,
       learning_rate=0.0002,
       schedule="fixed",
-      # Horizon 1/(1-gamma) = 400 steps, the 8 s episode. lam stays at 0.9: at
-      # 0.95 the GAE window (1/(1-gamma*lam)) runs past num_steps_per_env, so
-      # every advantage leans on the value bootstrap instead of observed reward.
-      gamma=0.9975,
+      # Horizon 1/(1-gamma) = 667 steps against the 800-step episode. lam stays
+      # at 0.9: at 0.95 the GAE window (1/(1-gamma*lam)) runs past
+      # num_steps_per_env, so every advantage leans on the value bootstrap
+      # instead of observed reward.
+      gamma=0.9985,
       lam=0.9,
       entropy_coef=0.001,
       # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations

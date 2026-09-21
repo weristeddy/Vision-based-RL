@@ -121,8 +121,8 @@ def test_every_push_t_arm_widens_the_goal_yaw() -> None:
   assert seen == 3
   assert GOAL_YAW_STAGES[0]["half_range"] == 0.0
   assert GOAL_YAW_STAGES[-1]["half_range"] == pytest.approx(math.pi)
-  assert GOAL_YAW_STAGES[1]["step"] == 24_000
-  assert GOAL_YAW_STAGES[-1]["step"] == 46_400
+  assert GOAL_YAW_STAGES[1]["step"] == 48_000
+  assert GOAL_YAW_STAGES[-1]["step"] == 76_000
   assert len(GOAL_YAW_STAGES) == 9
 
 

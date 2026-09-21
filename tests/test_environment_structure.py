@@ -148,7 +148,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert tuple(state.curriculum) == tuple(rgb.curriculum) == ("goal_yaw_range",)
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
-  assert state.episode_length_s == rgb.episode_length_s == 8.0
+  assert state.episode_length_s == rgb.episode_length_s == 16.0
 
   camera = _camera(rgb, "external_cam")
   assert camera.camera_name == "robot/external_cam"

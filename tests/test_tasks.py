@@ -800,7 +800,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "force" in sensors["object_table_contact"].fields
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
-  assert cfg.episode_length_s == 8.0
+  assert cfg.episode_length_s == 16.0
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 4
   assert cfg.scale_rewards_by_dt is False
@@ -918,5 +918,5 @@ def test_push_t_play_only_disables_actor_noise_and_curriculum() -> None:
 
   assert cfg.observations["actor"].enable_corruption is False
   assert cfg.curriculum == {}
-  assert cfg.episode_length_s == 8.0
+  assert cfg.episode_length_s == 16.0
   assert cfg.commands["push_t_goal"].resampling_time_range == (1.0e9, 1.0e9)

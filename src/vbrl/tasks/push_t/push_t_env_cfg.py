@@ -61,23 +61,24 @@ ACTION_RATE_WEIGHT = -0.002
 AT_GOAL_ACTION_WEIGHT = -0.05
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
-# Environment steps at num_steps_per_env=16: pinned for 1,500 iterations, then 8
-# rungs of 22.5 degrees every 200, full circle at 2,900 with 3,100 left to
-# consolidate. The pin ends where competence appears rather than on a clock --
-# measured at overlap 0.55 -- because widening from a policy that cannot yet
-# push has nothing to preserve, and 22.5 degrees is the one rung size that did
-# not make yaw error worse.
+# Environment steps at num_steps_per_env=16: pinned for 3,000 iterations, then 8
+# rungs of 22.5 degrees every 250, full circle at 4,750. Both numbers are
+# measured. The pin has to outlast incompetence -- at 1,500 iterations overlap
+# was 0.051 and widening from there went nowhere -- and 45-degree rungs made yaw
+# error worse in 8 of the 15 runs trained on them.
 GOAL_YAW_STAGES = (
   {"step": 0, "half_range": 0.0},
-  {"step": 24_000, "half_range": math.pi * 1 / 8},
-  {"step": 27_200, "half_range": math.pi * 2 / 8},
-  {"step": 30_400, "half_range": math.pi * 3 / 8},
-  {"step": 33_600, "half_range": math.pi * 4 / 8},
-  {"step": 36_800, "half_range": math.pi * 5 / 8},
-  {"step": 40_000, "half_range": math.pi * 6 / 8},
-  {"step": 43_200, "half_range": math.pi * 7 / 8},
-  {"step": 46_400, "half_range": math.pi * 8 / 8},
+  {"step": 48_000, "half_range": math.pi * 1 / 8},
+  {"step": 52_000, "half_range": math.pi * 2 / 8},
+  {"step": 56_000, "half_range": math.pi * 3 / 8},
+  {"step": 60_000, "half_range": math.pi * 4 / 8},
+  {"step": 64_000, "half_range": math.pi * 5 / 8},
+  {"step": 68_000, "half_range": math.pi * 6 / 8},
+  {"step": 72_000, "half_range": math.pi * 7 / 8},
+  {"step": 76_000, "half_range": math.pi * 8 / 8},
 )
+
+
 _PRIVILEGED_ACTOR_TERMS = (
   "ee_to_object",
   "object_to_goal",
@@ -138,7 +139,7 @@ def build_env_cfg(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   action_delta: float = _ACTION_DELTA,
-  episode_length_s: float = 8.0,
+  episode_length_s: float = 16.0,
   goal_outline: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> ManagerBasedRlEnvCfg:
