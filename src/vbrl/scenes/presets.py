@@ -79,6 +79,23 @@ PLASTER_TABLE = TexturePreset(
   roughness=0.95,
   specular=0.02,
 )
+# The rig's own tabletop, pale unfinished spruce. Rotated 90 degrees from the
+# supplied square file because texture u maps to the table's x -- verified with
+# a striped test pattern, not inferred -- while the real planks run along y.
+# Then centre-cropped 1305x1206 -> 1255x1206 for the table's 1.015 x 0.975
+# aspect, so texrepeat (1, 1) lays it down once, centred, no tiling, no resample.
+# rgba carries two measurements. The ratios 0.80 : 0.898 : 1.0 map the source's
+# chromaticity (0.378/0.331/0.290) onto the real table's (0.340/0.335/0.325).
+# The overall 0.55 lands the rendered median near 138 against the rig camera's
+# 116-161; at 1.0 the pale texture blew out to 239-255.
+REAL_TABLE = TexturePreset(
+  name="real_table",
+  image=TEXTURES_DIR / "real_table" / "real_table_color.png",
+  texrepeat=(1.0, 1.0),
+  rgba=(0.442, 0.496, 0.550, 1.0),
+  roughness=0.93,
+  specular=0.02,
+)
 RED_PLASTIC_OBJECT = TexturePreset(
   name="red_plastic",
   image=TEXTURES_DIR / "ood" / "red_plastic" / "plastic007_color_1k.png",
@@ -178,6 +195,12 @@ _RED_PLASTIC_OBJECT = MaterialBank(
 )
 
 
+_REAL_TABLE_BANK = MaterialBank(kind="image", prefix="real_table", image=REAL_TABLE)
+# Measured off the rig: the object's bordeaux (#68392c) and the printed marker's
+# green (#046147). Both keep colour DR, narrowed to what the camera really sees.
+REAL_TABLE_OBJECT_COLOUR_RANGE = ((0.30, 0.52), (0.14, 0.30), (0.10, 0.26))
+
+
 def _ood_table(preset: TexturePreset) -> MaterialBank:
   return MaterialBank(kind="image", prefix=f"ood_{preset.name}_table", image=preset)
 
@@ -208,6 +231,15 @@ _PRESETS: dict[str, ScenePreset] = {
     table=_AMBIENTCG_TABLE,
     wide_lighting=True,
     object_colour_range=((0.30, 0.52), (0.14, 0.30), (0.10, 0.26)),
+  ),
+  # One fixed table texture and no texture DR at all -- the rig's tabletop, laid
+  # down once. Object and goal keep colour DR inside their measured ranges, and
+  # the lighting stays randomized.
+  "real_table": ScenePreset(
+    "real_table",
+    table=_REAL_TABLE_BANK,
+    wide_lighting=True,
+    object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
   ),
   "wood": ScenePreset(
     "wood", table=_ood_table(WOOD_TABLE), obj=_RED_PLASTIC_OBJECT,

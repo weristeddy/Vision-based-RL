@@ -84,3 +84,20 @@ _register(
   goal_in_observation=False,
   **_OUTLINE,
 )
+
+# The overfitted arm: the rig's own tabletop laid down once with no texture DR,
+# and object and marker colours narrowed to what its camera measures. Everything
+# else matches the pair above, so the difference is the scene alone.
+_REAL_TABLE = {**_OUTLINE, "real_goal_colour": True, "scene": "real_table"}
+_register(
+  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "DinoV2ViTS14-Afa6",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  **_REAL_TABLE,
+)
+_register(
+  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "DinoV2ViTS14-Afa6",
+  goal_in_observation=False,
+  **_REAL_TABLE,
+)

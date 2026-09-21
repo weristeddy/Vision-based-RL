@@ -49,15 +49,18 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-State-TrossenRealistic",
     "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
     "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
+    # The same pair on the rig scene: one fixed table texture, no texture DR.
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_39_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_41_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 39
+  assert len(EXPECTED_TASK_IDS) == 41
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -95,7 +98,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     seen_external += bool(external)
 
   # Lift-Cube is a wrist-camera task, so its 36 visual IDs declare `cam` alone.
-  assert seen_external == 2
+  assert seen_external == 4
 
 
 def test_every_push_t_arm_widens_the_goal_yaw() -> None:
@@ -118,7 +121,7 @@ def test_every_push_t_arm_widens_the_goal_yaw() -> None:
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 3
+  assert seen == 5
   assert GOAL_YAW_STAGES[0]["half_range"] == 0.0
   assert GOAL_YAW_STAGES[-1]["half_range"] == pytest.approx(math.pi)
   assert GOAL_YAW_STAGES[1]["step"] == 48_000
