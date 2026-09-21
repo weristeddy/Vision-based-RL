@@ -1,0 +1,36 @@
+version: 1
+
+# W&B run 9pqs3f02, iteration 5999. Pixel-only (22 inputs, no target_pose) at
+# the 0.03 per-step cap. Sim: 0.682 success, 0.736 overlap, 1.85 cm, 0.189 rad.
+#
+# Trained with the goal yaw stuck at 0 -- the sampler was missing its
+# assignment, fixed in 560580a -- so it is only in distribution near yaw 0.
+#
+# The marker is this policy's only goal signal, and training drew it as a
+# hollow 15 mm frame tracing the T footprint, not a filled T. A filled marker
+# is out of distribution with nothing to fall back on.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_goaloutlinepixel_5999.onnx
+
+arm_ip: 192.168.1.2
+
+# Not read by the policy: target_pose is absent, so the goal reaches it only
+# through the marker. Kept because the schema range-checks it and the trace
+# logs it, and it records where the marker is.
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+# Auto clipped 42% of the pixels on the first logged run; 7000 us measures
+# median 158 against sim's 150, 0% clipped.
+camera_exposure_us: 7000
+
+control_hz: 50.0
+
+motion:
+  # Empty by design: scale and clip are both 0.03 in the ONNX metadata.
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  # Not measured for this policy; 8.0 cleared the widest spread in the previous
+  # generation (5.68). A trip on step 1-2 means the threshold, not the policy.
+  max_arm_action: 8.0
+  home_seconds: 3.0

@@ -1,0 +1,34 @@
+version: 1
+
+# W&B run 8vpxhjf2, iteration 5999. Goal-conditioned (27 inputs, target_pose
+# present) at the 0.03 per-step cap.
+#
+# Trained with the goal yaw stuck at 0 -- the sampler was missing its
+# assignment, fixed in 560580a -- so it is only in distribution near yaw 0.
+# This manifest's goal is at 0.0124 rad. Rotating the marker puts it OOD.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_goaloutline_5999.onnx
+
+arm_ip: 192.168.1.2
+
+# An input, not just a record: target_pose is in the observation, so these
+# numbers and the marker on the table must agree. Re-solve after moving it:
+#   python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+# Auto clipped 42% of the pixels on the first logged run; 7000 us measures
+# median 158 against sim's 150, 0% clipped.
+camera_exposure_us: 7000
+
+control_hz: 50.0
+
+motion:
+  # Empty by design: scale and clip are both 0.03 in the ONNX metadata, so the
+  # bound is applied with the numbers training used.
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  # Not measured for this policy; 8.0 cleared the widest spread in the previous
+  # generation (5.68). A trip on step 1-2 means the threshold, not the policy.
+  max_arm_action: 8.0
+  home_seconds: 3.0
