@@ -333,3 +333,31 @@ def test_frozen_visual_features_are_cached_during_rollout(tmp_path: Path) -> Non
     assert any(key.endswith("_features") for key in stored), (
       f"rollout storage holds no cached features: {sorted(stored)}"
     )
+
+
+@pytest.mark.sim
+@pytest.mark.gpu
+@requires_cuda
+def test_the_sampled_goal_yaw_reaches_the_command() -> None:
+  from mjlab.envs import ManagerBasedRlEnv
+  from mjlab.tasks.registry import load_env_cfg
+
+  import vbrl.tasks  # noqa: F401
+  from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import STATE_TASK_ID
+
+  cfg = load_env_cfg(STATE_TASK_ID, play=False)
+  cfg.scene.num_envs = 64
+  env = ManagerBasedRlEnv(cfg, device="cuda:0")
+  try:
+    command = env.command_manager.get_term("push_t_goal")
+    assert float(command.cfg.target_yaw_range[1]) == pytest.approx(torch.pi, abs=1e-3)
+    env.reset()
+    yaw = command.target_yaw.detach()
+    # Dropping `self.target_yaw[env_ids] = target_yaw` leaves this at its zero
+    # initialization, which pins every goal to yaw 0 while target_yaw_range --
+    # and the curriculum that narrows it -- still read as the full circle.
+    assert float(yaw.std()) > 1.0
+    assert float(yaw.abs().max()) > 2.5
+    assert len(torch.unique(yaw)) > env.num_envs // 2
+  finally:
+    env.close()

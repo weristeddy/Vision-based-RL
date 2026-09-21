@@ -187,6 +187,7 @@ class PushTCommand(LiftingCommand):
     )
     if self.cfg.fixed_target is not None:
       target_yaw = torch.full_like(target_yaw, self.cfg.fixed_target[2])
+    self.target_yaw[env_ids] = target_yaw
     zeros = torch.zeros(n, device=self.device)
     pose = torch.cat(
       (
