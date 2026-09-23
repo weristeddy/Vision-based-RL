@@ -73,13 +73,13 @@ _OUTLINE = {
 _CALIBRATION_NOISE = (0.003, 0.026)
 
 _register(
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
   "DinoV2ViTS14-Afa6",
   goal_observation_noise=_CALIBRATION_NOISE,
   **_OUTLINE,
 )
 _register(
-  "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
   "DinoV2ViTS14-Afa6",
   goal_in_observation=False,
   **_OUTLINE,
@@ -90,13 +90,13 @@ _register(
 # else matches the pair above, so the difference is the scene alone.
 _REAL_TABLE = {**_OUTLINE, "real_goal_colour": True, "scene": "real_table"}
 _register(
-  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic",
   "DinoV2ViTS14-Afa6",
   goal_observation_noise=_CALIBRATION_NOISE,
   **_REAL_TABLE,
 )
 _register(
-  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
   "DinoV2ViTS14-Afa6",
   goal_in_observation=False,
   **_REAL_TABLE,

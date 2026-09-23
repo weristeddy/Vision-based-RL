@@ -19,12 +19,12 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 
 
 TASK_IDS = (
-  "Mjlab-PushT-State-TrossenIdentified",
+  "Mjlab-PushT-State-TrossenRealistic",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
+STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
 
 NUM_ENVS = 8
 IMAGE_SIZE = (224, 224)
@@ -190,7 +190,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
+  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model
@@ -363,5 +363,47 @@ def test_the_sampled_goal_yaw_reaches_the_command() -> None:
     assert float(yaw.std()) > 1.0
     assert float(yaw.abs().max()) > 2.5
     assert len(torch.unique(yaw)) > env.num_envs // 2
+  finally:
+    env.close()
+
+
+@pytest.mark.sim
+@pytest.mark.gpu
+def test_the_arm_can_actually_push_the_object() -> None:
+  """The robot must be able to move the T, not merely reach towards it.
+
+  A model whose actuators cannot track the 0.03 rad per-step delta leaves the
+  policy pressing into the table: reaching reward saturates, `overlap` stays at
+  exactly zero and 500 iterations of training look like an algorithm failure.
+  """
+  from vbrl.runtime import build_env
+
+  env = build_env(
+    "Mjlab-PushT-State-TrossenRealistic", device=DEVICE, num_envs=16, seed=0
+  )
+  try:
+    robot, obj = env.scene["robot"], env.scene["object"]
+    env.reset()
+    site = robot.data.site_pos_w[:, 0, :]
+    start = obj.data.root_link_pos_w.clone()
+    pose = torch.zeros(env.num_envs, 7, device=env.device)
+    pose[:, :2] = site[:, :2]
+    pose[:, 0] -= 0.03
+    pose[:, 2] = start[:, 2]
+    pose[:, 3] = 1.0
+    obj.write_root_link_pose_to_sim(pose, torch.arange(env.num_envs, device=env.device))
+    placed = obj.data.root_link_pos_w[:, :2].clone()
+
+    action = torch.zeros(env.num_envs, env.action_manager.total_action_dim)
+    action = action.to(env.device)
+    action[:, 1] = 1.0
+    for _ in range(60):
+      env.step(action)
+
+    moved = (obj.data.root_link_pos_w[:, :2] - placed).norm(dim=-1).max()
+    assert float(moved) > 0.002, (
+      f"the arm moved the object by {1000 * float(moved):.2f} mm; it cannot push, "
+      "so no policy can solve the task"
+    )
   finally:
     env.close()

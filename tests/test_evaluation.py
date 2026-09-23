@@ -186,7 +186,7 @@ def test_committed_thesis_evaluations_pin_local_structural_references() -> None:
     if reference[0].startswith("Mjlab-PushT-")
   } == {
     (
-      "Mjlab-PushT-State-TrossenIdentified",
+      "Mjlab-PushT-State-TrossenRealistic",
       "ckpts/push_t/state.pt",
     ),
   }

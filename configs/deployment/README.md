@@ -26,7 +26,7 @@ signal.
 > **These policies are history, not the current configuration.** They were
 > trained on `-TrossenRealistic` against the Trossen MJCF, a grey-rendering
 > tabletop, a black background and no joint-velocity penalty. Push-T now
-> registers `-TrossenIdentified` on the system-identified arm, so the task IDs
+> registers `-TrossenRealistic` on the system-identified arm, so the task IDs
 > below no longer exist and nothing here can be reproduced from source. The
 > manifests still run, because the observation and action contract travels
 > inside the ONNX graph.
@@ -107,7 +107,7 @@ This is the one manifest that shapes the action in the manifest itself
 it). The entry point is `vbrl-play`, not `vbrl-visualize`. These policies have
 no local `.pt`, only the exported ONNX, so the weights come from W&B and the
 task ID supplies the architecture -- and the IDs below were renamed to
-`-TrossenIdentified`, so these commands no longer resolve. They are kept as the
+`-TrossenRealistic`, so these commands no longer resolve. They are kept as the
 record of which run produced which policy.
 
 The Jetson is headless, so the browser is on the laptop and port 8080 has to
