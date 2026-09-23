@@ -806,19 +806,15 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.scale_rewards_by_dt is False
   assert set(cfg.metrics) == {
     "peak_table_force",
-    "peak_object_force",
     "peak_top_face_force",
     "peak_side_face_force",
     "peak_object_press",
     "top_contact_share",
-    "final_overlap",
     "at_goal_share",
   }
   assert cfg.metrics["peak_table_force"].reduce == "max"
-  assert cfg.metrics["peak_object_force"].reduce == "max"
   assert cfg.metrics["top_contact_share"].reduce == "mean"
-  # episode_success latches; these report the outcome instead.
-  assert cfg.metrics["final_overlap"].reduce == "last"
+  # episode_success latches; this reports how long the goal was held.
   assert cfg.metrics["at_goal_share"].reduce == "mean"
 
   action = cfg.actions["joint_pos"]

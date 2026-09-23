@@ -1,0 +1,29 @@
+version: 1
+
+# W&B run xbl8pqsz, iteration 14999, trained on the real-table
+# physics: 0.03 per-step cap, 16 s episodes, linear orientation summand.
+# RealTable, goal-conditioned (27 inputs). Sim at 15,000 iterations over the
+# full yaw range: 0.727 episode success, 0.805 final overlap, 0.137 rad yaw
+# error, at goal for 21.5% of the episode. Best of the four 15k runs and the
+# best result at the full yaw range so far.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_realtable_14999.onnx
+
+arm_ip: 192.168.1.2
+
+# An input: target_pose is in the observation, so these numbers and the
+# marker on the table must agree. Re-solve after moving it:
+#   python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+camera_exposure_us: 7000
+
+control_hz: 50.0
+
+motion:
+  # Empty by design: scale and clip are both 0.03 in the ONNX metadata.
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 8.0
+  home_seconds: 3.0

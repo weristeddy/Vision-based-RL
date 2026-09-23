@@ -1,0 +1,32 @@
+version: 1
+
+# W&B run 0vv02udk, iteration 14999, trained on the real-table
+# physics: 0.03 per-step cap, 16 s episodes, linear orientation summand.
+# RealTablePixel, pixel-only (22 inputs, no target_pose). Sim: 0.500 success,
+# 0.693 final overlap, 0.464 rad yaw error. Still climbing at 15,000 and its
+# policy std had risen to 0.35, so the run-to-run spread is wide -- 0.750 at
+# iteration 12,000 against 0.500 at 15,000.
+#
+# The marker is its only goal signal, so it needs the hollow outline marker
+# on the table, not a filled one.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_realtablepixel_14999.onnx
+
+arm_ip: 192.168.1.2
+
+# Not read by the policy: target_pose is absent, so the goal reaches it
+# only through the marker. Kept because the schema range-checks it and
+# the trace logs it, and it records where the marker is.
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+camera_exposure_us: 7000
+
+control_hz: 50.0
+
+motion:
+  # Empty by design: scale and clip are both 0.03 in the ONNX metadata.
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 8.0
+  home_seconds: 3.0

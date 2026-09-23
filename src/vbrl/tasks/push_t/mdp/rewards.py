@@ -160,13 +160,9 @@ def contact_force_hinge(
   return (excess / scale).square()
 
 
-# `episode_success` latches on the first at-goal step, so it reports the peak
-# rather than the outcome -- measured 45.3% ever against 28.1% still there at
-# the end. These two report what the arm actually leaves behind.
-def final_overlap(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-  return push_t_command(env, command_name).get_overlap()
-
-
+# `episode_success` latches on the first at-goal step, so it says whether the
+# goal was ever reached, not whether the arm held it. This says how much of the
+# episode was spent there.
 def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
   return push_t_command(env, command_name).get_at_goal().float()
 
@@ -175,7 +171,6 @@ __all__ = [
   "action_path_length_l1",
   "at_goal_action_l1",
   "at_goal_share",
-  "final_overlap",
   "contact_force_hinge",
   "fingertip_height_excess",
   "maniskill_dense_reward",

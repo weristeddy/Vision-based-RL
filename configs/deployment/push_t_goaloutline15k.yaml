@@ -1,0 +1,29 @@
+version: 1
+
+# W&B run ao5bzb64, iteration 14999, trained on the real-table
+# physics: 0.03 per-step cap, 16 s episodes, linear orientation summand.
+# GoalOutline, goal-conditioned (27 inputs), randomized table texture. Sim:
+# 0.409 success, 0.632 final overlap, 0.339 rad yaw error -- the control for
+# RealTable, which differs only by the fixed tabletop texture and scores
+# 0.727. Still climbing at 15,000 (+0.030 success per 1000 iterations).
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_goaloutline_14999.onnx
+
+arm_ip: 192.168.1.2
+
+# An input: target_pose is in the observation, so these numbers and the
+# marker on the table must agree. Re-solve after moving it:
+#   python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+camera_exposure_us: 7000
+
+control_hz: 50.0
+
+motion:
+  # Empty by design: scale and clip are both 0.03 in the ONNX metadata.
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 8.0
+  home_seconds: 3.0

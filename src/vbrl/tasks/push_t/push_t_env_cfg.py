@@ -266,13 +266,8 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": EE_GROUND_CONTACT_SENSOR},
     ),
-    "peak_object_force": MetricsTermCfg(
-      func=mdp.max_contact_force,
-      reduce="max",
-      params={"sensor_name": _CONTACT_SENSOR},
-    ),
     # A lateral push is bounded by the task (the T slides at ~0.7 N); a press
-    # into the top face is bounded only by the arm. `peak_object_force` sums both.
+    # into the top face is bounded only by the arm.
     "peak_top_face_force": MetricsTermCfg(
       func=mdp.max_contact_force_on_face,
       reduce="max",
@@ -296,11 +291,6 @@ def build_env_cfg(
       func=mdp.top_contact_share,
       reduce="mean",
       params={"sensor_name": _CONTACT_SENSOR},
-    ),
-    "final_overlap": MetricsTermCfg(
-      func=mdp.final_overlap,
-      reduce="last",
-      params={"command_name": _COMMAND},
     ),
     "at_goal_share": MetricsTermCfg(
       func=mdp.at_goal_share,
