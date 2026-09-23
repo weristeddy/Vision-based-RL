@@ -10,7 +10,7 @@ from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
+STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
 _RGB_MAX_ITERATIONS = 6000
 
 
@@ -35,16 +35,15 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       "success_90",
       "sim2real_dr",
     ),
-    clip_actions=1.0,
+    clip_actions=None,
     upload_model=True,
     actor=RslRlModelCfg(
       hidden_dims=(512, 256, 128),
       activation="elu",
       obs_normalization=True,
       distribution_cfg={
-        "class_name": "GaussianDistribution",
-        "init_std": 1.0,
-        "std_type": "scalar",
+        "class_name": "BetaDistribution",
+        "action_range": (-1.0, 1.0),
       },
       class_name="MLPModel",
     ),
@@ -108,7 +107,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "goal_yaw_curriculum",
       "visual_goal",
     ),
-    clip_actions=1.0,
+    clip_actions=None,
     upload_model=True,
     actor=RslRlModelCfg(
       hidden_dims=(256, 256, 128),
@@ -119,10 +118,8 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
         "latent_batchnorm": False,
       },
       distribution_cfg={
-        "class_name": "GaussianDistribution",
-        "init_std": 0.6065306597,
-        "std_type": "log",
-        "std_range": (0.05, 1.0),
+        "class_name": "BetaDistribution",
+        "action_range": (-1.0, 1.0),
       },
       class_name="vbrl.vision.model:VisionModel",
     ),

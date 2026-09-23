@@ -29,8 +29,6 @@ class TrainConfig(MjlabTrainConfig):
   """Extra W&B tag and run-name prefix, for telling one sweep arm from another."""
   min_action_std: float | None = None
   """Lower bound of the policy's action-std range."""
-  action_path_weight: float | None = None
-  """Weight of the L1 commanded-travel penalty."""
   action_rate_weight: float | None = None
   """Weight of MJLab's `action_rate_l2`."""
   object_press_weight: float | None = None
@@ -49,7 +47,6 @@ class TrainConfig(MjlabTrainConfig):
 
 def _retune_penalty_weights(cfg: TrainConfig) -> None:
   overrides = (
-    ("action_path_length", "--action-path-weight", cfg.action_path_weight),
     ("action_rate_l2", "--action-rate-weight", cfg.action_rate_weight),
     ("object_table_press", "--object-press-weight", cfg.object_press_weight),
   )

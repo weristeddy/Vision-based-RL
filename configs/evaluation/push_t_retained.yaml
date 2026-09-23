@@ -3,7 +3,7 @@ name: push_t_retained_state
 
 models:
   - name: push_t_state
-    task_id: Mjlab-PushT-State-TrossenRealistic
+    task_id: Mjlab-PushT-State-TrossenIdentified
     checkpoint_file: ckpts/push_t/state.pt
 
 scenes:

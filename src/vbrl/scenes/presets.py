@@ -92,7 +92,11 @@ REAL_TABLE = TexturePreset(
   name="real_table",
   image=TEXTURES_DIR / "real_table" / "real_table_color.png",
   texrepeat=(1.0, 1.0),
-  rgba=(0.442, 0.496, 0.550, 1.0),
+  # Multiplies the photo, so it is the wood's tint, not a dimmer. The previous
+  # (0.442, 0.496, 0.550) rose towards blue and cancelled the photo's warmth
+  # exactly, rendering the table grey at 136/136/133 while the rig photographs
+  # it at 186/134/88. These reproduce that ratio at the same luminance.
+  rgba=(0.593, 0.488, 0.363, 1.0),
   roughness=0.93,
   specular=0.02,
 )
@@ -198,7 +202,10 @@ _RED_PLASTIC_OBJECT = MaterialBank(
 _REAL_TABLE_BANK = MaterialBank(kind="image", prefix="real_table", image=REAL_TABLE)
 # Measured off the rig: the object's bordeaux (#68392c) and the printed marker's
 # green (#046147). Both keep colour DR, narrowed to what the camera really sees.
-REAL_TABLE_OBJECT_COLOUR_RANGE = ((0.30, 0.52), (0.14, 0.30), (0.10, 0.26))
+# Albedo, not observed colour. Tuned until the rendered object matched the rig
+# at 0.426/0.192/0.090; the previous range rendered 0.452/0.247/0.192, with
+# blue 2.1x too high.
+REAL_TABLE_OBJECT_COLOUR_RANGE = ((0.22, 0.44), (0.055, 0.215), (0.0, 0.115))
 
 
 def _ood_table(preset: TexturePreset) -> MaterialBank:

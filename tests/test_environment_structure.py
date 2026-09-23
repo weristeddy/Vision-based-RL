@@ -126,7 +126,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   )
 
   state = trossen_realistic_push_t_state_env_cfg()
-  rgb = trossen_realistic_push_t_rgb_env_cfg(action_delta=0.03)
+  rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
 
   assert tuple(state.observations["actor"].terms) == PUSH_T_STATE
   assert tuple(state.observations["critic"].terms) == PUSH_T_STATE
@@ -145,7 +145,10 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.min_xy_separation == rgb_goal.min_xy_separation
   assert state_goal.success_threshold == rgb_goal.success_threshold
-  assert tuple(state.curriculum) == tuple(rgb.curriculum) == ("goal_yaw_range",)
+  assert tuple(state.curriculum) == tuple(rgb.curriculum) == (
+    "joint_vel_hinge_weight",
+    "goal_yaw_range",
+  )
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
   assert state.episode_length_s == rgb.episode_length_s == 16.0
@@ -189,7 +192,7 @@ def test_rgb_camera_term_preserves_native_uint8_bchw() -> None:
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "collision"}),
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "visual"}),
     ("trossen_realistic_push_t_state_env_cfg", {}),
-    ("trossen_realistic_push_t_rgb_env_cfg", {"action_delta": 0.03}),
+    ("trossen_realistic_push_t_rgb_env_cfg", {"action_scale": 0.03}),
   ),
   ids=("lift-collision", "lift-visual", "push-t-state", "push-t-rgb"),
 )
@@ -219,8 +222,8 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
   for task_id in (
     "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-    "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-State-TrossenIdentified",
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
   ):
     train = load_env_cfg(task_id)
     play = load_env_cfg(task_id, play=True)

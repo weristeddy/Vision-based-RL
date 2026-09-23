@@ -11,10 +11,13 @@ from vbrl.asset_zoo.robots.definition import (
 XMLS_DIR = Path(__file__).resolve().parent / "xmls"
 WXAI_XML = XMLS_DIR / "wxai.xml"
 WXAI_REALISTIC_XML = XMLS_DIR / "wxai_realistic.xml"
+WXAI_IDENTIFIED_XML = XMLS_DIR / "wxai_identified.xml"
 
 # The arm bolts to a 190 x 80 x 5 mm plate on the tabletop, measured off the real rig
 # (nothing about it is published).
 MOUNT_PLATE_THICKNESS_M = 0.005
+FINGER_PAD_PATTERN = r"(left|right)_finger_pad_[0-2]_collision"
+IDENTIFIED_PAD_PATTERN = r"gripper_(left|right)_pad"
 
 
 _ACTION_SCALE = {
@@ -76,7 +79,9 @@ def _articulation(enable_delay: bool):
   )
 
 
-def _definition(name: str, xml_path: Path) -> RobotDefinition:
+def _definition(
+  name: str, xml_path: Path, fingertip_geom_pattern: str = FINGER_PAD_PATTERN
+) -> RobotDefinition:
   return RobotDefinition(
     name=name,
     xml_path=xml_path,
@@ -95,7 +100,7 @@ def _definition(name: str, xml_path: Path) -> RobotDefinition:
       "left_carriage_joint": 0.0,
     },
     ee_site="ee_site",
-    fingertip_geom_pattern=r"(left|right)_finger_pad_[0-2]_collision",
+    fingertip_geom_pattern=fingertip_geom_pattern,
     collision_body_pattern="link_6",
     viewer_body="link_6",
     cameras=dict(_CAMERAS),
@@ -110,9 +115,17 @@ def make_wxai_realistic() -> RobotDefinition:
   return _definition("trossen_realistic", WXAI_REALISTIC_XML)
 
 
+def make_wxai_identified() -> RobotDefinition:
+  return _definition(
+    "trossen_identified", WXAI_IDENTIFIED_XML, IDENTIFIED_PAD_PATTERN
+  )
+
+
 __all__ = [
+  "WXAI_IDENTIFIED_XML",
   "WXAI_REALISTIC_XML",
   "WXAI_XML",
   "make_wxai",
+  "make_wxai_identified",
   "make_wxai_realistic",
 ]

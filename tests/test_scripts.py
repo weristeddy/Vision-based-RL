@@ -43,7 +43,6 @@ def test_train_config_exposes_the_flags_sweeps_and_cluster_scripts_use() -> None
   assert {
     "label",
     "min_action_std",
-    "action_path_weight",
     "action_rate_weight",
     "object_press_weight",
     "goal_yaw_rungs",

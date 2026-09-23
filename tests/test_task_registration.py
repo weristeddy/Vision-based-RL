@@ -46,12 +46,12 @@ EXPECTED_TASK_IDS = frozenset(
       f"Mjlab-LiftCube-Sim2Real-{arch}-TrossenRealistic"
       for arch in SIM2REAL_ARCHITECTURES
     ),
-    "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
-    "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-State-TrossenIdentified",
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
     # The same pair on the rig scene: one fixed table texture, no texture DR.
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic",
-    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
   )
 )
 
@@ -146,7 +146,7 @@ def test_every_visual_id_names_a_row_of_the_architecture_table() -> None:
 
   registered = vbrl_task_ids()
   for task_id in registered:
-    if task_id.endswith(("-State-Trossen", "-State-TrossenRealistic")):
+    if task_id.endswith(("-State-Trossen", "-State-TrossenIdentified")):
       continue
     token = re.sub(r"^Mjlab-\w+-\w+-|-\w+$", "", task_id)
     assert token in ARCHITECTURES, task_id
@@ -201,7 +201,7 @@ print(json.dumps(list(vbrl_task_ids())))
 def test_native_registry_returns_independent_environment_and_agent_copies() -> None:
   from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
-  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
+  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
   first_env, second_env = load_env_cfg(task_id), load_env_cfg(task_id)
   first_agent, second_agent = load_rl_cfg(task_id), load_rl_cfg(task_id)
 

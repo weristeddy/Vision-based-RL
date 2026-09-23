@@ -118,6 +118,7 @@ def run(
     )
   }
   frames: list = []
+  networks: list = []
   stack = ExitStack()
   started_at = deadline = time.perf_counter()
   try:
@@ -140,6 +141,7 @@ def run(
 
       # The network's own output: `action` is already clamped and never trips.
       network = policy.network_action
+      networks.append(np.asarray(network, dtype=np.float32))
       arm_channels = network[:-1] if policy.has_gripper else network
       largest_arm_action = float(np.abs(arm_channels).max())
       if largest_arm_action > motion.max_arm_action:
@@ -208,6 +210,7 @@ def run(
       print(f"Wrote {destination} ({len(trace['action'])} steps, {len(frames)} frames)")
     elapsed = time.perf_counter() - started_at
     print(f"\n{step} steps in {elapsed:.1f} s ({step / max(elapsed, 1e-9):.1f} Hz)")
+    _report_clipping(networks, policy.metadata.clip_actions, policy.has_gripper)
     if closest_error < float("inf"):
       print(
         f"  closest while holding {closest_error:.3f} m"
@@ -224,6 +227,35 @@ def run(
     arm.park(seconds=motion.home_seconds)
     arm.close()
   return 0
+
+
+def _report_clipping(networks: list, bound: float | None, has_gripper: bool) -> None:
+  """Say how hard the raw network pushed against `clip_actions`.
+
+  A channel that sits at one end and never the other is a standing bias, not
+  noise: the same observation in sim leaves the mean near zero.
+  """
+  if not networks:
+    return
+  raw = np.asarray(networks)
+  arm = raw[:, :-1] if has_gripper else raw
+  if bound is None:
+    print(
+      f"  raw action |max| {np.abs(arm).max():.2f}; clip_actions absent, so "
+      "nothing bounded it"
+    )
+    return
+  high, low = arm >= bound - 1e-6, arm <= -bound + 1e-6
+  touched = (high | low).any(axis=1).mean()
+  print(f"  clipping at +/-{bound:g}: {touched * 100:.1f}% of steps touched it")
+  print("    ch     mean      min      max     %at+     %at-")
+  for channel in range(arm.shape[1]):
+    column = arm[:, channel]
+    print(
+      f"    {channel}  {column.mean():+8.3f} {column.min():+8.3f} "
+      f"{column.max():+8.3f} {high[:, channel].mean() * 100:7.1f} "
+      f"{low[:, channel].mean() * 100:7.1f}"
+    )
 
 
 def _image(camera: Any) -> Any:

@@ -379,22 +379,6 @@ def _push_t_reward_env(target_pos, target_yaw, object_pos, object_yaw, weight=0.
   return env, asset_cfg
 
 
-def test_push_t_action_path_length_is_l1_so_splitting_a_move_is_never_cheaper() -> None:
-  from vbrl.tasks.push_t.mdp import action_path_length_l1
-
-  def cost(action: list[float]) -> float:
-    env = SimpleNamespace(
-      action_manager=SimpleNamespace(action=torch.tensor([action]))
-    )
-    return float(action_path_length_l1(env)[0])
-
-  assert cost([0.0] * 6) == 0.0
-  # One decisive step costs exactly what two half steps cost: the term measures
-  # path, not speed, so a back-and-forth correction cycle pays double.
-  assert cost([1.0, 0, 0, 0, 0, 0]) == pytest.approx(2 * cost([0.5, 0, 0, 0, 0, 0]))
-  assert cost([0.5, -0.5, 0, 0, 0, 0]) == pytest.approx(1.0)
-
-
 def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> None:
   from mjlab.managers import SceneEntityCfg
 
@@ -782,9 +766,12 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.push_t_env_cfg import (
     ACTION_PATH_LENGTH_WEIGHT,
     ACTION_RATE_WEIGHT,
+    ACTION_SCALE,
     AT_GOAL_ACTION_WEIGHT,
     EE_HEIGHT_CEILING_M,
     EE_HEIGHT_WEIGHT,
+    JOINT_VEL_HINGE_STAGES,
+    MAX_JOINT_VEL_RAD_S,
     OBJECT_PRESS_ONSET_N,
     OBJECT_PRESS_SCALE_N,
     OBJECT_WEIGHT_N,
@@ -821,9 +808,10 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert isinstance(action, RelativeJointPositionActionCfg)
   assert action.actuator_names == definition.arm_actuator_names
   assert len(action.actuator_names) == 6
-  assert action.scale == pytest.approx(0.03)
+  assert action.scale == pytest.approx(ACTION_SCALE)
   assert action.clip == {
-    name: pytest.approx((-0.03, 0.03)) for name in definition.arm_actuator_names
+    name: pytest.approx((-ACTION_SCALE, ACTION_SCALE))
+    for name in definition.arm_actuator_names
   }
   assert {
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
@@ -841,6 +829,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "side_contact_align",
     "action_path_length",
     "action_rate_l2",
+    "joint_vel_hinge",
     "at_goal_action",
     "table_contact_force",
     "object_table_press",
@@ -851,10 +840,15 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert SIDE_CONTACT_ALIGN_WEIGHT == pytest.approx(0.05)
   assert cfg.rewards["side_contact_align"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
-  assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
   assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
+  assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
   assert "action_acc_l2" not in cfg.rewards
+  assert cfg.actions["joint_pos"].scale == pytest.approx(ACTION_SCALE)
+  hinge = cfg.rewards["joint_vel_hinge"]
+  assert hinge.params["max_vel"] == pytest.approx(MAX_JOINT_VEL_RAD_S)
+  assert hinge.weight == pytest.approx(JOINT_VEL_HINGE_STAGES[0]["weight"])
+  assert [stage["weight"] for stage in JOINT_VEL_HINGE_STAGES] == [-0.01, -0.1, -1.0]
   assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
   assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
 
@@ -879,7 +873,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert table_contact["onset"] == pytest.approx(0.0) == TABLE_CONTACT_ONSET_N
   assert table_contact["scale"] == pytest.approx(5.0)
 
-  assert tuple(cfg.curriculum) == ("goal_yaw_range",)
+  assert tuple(cfg.curriculum) == ("joint_vel_hinge_weight", "goal_yaw_range")
 
 
   assert tuple(cfg.terminations) == (

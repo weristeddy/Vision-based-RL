@@ -19,12 +19,12 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 
 
 TASK_IDS = (
-  "Mjlab-PushT-State-TrossenRealistic",
+  "Mjlab-PushT-State-TrossenIdentified",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
+STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
 
 NUM_ENVS = 8
 IMAGE_SIZE = (224, 224)
@@ -190,7 +190,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
+  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model

@@ -2,7 +2,7 @@ import functools
 
 from mjlab.tasks.registry import register_mjlab_task
 
-from vbrl.tasks.push_t.push_t_env_cfg import DEPLOYABLE_ACTION_DELTA
+from vbrl.tasks.push_t.push_t_env_cfg import ACTION_SCALE
 from vbrl.training.runner import VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
 
@@ -21,7 +21,7 @@ def _register(
   task_id: str,
   architecture: str,
   *,
-  action_delta: float,
+  action_scale: float,
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   scene: str = "real_texture",
@@ -32,7 +32,7 @@ def _register(
 ) -> None:
   env = functools.partial(
     trossen_realistic_push_t_rgb_env_cfg,
-    action_delta=action_delta,
+    action_scale=action_scale,
     goal_in_observation=goal_in_observation,
     fixed_target=fixed_target,
     scene=scene,
@@ -67,19 +67,19 @@ register_mjlab_task(
 # repeatability, ~0.4 mm tag detection, +/-1 mm hand-measured margin) with
 # headroom. The reward keeps the true goal, so only the actor is misled.
 _OUTLINE = {
-  "action_delta": DEPLOYABLE_ACTION_DELTA,
+  "action_scale": ACTION_SCALE,
   "goal_outline": True,
 }
 _CALIBRATION_NOISE = (0.003, 0.026)
 
 _register(
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
   "DinoV2ViTS14-Afa6",
   goal_observation_noise=_CALIBRATION_NOISE,
   **_OUTLINE,
 )
 _register(
-  "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
   "DinoV2ViTS14-Afa6",
   goal_in_observation=False,
   **_OUTLINE,
@@ -90,13 +90,13 @@ _register(
 # else matches the pair above, so the difference is the scene alone.
 _REAL_TABLE = {**_OUTLINE, "real_goal_colour": True, "scene": "real_table"}
 _register(
-  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
   "DinoV2ViTS14-Afa6",
   goal_observation_noise=_CALIBRATION_NOISE,
   **_REAL_TABLE,
 )
 _register(
-  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
   "DinoV2ViTS14-Afa6",
   goal_in_observation=False,
   **_REAL_TABLE,

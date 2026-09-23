@@ -19,7 +19,9 @@ ALL_SCENES = (
 )
 # Every training preset randomizes the sun's colour on top of its pose. The
 # matched-evaluation branch deliberately does not; see `_events` in the builder.
-LIGHT_COLOR_EVENTS = frozenset({"light_diffuse", "light_specular", "light_ambient"})
+LIGHT_COLOR_EVENTS = frozenset({"light_intensity"})
+# Every scene with a camera also randomizes the room behind the table.
+CAMERA_EVENTS = frozenset({"background"})
 
 
 def _object_xml(name: str):
@@ -120,7 +122,7 @@ def test_replace_scene_rejects_a_non_ood_target() -> None:
 )
 def test_each_preset_derives_its_own_event_set(scene: str, expected) -> None:
   if expected:
-    expected |= LIGHT_COLOR_EVENTS
+    expected |= LIGHT_COLOR_EVENTS | CAMERA_EVENTS
   assert frozenset(_apply(scene).events) == expected
 
 
@@ -164,6 +166,7 @@ def test_matched_evaluation_adds_the_fill_light_and_shifts_lighting() -> None:
       "fill_light_direction",
       "camera_position",
       "camera_orientation",
+      "background",
     }
   )
   assert cfg.events["light_position"].params["operation"] == "add"
@@ -203,7 +206,7 @@ def test_real_texture_spends_one_material_on_its_texture_pool() -> None:
 
   from mjlab.envs.mdp import dr
 
-  from vbrl.scenes.builder import table_spec
+  from vbrl.scenes.builder import BACKDROP_COUNT, table_spec
   from vbrl.scenes.presets import ambientcg_texture_names
 
   preset = get_preset("real_texture")
@@ -222,7 +225,7 @@ def test_real_texture_spends_one_material_on_its_texture_pool() -> None:
 
   model = table_spec(preset).compile()
   assert model.nmat == 1
-  assert model.ntex == len(names)
+  assert model.ntex == len(names) + BACKDROP_COUNT
 
 
 def test_realistic_scenes_add_a_fill_light() -> None:
@@ -262,7 +265,7 @@ def test_a_recording_holds_the_sun_colour_but_keeps_its_pose_jitter() -> None:
   import vbrl.tasks  # noqa: F401
   from vbrl.scenes.builder import LIGHT_COLOUR_EVENTS, hold_lighting_colour_fixed
 
-  cfg = load_env_cfg("Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic")
+  cfg = load_env_cfg("Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified")
   assert frozenset(LIGHT_COLOUR_EVENTS) <= frozenset(cfg.events)
 
   hold_lighting_colour_fixed(cfg)

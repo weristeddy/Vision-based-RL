@@ -9,7 +9,7 @@ import mujoco
 from mjlab.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
-from mjlab.managers.event_manager import EventTermCfg
+from mjlab.managers.event_manager import EventTermCfg, requires_model_fields
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 
 from .materials import add_bank
@@ -38,7 +38,7 @@ SpecSource = Callable[[], mujoco.MjSpec]
 
 # Reapplying a scene clears all of these, so a replacement cannot inherit a stale term
 # from the preset it replaces.
-LIGHT_COLOUR_EVENTS = ("light_diffuse", "light_specular", "light_ambient")
+LIGHT_COLOUR_EVENTS = ("light_intensity",)
 
 SCENE_EVENTS = (
   "table_color",
@@ -49,10 +49,9 @@ SCENE_EVENTS = (
   "object_material_tint",
   "light_position",
   "light_direction",
-  "light_diffuse",
-  "light_specular",
-  "light_ambient",
+  "light_intensity",
   "fill_light_direction",
+  "background",
   "camera_position",
   "camera_orientation",
 )
@@ -72,11 +71,117 @@ _MATCHED_RANGES = {
   "direction": {0: (-0.12, 0.12), 1: (-0.12, 0.12), 2: (-0.08, 0.08)},
   "fill": {0: (-0.10, 0.10), 1: (-0.10, 0.10), 2: (-0.06, 0.06)},
 }
-_LIGHT_COLOR_RANGES = {
-  "diffuse": {axis: (0.70, 1.00) for axis in range(3)},
-  "specular": {axis: (0.02, 0.18) for axis in range(3)},
-  "ambient": {axis: (0.04, 0.16) for axis in range(3)},
+_LIGHT_INTENSITY_RANGES = {
+  # Widened from (0.70, 1.00), which rendered luminance 122-160 while the rig has
+  # produced 94-161 across a single day. Shared by every scene.
+  "diffuse": (0.34, 1.30),
+  "specular": (0.02, 0.18),
+  "ambient": (0.04, 0.16),
+  # Tilts the light along the red-blue axis, the axis a bulb or a window moves
+  # along: +0.25 is roughly an incandescent bulb, -0.25 a cool blue LED or open
+  # shade. Wider than the 1.11 red/blue factor the rig has shown, on Tobin et
+  # al.'s (2017) argument that the real world should read as one more variation.
+  "warmth": (-0.25, 0.25),
+  "shadow_probability": 0.5,
 }
+
+
+# Every camera ray descends to the tabletop plane, so none of these scenes has a
+# sky; what the camera sees past the table's far edge is the room behind the rig.
+# MuJoCo Warp shades those rays with the skybox texture, but only if the model
+# declares one -- `create_render_context` forces `render_skybox` off otherwise,
+# which is where the solid black came from.
+BACKDROP_COUNT = 32
+BACKDROP_PREFIX = "backdrop_"
+_BACKDROP_FACE_WIDTH = 64
+# The rig's room reads 28 against a tabletop at 135, so the draw is squared to
+# sit dark and keep a bright tail for a lit wall. A flat uniform over the same
+# range put every backdrop brighter than the rig's own.
+_BACKDROP_LUMINANCE = (0.004, 0.35)
+_BACKDROP_WARMTH = (-0.12, 0.30)
+
+
+def _backdrop_colour(rng) -> tuple[float, float, float]:
+  low, high = _BACKDROP_LUMINANCE
+  level = low + (high - low) * rng.random() ** 2
+  tilt = rng.uniform(*_BACKDROP_WARMTH)
+  return tuple(
+    min(1.0, max(0.0, level * scale)) for scale in (1.0 + tilt, 1.0, 1.0 - tilt)
+  )
+
+
+def _add_backdrops(spec: mujoco.MjSpec) -> None:
+  import random
+
+  rng = random.Random(0)
+  for index in range(BACKDROP_COUNT):
+    spec.add_texture(
+      name=f"{BACKDROP_PREFIX}{index}",
+      type=mujoco.mjtTexture.mjTEXTURE_SKYBOX,
+      builtin=mujoco.mjtBuiltin.mjBUILTIN_GRADIENT,
+      width=_BACKDROP_FACE_WIDTH,
+      height=_BACKDROP_FACE_WIDTH * 6,
+      rgb1=_backdrop_colour(rng),
+      rgb2=_backdrop_colour(rng),
+    )
+
+
+def _widen_skybox_to_one_per_world() -> None:
+  """Give every world its own skybox slot before the render graph is captured.
+
+  MuJoCo Warp indexes the skybox per world already, but builds a length-1 array,
+  and mjlab renders inside a captured CUDA graph -- so the array has to be the
+  right length before capture and can only be written in place afterwards.
+  """
+  import warp as wp
+  from mjlab.sensor import sensor_context
+
+  create = sensor_context.mjwarp.create_render_context
+  if getattr(create, "_vbrl_per_world_skybox", False):
+    return
+
+  def create_render_context(*args, **kwargs):
+    context = create(*args, **kwargs)
+    worlds = int(kwargs.get("nworld", 1))
+    for field in ("skybox_tex_id", "skybox_face_width"):
+      values = getattr(context, field).numpy()
+      if worlds > 1 and values.shape[0] == 1:
+        setattr(context, field, wp.array(values.repeat(worlds), dtype=int))
+    return context
+
+  create_render_context._vbrl_per_world_skybox = True
+  sensor_context.mjwarp.create_render_context = create_render_context
+
+
+def randomize_background(env, env_ids, count: int) -> None:
+  import torch
+  import warp as wp
+
+  context = env.scene.sensor_context
+  if context is None:
+    return
+  slots = wp.to_torch(context.render_context.skybox_tex_id)
+  if slots.shape[0] != env.num_envs:
+    return
+  choices = getattr(context, "_vbrl_backdrop_ids", None)
+  if choices is None:
+    # By type, not by name: the scene is an entity, so these compile to
+    # "table/backdrop_0" and a prefix match silently finds nothing.
+    model = env.sim.mj_model
+    skybox = int(mujoco.mjtTexture.mjTEXTURE_SKYBOX)
+    choices = torch.tensor(
+      [i for i in range(model.ntex) if model.tex_type[i] == skybox],
+      device=slots.device,
+      dtype=slots.dtype,
+    )
+    context._vbrl_backdrop_ids = choices
+  if choices.numel() == 0:
+    return
+  if env_ids is None:
+    env_ids = torch.arange(env.num_envs, device=slots.device)
+  env_ids = env_ids.to(slots.device).long()
+  picks = torch.randint(min(count, choices.numel()), env_ids.shape, device=slots.device)
+  slots[env_ids] = choices[picks]
 
 
 def _load_mjcf(path: str) -> mujoco.MjSpec:
@@ -126,6 +231,7 @@ def _add_lights(spec: mujoco.MjSpec, preset: ScenePreset) -> None:
 def table_spec(preset: ScenePreset) -> mujoco.MjSpec:
   spec = mujoco.MjSpec()
   _add_lights(spec, preset)
+  _add_backdrops(spec)
   bank = preset.table
   if bank is not None:
     names = add_bank(spec, bank)
@@ -259,6 +365,51 @@ def _light_event(func, light: str, ranges, *, operation: str):
   )
 
 
+@requires_model_fields(
+  "light_diffuse", "light_specular", "light_ambient", "light_castshadow"
+)
+def randomize_light_intensity(
+  env,
+  env_ids,
+  asset_cfg: SceneEntityCfg,
+  diffuse: tuple[float, float],
+  specular: tuple[float, float],
+  ambient: tuple[float, float],
+  warmth: tuple[float, float],
+  shadow_probability: float,
+) -> None:
+  import torch
+
+  if env_ids is None:
+    env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.int)
+  else:
+    env_ids = env_ids.to(env.device, dtype=torch.int)
+  light = env.scene[asset_cfg.name].indexing.light_ids[asset_cfg.light_ids]
+  grid = torch.meshgrid(env_ids, light, indexing="ij")
+
+  def scalar(lo: float, hi: float):
+    return torch.rand(env_ids.numel(), 1, 1, device=env.device) * (hi - lo) + lo
+
+  # dr.light_diffuse samples each channel independently, which lit the table
+  # green, purple and pink -- colours no room produces. One draw for all three
+  # keeps the sun neutral; `warmth` then tilts it along the red-blue axis only,
+  # which is the axis a real bulb or a window moves along.
+  tilt = scalar(*warmth)
+  ones = torch.ones_like(tilt)
+  tint = torch.cat([ones + tilt, ones, ones - tilt], dim=2)
+
+  env.sim.model.light_diffuse[grid] = scalar(*diffuse) * tint
+  env.sim.model.light_specular[grid] = scalar(*specular).expand_as(tint)
+  env.sim.model.light_ambient[grid] = scalar(*ambient).expand_as(tint)
+  # One directional light throws a hard black blob the rig never shows, because
+  # its room lights it from several directions at once. MuJoCo Warp ignores
+  # `light_bulbradius`, so there are no soft shadows to fade it with; dropping
+  # the shadow on some resets is the coverage that is actually available.
+  env.sim.model.light_castshadow[grid] = (
+    torch.rand(env_ids.numel(), 1, device=env.device) < shadow_probability
+  )
+
+
 def _camera_events(camera_model: str) -> dict[str, EventTermCfg]:
   asset_cfg = SceneEntityCfg("robot", camera_names=(camera_model,))
   return {
@@ -349,16 +500,22 @@ def _events(
   else:
     # Held out of the matched branch so a sim2sim evaluation measures exactly
     # the lighting it was calibrated against.
-    for field, func in (
-      ("diffuse", dr.light_diffuse),
-      ("specular", dr.light_specular),
-      ("ambient", dr.light_ambient),
-    ):
-      events[f"light_{field}"] = _light_event(
-        func, TABLE_LIGHT_NAME, _LIGHT_COLOR_RANGES[field], operation="abs"
-      )
+    events["light_intensity"] = EventTermCfg(
+      func=randomize_light_intensity,
+      mode="reset",
+      params={
+        "asset_cfg": SceneEntityCfg("table", light_names=(TABLE_LIGHT_NAME,)),
+        **_LIGHT_INTENSITY_RANGES,
+      },
+    )
   if camera_model is not None:
     events.update(_camera_events(camera_model))
+    # Registration time, which is the last moment before the render graph is
+    # captured; importing mjlab.sensor from the module body would be circular.
+    _widen_skybox_to_one_per_world()
+    events["background"] = EventTermCfg(
+      func=randomize_background, mode="reset", params={"count": BACKDROP_COUNT}
+    )
   return events
 
 
@@ -474,7 +631,10 @@ __all__ = [
   "SCENE_EVENTS",
   "apply_scene",
   "hold_lighting_colour_fixed",
+  "BACKDROP_COUNT",
   "object_spec",
+  "randomize_background",
+  "randomize_light_intensity",
   "replace_scene",
   "table_spec",
 ]

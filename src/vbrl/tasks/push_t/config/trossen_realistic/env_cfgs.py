@@ -7,7 +7,7 @@ from mjlab.envs import ManagerBasedRlEnvCfg
 
 from vbrl.asset_zoo.objects import PUSH_T_XML
 from vbrl.asset_zoo.robots.definition import CameraView
-from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_realistic
+from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_identified
 from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.push_t.goal_marker import (
   GOAL_COLOUR_EVENT,
@@ -17,7 +17,7 @@ from vbrl.tasks.push_t.goal_marker import (
   goal_marker_spec,
 )
 from vbrl.tasks.push_t.push_t_env_cfg import (
-  DEPLOYABLE_ACTION_DELTA,
+  ACTION_SCALE,
   GOAL_YAW_STAGES,
   build_env_cfg,
 )
@@ -32,12 +32,12 @@ _CAMERA: CameraView = "external"
 def trossen_realistic_push_t_state_env_cfg(
   *, play: bool = False
 ) -> ManagerBasedRlEnvCfg:
-  robot = make_wxai_realistic()
+  robot = make_wxai_identified()
   cfg = build_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,
     play=play,
-    action_delta=DEPLOYABLE_ACTION_DELTA,
+    action_scale=ACTION_SCALE,
     goal_yaw_stages=GOAL_YAW_STAGES,
   )
   apply_scene(
@@ -55,7 +55,7 @@ def trossen_realistic_push_t_state_env_cfg(
 
 def trossen_realistic_push_t_rgb_env_cfg(
   *,
-  action_delta: float,
+  action_scale: float,
   play: bool = False,
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
@@ -65,7 +65,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> ManagerBasedRlEnvCfg:
-  robot = make_wxai_realistic()
+  robot = make_wxai_identified()
   cfg = build_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,
@@ -75,7 +75,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
     visual_goal=True,
     goal_in_observation=goal_in_observation,
     fixed_target=fixed_target,
-    action_delta=action_delta,
+    action_scale=action_scale,
     episode_length_s=episode_length_s,
     goal_outline=goal_outline,
     goal_observation_noise=goal_observation_noise,
