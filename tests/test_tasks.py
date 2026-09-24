@@ -770,8 +770,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     AT_GOAL_ACTION_WEIGHT,
     EE_HEIGHT_CEILING_M,
     EE_HEIGHT_WEIGHT,
-    JOINT_VEL_HINGE_STAGES,
-    MAX_JOINT_VEL_RAD_S,
     OBJECT_PRESS_ONSET_N,
     OBJECT_PRESS_SCALE_N,
     OBJECT_WEIGHT_N,
@@ -829,7 +827,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "side_contact_align",
     "action_path_length",
     "action_rate_l2",
-    "joint_vel_hinge",
     "at_goal_action",
     "table_contact_force",
     "object_table_press",
@@ -845,10 +842,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
   assert "action_acc_l2" not in cfg.rewards
   assert cfg.actions["joint_pos"].scale == pytest.approx(ACTION_SCALE)
-  hinge = cfg.rewards["joint_vel_hinge"]
-  assert hinge.params["max_vel"] == pytest.approx(MAX_JOINT_VEL_RAD_S)
-  assert hinge.weight == pytest.approx(JOINT_VEL_HINGE_STAGES[0]["weight"])
-  assert [stage["weight"] for stage in JOINT_VEL_HINGE_STAGES] == [-0.01, -0.1, -1.0]
+  assert "joint_vel_hinge" not in cfg.rewards
   assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
   assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
 
@@ -873,7 +867,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert table_contact["onset"] == pytest.approx(0.0) == TABLE_CONTACT_ONSET_N
   assert table_contact["scale"] == pytest.approx(5.0)
 
-  assert tuple(cfg.curriculum) == ("joint_vel_hinge_weight", "goal_yaw_range")
+  assert tuple(cfg.curriculum) == ("goal_yaw_range",)
 
 
   assert tuple(cfg.terminations) == (

@@ -28,6 +28,7 @@ class TrossenArm:
       getattr(trossen_arm.StandardMotorParameters, config.motor_parameters)
     )
     self._motion = config.motion
+    self._goal_time = 1.0 / config.control_hz
 
     limits = self._driver.get_joint_limits()
     self._low = np.array([limit.position_min for limit in limits])
@@ -67,7 +68,7 @@ class TrossenArm:
         self._low,
         self._high,
       )
-    self._driver.set_all_positions(sent.tolist(), 0.0, False)
+    self._driver.set_all_positions(sent.tolist(), self._goal_time, False)
     self._last_sent = sent
     return sent
 

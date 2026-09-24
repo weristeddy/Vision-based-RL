@@ -28,7 +28,7 @@ from .goal_marker import GOAL_ENTITY_NAME
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
-ACTION_SCALE = 0.13
+ACTION_SCALE = 0.03
 # The object's own height, so it follows the T. Linear, not quadratic: a constant
 # gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
@@ -55,12 +55,6 @@ OBJECT_PRESS_WEIGHT = -0.01
 # policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
 ACTION_PATH_LENGTH_WEIGHT = -0.002
 ACTION_RATE_WEIGHT = -0.002
-MAX_JOINT_VEL_RAD_S = 0.75
-JOINT_VEL_HINGE_STAGES = (
-  {"step": 0, "weight": -0.01},
-  {"step": 1_000 * 16, "weight": -0.1},
-  {"step": 2_000 * 16, "weight": -1.0},
-)
 # Cut post-success drift 55% (2.33 -> 1.05 mm per step). -0.2 was tried and is wrong:
 # the term cannot distort behaviour *at* goal, but it lowers the goal state's value.
 AT_GOAL_ACTION_WEIGHT = -0.05
@@ -227,16 +221,6 @@ def build_env_cfg(
       func=mdp.action_rate_l2,
       weight=ACTION_RATE_WEIGHT,
     ),
-    "joint_vel_hinge": RewardTermCfg(
-      func=mdp.joint_velocity_hinge_penalty,
-      weight=JOINT_VEL_HINGE_STAGES[0]["weight"],
-      params={
-        "max_vel": MAX_JOINT_VEL_RAD_S,
-        "asset_cfg": SceneEntityCfg(
-          "robot", joint_names=robot.arm_actuator_names, preserve_order=True
-        ),
-      },
-    ),
     "at_goal_action": RewardTermCfg(
       func=mdp.at_goal_action_l1,
       weight=AT_GOAL_ACTION_WEIGHT,
@@ -322,15 +306,7 @@ def build_env_cfg(
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
   )
-  cfg.curriculum = {
-    "joint_vel_hinge_weight": CurriculumTermCfg(
-      func=mdp.reward_curriculum,
-      params={
-        "reward_name": "joint_vel_hinge",
-        "stages": [dict(stage) for stage in JOINT_VEL_HINGE_STAGES],
-      },
-    )
-  }
+  cfg.curriculum = {}
   if goal_yaw_stages is not None:
     cfg.curriculum["goal_yaw_range"] = CurriculumTermCfg(
       func=mdp.goal_yaw_curriculum,
