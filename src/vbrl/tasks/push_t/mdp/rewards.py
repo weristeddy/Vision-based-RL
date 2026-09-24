@@ -98,14 +98,13 @@ def fingertip_height_excess(
   return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
 
 
-def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
-  return torch.sum(torch.abs(env.action_manager.action), dim=1)
-
-
-def at_goal_action_l1(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+def at_goal_joint_vel_l2(
+  env: ManagerBasedRlEnv, command_name: str, asset_cfg: SceneEntityCfg
+) -> torch.Tensor:
   command = push_t_command(env, command_name)
-  action = torch.sum(torch.abs(env.action_manager.action), dim=1)
-  return action * command.get_at_goal().to(action.dtype)
+  vel = env.scene[asset_cfg.name].data.joint_vel[:, asset_cfg.joint_ids]
+  speed = torch.sum(torch.square(vel), dim=1)
+  return speed * command.get_at_goal().to(speed.dtype)
 
 
 # Zero-set is "do not press down", so pushing stays free at any magnitude --
@@ -168,8 +167,7 @@ def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
 
 
 __all__ = [
-  "action_path_length_l1",
-  "at_goal_action_l1",
+  "at_goal_joint_vel_l2",
   "at_goal_share",
   "contact_force_hinge",
   "fingertip_height_excess",

@@ -1,0 +1,74 @@
+[
+  {
+    "case": "identified_current_reset",
+    "robot": "/home/eddy/projects/Vision-based-RL/src/vbrl/asset_zoo/robots/trossen_wxai/xmls/wxai_identified.xml",
+    "initial_max_target_error_rad": 1.4590131044387817,
+    "max_drift_rad": 0.10464537143707275,
+    "first_step_max_velocity_rad_s": 1.1252706050872803,
+    "max_velocity_rad_s": 1.1252706050872803,
+    "max_drift_per_joint_rad": [
+      0.0007473789155483246,
+      0.022912979125976562,
+      0.10464537143707275,
+      0.019135236740112305,
+      0.0012444891035556793,
+      0.0021588653326034546
+    ],
+    "worlds_drifting_over_001rad": 11,
+    "partial_reset_drift_rad": 5.960464477539062e-07
+  },
+  {
+    "case": "identified_no_delay",
+    "robot": "/home/eddy/projects/Vision-based-RL/src/vbrl/asset_zoo/robots/trossen_wxai/xmls/wxai_identified.xml",
+    "initial_max_target_error_rad": 1.4590131044387817,
+    "max_drift_rad": 3.1297095119953156e-06,
+    "first_step_max_velocity_rad_s": 6.57414275337942e-05,
+    "max_velocity_rad_s": 0.00013935862807556987,
+    "max_drift_per_joint_rad": [
+      1.0598450899124146e-06,
+      1.1920928955078125e-07,
+      3.5762786865234375e-07,
+      2.384185791015625e-07,
+      3.1297095119953156e-06,
+      2.5779008865356445e-06
+    ],
+    "worlds_drifting_over_001rad": 0,
+    "partial_reset_drift_rad": 5.960464477539062e-07
+  },
+  {
+    "case": "identified_primed_targets",
+    "robot": "/home/eddy/projects/Vision-based-RL/src/vbrl/asset_zoo/robots/trossen_wxai/xmls/wxai_identified.xml",
+    "initial_max_target_error_rad": 0.0,
+    "max_drift_rad": 3.125518560409546e-06,
+    "first_step_max_velocity_rad_s": 6.567251693923026e-05,
+    "max_velocity_rad_s": 0.00013967309496365488,
+    "max_drift_per_joint_rad": [
+      1.0649673640727997e-06,
+      1.1920928955078125e-07,
+      3.5762786865234375e-07,
+      2.384185791015625e-07,
+      3.125518560409546e-06,
+      2.562999725341797e-06
+    ],
+    "worlds_drifting_over_001rad": 0,
+    "partial_reset_drift_rad": 5.960464477539062e-07
+  },
+  {
+    "case": "realistic_current_reset",
+    "robot": "/home/eddy/projects/Vision-based-RL/src/vbrl/asset_zoo/robots/trossen_wxai/xmls/wxai_realistic.xml",
+    "initial_max_target_error_rad": 1.4590131044387817,
+    "max_drift_rad": 0.0324244499206543,
+    "first_step_max_velocity_rad_s": 0.2673421800136566,
+    "max_velocity_rad_s": 0.2673421800136566,
+    "max_drift_per_joint_rad": [
+      0.0026382077485322952,
+      0.020535707473754883,
+      0.01877450942993164,
+      0.0324244499206543,
+      0.0031909532845020294,
+      0.004116140305995941
+    ],
+    "worlds_drifting_over_001rad": 11,
+    "partial_reset_drift_rad": 1.1026859283447266e-06
+  }
+]
