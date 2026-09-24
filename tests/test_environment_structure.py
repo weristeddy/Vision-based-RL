@@ -126,7 +126,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   )
 
   state = trossen_realistic_push_t_state_env_cfg()
-  rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.13)
 
   assert tuple(state.observations["actor"].terms) == PUSH_T_STATE
   assert tuple(state.observations["critic"].terms) == PUSH_T_STATE
@@ -137,7 +137,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   # The two differ by the per-step delta cap alone: the RGB tasks train at the
   # deployable 0.03 so the raw policy output needs no clamp on the arm.
   state_action, rgb_action = state.actions["joint_pos"], rgb.actions["joint_pos"]
-  assert state_action.scale == rgb_action.scale == 0.03
+  assert state_action.scale == rgb_action.scale == 0.13
   assert state_action.actuator_names == rgb_action.actuator_names
   state_goal, rgb_goal = state.commands["push_t_goal"], rgb.commands["push_t_goal"]
   assert state_goal.goal_marker_name is None
@@ -192,7 +192,7 @@ def test_rgb_camera_term_preserves_native_uint8_bchw() -> None:
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "collision"}),
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "visual"}),
     ("trossen_realistic_push_t_state_env_cfg", {}),
-    ("trossen_realistic_push_t_rgb_env_cfg", {"action_scale": 0.03}),
+    ("trossen_realistic_push_t_rgb_env_cfg", {"action_scale": 0.13}),
   ),
   ids=("lift-collision", "lift-visual", "push-t-state", "push-t-rgb"),
 )

@@ -28,7 +28,7 @@ from .goal_marker import GOAL_ENTITY_NAME
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
-ACTION_SCALE = 0.03
+ACTION_SCALE = 0.13
 # The object's own height, so it follows the T. Linear, not quadratic: a constant
 # gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
