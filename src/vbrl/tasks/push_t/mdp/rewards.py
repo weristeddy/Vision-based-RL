@@ -116,7 +116,7 @@ def object_table_press(
   if scale <= 0.0:
     raise ValueError("object_table_press needs scale > 0.")
   data = _contact(env, sensor_name, "force")
-  return ((_press(data) - onset) / scale).clamp_min(0.0).square()
+  return ((_press(data) - onset) / scale).clamp_min(0.0)
 
 
 def peak_object_press(
@@ -157,7 +157,7 @@ def contact_force_hinge(
   if onset < 0.0 or scale <= 0.0:
     raise ValueError("contact_force_hinge needs onset >= 0 and scale > 0.")
   excess = (max_contact_force(env, sensor_name) - onset).clamp_min(0.0)
-  return (excess / scale).square()
+  return excess / scale
 
 
 # `episode_success` latches on the first at-goal step, so it says whether the

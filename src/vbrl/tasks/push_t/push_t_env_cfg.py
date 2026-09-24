@@ -39,6 +39,8 @@ EE_HEIGHT_WEIGHT = -0.02
 SIDE_CONTACT_ALIGN_WEIGHT = 0.05
 # No onset: the T is 24 mm tall, so avoiding the table is a height adjustment rather
 # than a change of strategy, which is what makes it safe to apply hard.
+# Both contact penalties are linear: a target-relative action integrates, so a wound-up
+# target presses up to the torque limit, and a quadratic turned that into -170/s.
 TABLE_CONTACT_ONSET_N = 0.0
 TABLE_CONTACT_SCALE_N = 5.0
 TABLE_CONTACT_WEIGHT = -0.01

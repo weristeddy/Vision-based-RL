@@ -404,7 +404,7 @@ def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> Non
   with pytest.raises(ValueError, match="ceiling > 0"):
     fingertip_height_excess(env, cfg, 0.0)
 
-def test_push_t_contact_force_hinge_is_zero_below_onset_then_quadratic() -> None:
+def test_push_t_contact_force_hinge_is_zero_below_onset_then_linear() -> None:
   from vbrl.tasks.push_t.mdp import contact_force_hinge, max_contact_force
 
   def sensor(*newtons: float):
@@ -419,7 +419,7 @@ def test_push_t_contact_force_hinge_is_zero_below_onset_then_quadratic() -> None
   )
   assert torch.allclose(
     contact_force_hinge(env, "table", onset=5.0, scale=5.0),
-    torch.tensor([0.0, 0.0, 1.0, 9.0]),
+    torch.tensor([0.0, 0.0, 1.0, 3.0]),
   )
   with pytest.raises(ValueError, match="onset >= 0 and scale > 0"):
     contact_force_hinge(env, "table", onset=5.0, scale=0.0)
@@ -485,7 +485,7 @@ def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
   assert float(out[0]) == 0.0
   assert float(out[1]) == 0.0
   assert float(out[2]) == pytest.approx(0.0)
-  assert float(out[3]) == pytest.approx((28.0 / 5.0) ** 2)
+  assert float(out[3]) == pytest.approx(28.0 / 5.0)
 
   press = peak_object_press(env, "object_table_contact", weight_n=W)
   assert press.tolist() == pytest.approx([0.0, 0.0, 2.0, 30.0])
