@@ -398,12 +398,13 @@ def test_the_arm_can_actually_push_the_object() -> None:
     assert float(moved) > 0.002, f"pushed the object only {1000 * float(moved):.2f} mm"
 
     env.reset()
-    start = robot.data.site_pos_w[:, 0, :].clone()
-    sweep = torch.zeros_like(action)
-    sweep[:, 0] = 1.0
-    for _ in range(100):
-      env.step(sweep)
-    travel = (robot.data.site_pos_w[:, 0, :] - start).norm(dim=-1).mean()
-    assert float(travel) > 0.15, f"swept only {1000 * float(travel):.0f} mm in 100 steps"
+    held = robot.data.joint_pos[:, :6].clone()
+    for _ in range(200):
+      env.step(torch.zeros_like(action))
+    drift = (robot.data.joint_pos[:, :6] - held).abs().max()
+    assert float(drift) < 0.2, (
+      f"the arm drifted {float(drift):.3f} rad under zero action; a relative action "
+      "space commands no torque at zero, so the model needs gravcomp to hold a pose"
+    )
   finally:
     env.close()
