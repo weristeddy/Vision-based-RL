@@ -265,7 +265,7 @@ def test_a_recording_holds_the_sun_colour_but_keeps_its_pose_jitter() -> None:
   import vbrl.tasks  # noqa: F401
   from vbrl.scenes.builder import LIGHT_COLOUR_EVENTS, hold_lighting_colour_fixed
 
-  cfg = load_env_cfg("Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic")
+  cfg = load_env_cfg("Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified")
   assert frozenset(LIGHT_COLOUR_EVENTS) <= frozenset(cfg.events)
 
   hold_lighting_colour_fixed(cfg)

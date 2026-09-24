@@ -92,10 +92,6 @@ REAL_TABLE = TexturePreset(
   name="real_table",
   image=TEXTURES_DIR / "real_table" / "real_table_color.png",
   texrepeat=(1.0, 1.0),
-  # Multiplies the photo, so it is the wood's tint, not a dimmer. The previous
-  # (0.442, 0.496, 0.550) rose towards blue and cancelled the photo's warmth
-  # exactly, rendering the table grey at 136/136/133 while the rig photographs
-  # it at 186/134/88. These reproduce that ratio at the same luminance.
   rgba=(0.593, 0.488, 0.363, 1.0),
   roughness=0.93,
   specular=0.02,

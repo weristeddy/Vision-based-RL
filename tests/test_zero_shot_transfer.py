@@ -19,12 +19,12 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 
 
 TASK_IDS = (
-  "Mjlab-PushT-State-TrossenRealistic",
+  "Mjlab-PushT-State-TrossenIdentified",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
+  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
+STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
 
 NUM_ENVS = 8
 IMAGE_SIZE = (224, 224)
@@ -190,7 +190,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
+  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model
@@ -370,16 +370,10 @@ def test_the_sampled_goal_yaw_reaches_the_command() -> None:
 @pytest.mark.sim
 @pytest.mark.gpu
 def test_the_arm_can_actually_push_the_object() -> None:
-  """The robot must be able to move the T, not merely reach towards it.
-
-  A model whose actuators cannot track the 0.03 rad per-step delta leaves the
-  policy pressing into the table: reaching reward saturates, `overlap` stays at
-  exactly zero and 500 iterations of training look like an algorithm failure.
-  """
   from vbrl.runtime import build_env
 
   env = build_env(
-    "Mjlab-PushT-State-TrossenRealistic", device=DEVICE, num_envs=16, seed=0
+    "Mjlab-PushT-State-TrossenIdentified", device=DEVICE, num_envs=16, seed=0
   )
   try:
     robot, obj = env.scene["robot"], env.scene["object"]
@@ -401,9 +395,15 @@ def test_the_arm_can_actually_push_the_object() -> None:
       env.step(action)
 
     moved = (obj.data.root_link_pos_w[:, :2] - placed).norm(dim=-1).max()
-    assert float(moved) > 0.002, (
-      f"the arm moved the object by {1000 * float(moved):.2f} mm; it cannot push, "
-      "so no policy can solve the task"
-    )
+    assert float(moved) > 0.002, f"pushed the object only {1000 * float(moved):.2f} mm"
+
+    env.reset()
+    start = robot.data.site_pos_w[:, 0, :].clone()
+    sweep = torch.zeros_like(action)
+    sweep[:, 0] = 1.0
+    for _ in range(100):
+      env.step(sweep)
+    travel = (robot.data.site_pos_w[:, 0, :] - start).norm(dim=-1).mean()
+    assert float(travel) > 0.15, f"swept only {1000 * float(travel):.0f} mm in 100 steps"
   finally:
     env.close()

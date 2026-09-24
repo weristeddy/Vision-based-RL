@@ -72,31 +72,17 @@ _MATCHED_RANGES = {
   "fill": {0: (-0.10, 0.10), 1: (-0.10, 0.10), 2: (-0.06, 0.06)},
 }
 _LIGHT_INTENSITY_RANGES = {
-  # Widened from (0.70, 1.00), which rendered luminance 122-160 while the rig has
-  # produced 94-161 across a single day. Shared by every scene.
   "diffuse": (0.34, 1.30),
   "specular": (0.02, 0.18),
   "ambient": (0.04, 0.16),
-  # Tilts the light along the red-blue axis, the axis a bulb or a window moves
-  # along: +0.25 is roughly an incandescent bulb, -0.25 a cool blue LED or open
-  # shade. Wider than the 1.11 red/blue factor the rig has shown, on Tobin et
-  # al.'s (2017) argument that the real world should read as one more variation.
   "warmth": (-0.25, 0.25),
   "shadow_probability": 0.5,
 }
 
 
-# Every camera ray descends to the tabletop plane, so none of these scenes has a
-# sky; what the camera sees past the table's far edge is the room behind the rig.
-# MuJoCo Warp shades those rays with the skybox texture, but only if the model
-# declares one -- `create_render_context` forces `render_skybox` off otherwise,
-# which is where the solid black came from.
 BACKDROP_COUNT = 32
 BACKDROP_PREFIX = "backdrop_"
 _BACKDROP_FACE_WIDTH = 64
-# The rig's room reads 28 against a tabletop at 135, so the draw is squared to
-# sit dark and keep a bright tail for a lit wall. A flat uniform over the same
-# range put every backdrop brighter than the rig's own.
 _BACKDROP_LUMINANCE = (0.004, 0.35)
 _BACKDROP_WARMTH = (-0.12, 0.30)
 
@@ -165,8 +151,6 @@ def randomize_background(env, env_ids, count: int) -> None:
     return
   choices = getattr(context, "_vbrl_backdrop_ids", None)
   if choices is None:
-    # By type, not by name: the scene is an entity, so these compile to
-    # "table/backdrop_0" and a prefix match silently finds nothing.
     model = env.sim.mj_model
     skybox = int(mujoco.mjtTexture.mjTEXTURE_SKYBOX)
     choices = torch.tensor(
@@ -390,10 +374,6 @@ def randomize_light_intensity(
   def scalar(lo: float, hi: float):
     return torch.rand(env_ids.numel(), 1, 1, device=env.device) * (hi - lo) + lo
 
-  # dr.light_diffuse samples each channel independently, which lit the table
-  # green, purple and pink -- colours no room produces. One draw for all three
-  # keeps the sun neutral; `warmth` then tilts it along the red-blue axis only,
-  # which is the axis a real bulb or a window moves along.
   tilt = scalar(*warmth)
   ones = torch.ones_like(tilt)
   tint = torch.cat([ones + tilt, ones, ones - tilt], dim=2)
@@ -401,10 +381,6 @@ def randomize_light_intensity(
   env.sim.model.light_diffuse[grid] = scalar(*diffuse) * tint
   env.sim.model.light_specular[grid] = scalar(*specular).expand_as(tint)
   env.sim.model.light_ambient[grid] = scalar(*ambient).expand_as(tint)
-  # One directional light throws a hard black blob the rig never shows, because
-  # its room lights it from several directions at once. MuJoCo Warp ignores
-  # `light_bulbradius`, so there are no soft shadows to fade it with; dropping
-  # the shadow on some resets is the coverage that is actually available.
   env.sim.model.light_castshadow[grid] = (
     torch.rand(env_ids.numel(), 1, device=env.device) < shadow_probability
   )
@@ -510,8 +486,6 @@ def _events(
     )
   if camera_model is not None:
     events.update(_camera_events(camera_model))
-    # Registration time, which is the last moment before the render graph is
-    # captured; importing mjlab.sensor from the module body would be circular.
     _widen_skybox_to_one_per_world()
     events["background"] = EventTermCfg(
       func=randomize_background, mode="reset", params={"count": BACKDROP_COUNT}

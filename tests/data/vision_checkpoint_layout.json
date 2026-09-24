@@ -960,7 +960,7 @@
       "resnet.layer4.bias:(2048,)",
       "resnet.layer4.weight:(2048, 1024, 1, 1)"
     ],
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic": [
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified": [
       "adapter.pool.k_norm.bias:(64,)",
       "adapter.pool.k_norm.weight:(64,)",
       "adapter.pool.kv.bias:(768,)",
@@ -977,7 +977,7 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
-    "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenRealistic": [
+    "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified": [
       "adapter.pool.k_norm.bias:(64,)",
       "adapter.pool.k_norm.weight:(64,)",
       "adapter.pool.kv.bias:(768,)",
@@ -994,7 +994,7 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic": [
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified": [
       "adapter.pool.k_norm.bias:(64,)",
       "adapter.pool.k_norm.weight:(64,)",
       "adapter.pool.kv.bias:(768,)",
@@ -1011,7 +1011,7 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
-    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic": [
+    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified": [
       "adapter.pool.k_norm.bias:(64,)",
       "adapter.pool.k_norm.weight:(64,)",
       "adapter.pool.kv.bias:(768,)",

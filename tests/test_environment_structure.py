@@ -222,8 +222,8 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
   for task_id in (
     "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-    "Mjlab-PushT-State-TrossenRealistic",
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic",
+    "Mjlab-PushT-State-TrossenIdentified",
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
   ):
     train = load_env_cfg(task_id)
     play = load_env_cfg(task_id, play=True)

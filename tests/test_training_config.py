@@ -81,7 +81,7 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   from vbrl.training.ppo import VisualPpoCfg
 
   agent = load_rl_cfg(
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic"
+    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
   )
 
   assert agent.actor.hidden_dims == (256, 256, 128)
@@ -102,7 +102,7 @@ def test_state_tasks_keep_native_ppo() -> None:
   from mjlab.rl import RslRlPpoAlgorithmCfg
   from mjlab.tasks.registry import load_rl_cfg
 
-  for task_id in ("Mjlab-PushT-State-TrossenRealistic",):
+  for task_id in ("Mjlab-PushT-State-TrossenIdentified",):
     agent = load_rl_cfg(task_id)
     assert type(agent.algorithm) is RslRlPpoAlgorithmCfg
     assert agent.actor.hidden_dims == (512, 256, 128)

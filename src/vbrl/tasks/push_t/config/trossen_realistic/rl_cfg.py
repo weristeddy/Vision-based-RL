@@ -10,12 +10,8 @@ from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenRealistic"
-# A Gaussian actor bounded its own exploration with `std_range`; a Beta has no
-# such floor, so the bonus is the only thing stopping alpha and beta growing
-# without limit. At 0.0 the entropy fell -0.9 -> -12.8 over 500 iterations and
-# the policy froze after 70.
-BETA_ENTROPY_COEF = 0.01
+STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
+BETA_ENTROPY_COEF = 0.02
 _RGB_MAX_ITERATIONS = 6000
 
 
