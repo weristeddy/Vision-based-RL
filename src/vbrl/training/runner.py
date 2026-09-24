@@ -11,27 +11,31 @@ def policy_metadata(
   import mjlab.rl.exporter_utils as exporter_utils
   from mjlab.envs.mdp.actions import (
     JointPositionAction,
-    RelativeJointPositionAction,
     RelativeJointPositionActionCfg,
   )
+  from mjlab.envs.mdp.actions.actions import BaseAction
+
+  from vbrl.tasks.push_t.mdp.actions import TargetRelativeJointPositionActionCfg
 
   base = env.unwrapped if hasattr(env, "unwrapped") else env
-  exporter_utils.JointPositionAction = (
-    JointPositionAction,
-    RelativeJointPositionAction,
-  )
+  exporter_utils.JointPositionAction = BaseAction
   try:
     metadata = exporter_utils.get_base_metadata(base, run_name)
   finally:
     exporter_utils.JointPositionAction = JointPositionAction
 
   action_cfg = next(iter(base.cfg.actions.values()))
-  metadata["action_type"] = (
-    "relative" if isinstance(action_cfg, RelativeJointPositionActionCfg) else "absolute"
-  )
+  metadata["action_type"] = {
+    RelativeJointPositionActionCfg: "relative",
+    TargetRelativeJointPositionActionCfg: "target",
+  }.get(type(action_cfg), "absolute")
+  term = base.action_manager.get_term("joint_pos")
+  if metadata["action_type"] == "target":
+    metadata["target_low"] = term.low[0].cpu().tolist()
+    metadata["target_high"] = term.high[0].cpu().tolist()
   # The clip is as much of the contract as the scale: without it Push-T sent
   # 0.31 rad against the 0.1 the simulator would ever apply.
-  clip = getattr(base.action_manager.get_term("joint_pos"), "_clip", None)
+  clip = getattr(term, "_clip", None)
   if clip is not None:
     metadata["action_clip_low"] = clip[0, :, 0].cpu().tolist()
     metadata["action_clip_high"] = clip[0, :, 1].cpu().tolist()

@@ -20,21 +20,11 @@ class _Meta:
 
 class _Session:
   def __init__(self, env) -> None:
-    from mjlab.envs.mdp.actions import RelativeJointPositionActionCfg
-    from mjlab.rl.exporter_utils import get_base_metadata
-
-    metadata = get_base_metadata(env.unwrapped, "parity-test")
-    term = next(iter(env.unwrapped.cfg.actions.values()))
-    metadata["action_type"] = (
-      "relative"
-      if isinstance(term, RelativeJointPositionActionCfg)
-      else "absolute"
-    )
     from mjlab.tasks.registry import load_rl_cfg
 
-    clip_actions = load_rl_cfg(TASK).clip_actions
-    if clip_actions is not None:
-      metadata["clip_actions"] = float(clip_actions)
+    from vbrl.training.runner import policy_metadata
+
+    metadata = policy_metadata(env, "parity-test", load_rl_cfg(TASK).clip_actions)
     self._action_dim = env.unwrapped.action_manager.total_action_dim
     self._meta = _Meta(
       {
@@ -171,13 +161,15 @@ def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
     observation_terms=("joint_pos",),
     action_dim=6,
     action_clip=None,
-    relative=True,
+    action_type="relative",
+    target_limits=None,
     clip_actions=None,
     needs_camera=False,
     source_run="test",
   )
   policy = Policy.__new__(Policy)
   policy.metadata = metadata
+  policy._target = default.copy()
   action = np.array([1.0, -1.0, 0.5, 0.0, 0.25, -0.5])
 
   policy._position = default.copy()
@@ -206,6 +198,19 @@ def test_joint_targets_match_the_action_term_the_policy_trained_under() -> None:
   assert clipped[0] == pytest.approx(default[0] + 0.05)
   assert clipped[1] == pytest.approx(default[1] - 0.05)
 
+  high = default[:6] + 0.15
+  policy.metadata = replace(
+    metadata, action_type="target", target_limits=(default[:6] - 1.0, high)
+  )
+  policy._target = default.copy()
+  policy._position = moved
+  first = policy.joint_targets(action)[:6]
+  assert np.allclose(first, default[:6] + 0.1 * action)
+  policy._position = default.copy()
+  second = policy.joint_targets(action)[:6]
+  assert np.allclose(second, np.minimum(default[:6] + 0.2 * action, high))
+  assert second[0] == pytest.approx(high[0])
+
 
 def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() -> None:
   from dataclasses import replace
@@ -223,7 +228,8 @@ def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() 
     observation_terms=("actions",),
     action_dim=6,
     action_clip=(np.full(6, -0.05), np.full(6, 0.05)),
-    relative=True,
+    action_type="relative",
+    target_limits=None,
     clip_actions=1.0,
     needs_camera=False,
     source_run="test",

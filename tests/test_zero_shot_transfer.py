@@ -399,12 +399,14 @@ def test_the_arm_can_actually_push_the_object() -> None:
 
     env.reset()
     held = robot.data.joint_pos[:, :6].clone()
+    drift = torch.zeros((), device=env.device)
     for _ in range(200):
       env.step(torch.zeros_like(action))
-    drift = (robot.data.joint_pos[:, :6] - held).abs().max()
-    assert float(drift) < 0.2, (
-      f"the arm drifted {float(drift):.3f} rad under zero action; a relative action "
-      "space commands no torque at zero, so the model needs gravcomp to hold a pose"
+      drift = torch.maximum(drift, (robot.data.joint_pos[:, :6] - held).abs().max())
+    assert float(drift) < 0.005, (
+      f"the arm drifted {float(drift):.4f} rad under zero action; the real arm "
+      "holds home to 0.018 rad because its controller compensates gravity, and a "
+      "zeroed target seeded into the delay buffer at reset jolts it for one substep"
     )
   finally:
     env.close()

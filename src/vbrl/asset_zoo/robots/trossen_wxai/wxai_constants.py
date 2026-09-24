@@ -80,7 +80,10 @@ def _articulation(enable_delay: bool):
 
 
 def _definition(
-  name: str, xml_path: Path, fingertip_geom_pattern: str = FINGER_PAD_PATTERN
+  name: str,
+  xml_path: Path,
+  fingertip_geom_pattern: str = FINGER_PAD_PATTERN,
+  gravity_compensation: bool = False,
 ) -> RobotDefinition:
   return RobotDefinition(
     name=name,
@@ -104,6 +107,7 @@ def _definition(
     collision_body_pattern="link_6",
     viewer_body="link_6",
     cameras=dict(_CAMERAS),
+    gravity_compensation=gravity_compensation,
   )
 
 
@@ -117,7 +121,10 @@ def make_wxai_realistic() -> RobotDefinition:
 
 def make_wxai_identified() -> RobotDefinition:
   return _definition(
-    "trossen_identified", WXAI_IDENTIFIED_XML, IDENTIFIED_PAD_PATTERN
+    "trossen_identified",
+    WXAI_IDENTIFIED_XML,
+    IDENTIFIED_PAD_PATTERN,
+    gravity_compensation=True,
   )
 
 

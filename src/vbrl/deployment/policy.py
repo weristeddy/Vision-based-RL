@@ -32,7 +32,8 @@ class PolicyMetadata:
   observation_terms: tuple[str, ...]
   action_dim: int
   action_clip: Any
-  relative: bool
+  action_type: str
+  target_limits: Any
   clip_actions: float | None
   needs_camera: bool
   source_run: str
@@ -65,7 +66,15 @@ class PolicyMetadata:
         if "action_clip_low" in meta
         else None
       ),
-      relative=meta.get("action_type", "absolute") == "relative",
+      action_type=meta.get("action_type", "absolute"),
+      target_limits=(
+        (
+          np.array([float(v) for v in meta["target_low"].split(",")]),
+          np.array([float(v) for v in meta["target_high"].split(",")]),
+        )
+        if "target_low" in meta
+        else None
+      ),
       clip_actions=(
         float(meta["clip_actions"]) if "clip_actions" in meta else None
       ),
@@ -95,6 +104,7 @@ class Policy:
     self._network_action = np.zeros(self.metadata.action_dim)
     self._goal_position = np.full(3, np.inf)
     self._position = self.metadata.action_offset
+    self._target = self.metadata.action_offset
 
     unsupported = set(self.metadata.observation_terms) - set(TERMS)
     if unsupported:
@@ -172,19 +182,28 @@ class Policy:
 
   def joint_targets(self, action: Any) -> Any:
     n = self.metadata.action_dim
-    base = self._position if self.metadata.relative else self.metadata.action_offset
+    base = {
+      "absolute": self.metadata.action_offset,
+      "relative": self._position,
+      "target": self._target,
+    }[self.metadata.action_type]
     targets = self.metadata.action_offset.copy()
     delta = self.metadata.action_scale[:n] * action
     if self.metadata.action_clip is not None:
       low, high = self.metadata.action_clip
       delta = np.clip(delta, low[:n], high[:n])
     targets[:n] = base[:n] + delta
+    if self.metadata.target_limits is not None:
+      low, high = self.metadata.target_limits
+      targets[:n] = np.clip(targets[:n], low[:n], high[:n])
+    self._target = targets
     return targets
 
   def warm_up(
     self, *, joint_pos: Any, joint_vel: Any, image: Any, runs: int = 5
   ) -> None:
     observation = self.observe(joint_pos=joint_pos, joint_vel=joint_vel, image=image)
+    self._target = self._position[: len(ARM_JOINTS)].copy()
     for _ in range(runs):
       self._infer(observation)
 

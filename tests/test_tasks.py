@@ -425,27 +425,20 @@ def test_push_t_contact_force_hinge_is_zero_below_onset_then_quadratic() -> None
     contact_force_hinge(env, "table", onset=5.0, scale=0.0)
 
 
-def test_push_t_at_goal_penalty_is_zero_until_the_object_is_placed() -> None:
-  from mjlab.managers import SceneEntityCfg
-
-  from vbrl.tasks.push_t.mdp import at_goal_joint_vel_l2
+def test_push_t_at_goal_action_penalty_is_zero_until_the_object_is_placed() -> None:
+  from vbrl.tasks.push_t.mdp import at_goal_action_l1
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
 
   command = object.__new__(PushTCommand)
   command.get_at_goal = lambda: torch.tensor([True, False, True])
-  robot = SimpleNamespace(
-    data=SimpleNamespace(
-      joint_vel=torch.tensor([[1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 0.0]])
-    )
-  )
   env = SimpleNamespace(
-    scene={"robot": robot},
+    action_manager=SimpleNamespace(
+      action=torch.tensor([[1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 0.0]])
+    ),
     command_manager=SimpleNamespace(get_term=lambda name: command),
   )
-  cfg = SceneEntityCfg("robot")
-  cfg.joint_ids = slice(None)
   assert torch.allclose(
-    at_goal_joint_vel_l2(env, "push_t_goal", cfg), torch.tensor([2.0, 0.0, 0.0])
+    at_goal_action_l1(env, "push_t_goal"), torch.tensor([2.0, 0.0, 0.0])
   )
 
 
@@ -767,16 +760,15 @@ def test_push_t_friction_sample_is_coupled_across_object_and_table(
 
 
 def test_push_t_config_pins_the_trained_contract() -> None:
-  from mjlab.envs.mdp.actions import JointPositionActionCfg
-
   from vbrl.asset_zoo.robots import get_robot
+  from vbrl.tasks.push_t.mdp import TargetRelativeJointPositionActionCfg
   from vbrl.tasks.push_t.push_t_env_cfg import (
+    ACTION_PATH_LENGTH_WEIGHT,
     ACTION_RATE_WEIGHT,
     ACTION_SCALE,
-    AT_GOAL_JOINT_VEL_WEIGHT,
+    AT_GOAL_ACTION_WEIGHT,
     EE_HEIGHT_CEILING_M,
     EE_HEIGHT_WEIGHT,
-    JOINT_VEL_WEIGHT,
     OBJECT_PRESS_ONSET_N,
     OBJECT_PRESS_SCALE_N,
     OBJECT_WEIGHT_N,
@@ -810,11 +802,10 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.metrics["at_goal_share"].reduce == "mean"
 
   action = cfg.actions["joint_pos"]
-  assert isinstance(action, JointPositionActionCfg)
-  assert action.use_default_offset is True
+  assert isinstance(action, TargetRelativeJointPositionActionCfg)
   assert action.actuator_names == definition.arm_actuator_names
   assert len(action.actuator_names) == 6
-  assert action.scale == {k: pytest.approx(v) for k, v in ACTION_SCALE.items()}
+  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.015)
   assert action.clip is None
   assert {
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
@@ -830,9 +821,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
     "side_contact_align",
-    "joint_vel",
+    "action_path_length",
     "action_rate_l2",
-    "at_goal_joint_vel",
+    "at_goal_action",
     "table_contact_force",
     "object_table_press",
     "ee_height_ceiling",
@@ -841,14 +832,14 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["side_contact_align"].weight == pytest.approx(0.05)
   assert SIDE_CONTACT_ALIGN_WEIGHT == pytest.approx(0.05)
   assert cfg.rewards["side_contact_align"].params["sensor_name"] == "ee_object_contact"
-  assert cfg.rewards["joint_vel"].weight == pytest.approx(JOINT_VEL_WEIGHT)
+  assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
+  assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
   assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
-  assert JOINT_VEL_WEIGHT == pytest.approx(-0.0001)
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
   assert "action_acc_l2" not in cfg.rewards
   assert "joint_vel_hinge" not in cfg.rewards
-  assert cfg.rewards["at_goal_joint_vel"].weight == pytest.approx(AT_GOAL_JOINT_VEL_WEIGHT)
-  assert AT_GOAL_JOINT_VEL_WEIGHT == pytest.approx(-0.002)
+  assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
+  assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
 
   from vbrl.tasks.push_t.geometry import HALF_HEIGHT
 

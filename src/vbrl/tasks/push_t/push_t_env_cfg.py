@@ -4,7 +4,6 @@ import math
 from collections.abc import Mapping, Sequence
 
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import (
   CurriculumTermCfg,
   EventTermCfg,
@@ -28,14 +27,7 @@ from .goal_marker import GOAL_ENTITY_NAME
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
-ACTION_SCALE = {
-  "joint_0": 1.0,
-  "joint_1": 1.2,
-  "joint_2": 0.8,
-  "joint_3": 1.1,
-  "joint_4": 0.4,
-  "joint_5": 0.3,
-}
+ACTION_SCALE = 0.015
 # The object's own height, so it follows the T. Linear, not quadratic: a constant
 # gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
@@ -60,11 +52,11 @@ OBJECT_PRESS_SCALE_N = 5.0
 OBJECT_PRESS_WEIGHT = -0.01
 # `action_rate_l2` is upstream Lift-Cube's -0.01 at a fifth, because for a Gaussian
 # policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
-JOINT_VEL_WEIGHT = -0.0001
+ACTION_PATH_LENGTH_WEIGHT = -0.002
 ACTION_RATE_WEIGHT = -0.002
 # Cut post-success drift 55% (2.33 -> 1.05 mm per step). -0.2 was tried and is wrong:
 # the term cannot distort behaviour *at* goal, but it lowers the goal state's value.
-AT_GOAL_JOINT_VEL_WEIGHT = -0.002
+AT_GOAL_ACTION_WEIGHT = -0.05
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
 # Environment steps at num_steps_per_env=16: pinned for 3,000 iterations, then 8
@@ -133,12 +125,6 @@ def _command(
   )
 
 
-def _arm(robot) -> SceneEntityCfg:
-  return SceneEntityCfg(
-    "robot", joint_names=robot.arm_actuator_names, preserve_order=True
-  )
-
-
 def build_env_cfg(
   *,
   robot: RobotDefinition,
@@ -150,7 +136,7 @@ def build_env_cfg(
   visual_goal: bool = False,
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
-  action_scale: Mapping[str, float] = ACTION_SCALE,
+  action_scale: float = ACTION_SCALE,
   episode_length_s: float = 16.0,
   goal_outline: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
@@ -195,11 +181,10 @@ def build_env_cfg(
   cfg.observations["critic"].nan_policy = "sanitize"
 
   cfg.actions = {
-    "joint_pos": JointPositionActionCfg(
+    "joint_pos": mdp.TargetRelativeJointPositionActionCfg(
       entity_name="robot",
       actuator_names=robot.arm_actuator_names,
-      scale=dict(action_scale),
-      use_default_offset=True,
+      scale=action_scale,
       preserve_order=True,
     )
   }
@@ -223,19 +208,18 @@ def build_env_cfg(
       weight=SIDE_CONTACT_ALIGN_WEIGHT,
       params={"sensor_name": _CONTACT_SENSOR},
     ),
-    "joint_vel": RewardTermCfg(
-      func=mdp.joint_vel_l2,
-      weight=JOINT_VEL_WEIGHT,
-      params={"asset_cfg": _arm(robot)},
+    "action_path_length": RewardTermCfg(
+      func=mdp.action_path_length_l1,
+      weight=ACTION_PATH_LENGTH_WEIGHT,
     ),
     "action_rate_l2": RewardTermCfg(
       func=mdp.action_rate_l2,
       weight=ACTION_RATE_WEIGHT,
     ),
-    "at_goal_joint_vel": RewardTermCfg(
-      func=mdp.at_goal_joint_vel_l2,
-      weight=AT_GOAL_JOINT_VEL_WEIGHT,
-      params={"command_name": _COMMAND, "asset_cfg": _arm(robot)},
+    "at_goal_action": RewardTermCfg(
+      func=mdp.at_goal_action_l1,
+      weight=AT_GOAL_ACTION_WEIGHT,
+      params={"command_name": _COMMAND},
     ),
     "table_contact_force": RewardTermCfg(
       func=mdp.contact_force_hinge,
