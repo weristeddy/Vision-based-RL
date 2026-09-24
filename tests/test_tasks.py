@@ -12,6 +12,7 @@ torch = pytest.importorskip("torch")
 PUSH_T_STATE_TERMS = (
   "joint_pos",
   "joint_vel",
+  "joint_target",
   "ee_to_object",
   "object_to_goal",
   "object_heading",

@@ -8,7 +8,14 @@ import numpy as np
 from vbrl.deployment.config import TARGET_Z_BASE_M
 from vbrl.deployment.kinematics import Kinematics
 
-TERMS = ("joint_pos", "joint_vel", "actions", "goal_position", "target_pose")
+TERMS = (
+  "joint_pos",
+  "joint_vel",
+  "joint_target",
+  "actions",
+  "goal_position",
+  "target_pose",
+)
 
 ARM_JOINTS = (
   "joint_0",
@@ -139,6 +146,8 @@ class Policy:
       "joint_vel": self._mirror_gripper(joint_vel),
       "actions": self._last_action,
     }
+    if "joint_target" in self.metadata.observation_terms:
+      terms["joint_target"] = self._target[:6] - self.metadata.default_joint_pos[:6]
     if "goal_position" in self.metadata.observation_terms:
       ee_position, ee_quaternion = self._kinematics.ee_pose(position)
       self._goal_position = _rotate_by_inverse(
@@ -202,8 +211,8 @@ class Policy:
   def warm_up(
     self, *, joint_pos: Any, joint_vel: Any, image: Any, runs: int = 5
   ) -> None:
+    self._target = self._mirror_gripper(joint_pos)[: len(ARM_JOINTS)].copy()
     observation = self.observe(joint_pos=joint_pos, joint_vel=joint_vel, image=image)
-    self._target = self._position[: len(ARM_JOINTS)].copy()
     for _ in range(runs):
       self._infer(observation)
 

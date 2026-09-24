@@ -18,6 +18,7 @@ LIFT_CRITIC = (
 PUSH_T_STATE = (
   "joint_pos",
   "joint_vel",
+  "joint_target",
   "ee_to_object",
   "object_to_goal",
   "object_heading",
@@ -27,6 +28,7 @@ PUSH_T_STATE = (
 PUSH_T_RGB_ACTOR = (
   "joint_pos",
   "joint_vel",
+  "joint_target",
   "actions",
   "target_pose",
 )

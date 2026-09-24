@@ -153,6 +153,7 @@ def build_env_cfg(
   terms = {
     "joint_pos": base_terms["joint_pos"],
     "joint_vel": base_terms["joint_vel"],
+    "joint_target": ObservationTermCfg(func=mdp.joint_target),
     "ee_to_object": ObservationTermCfg(
       func=mdp.ee_to_object_distance,
       params={"object_name": object_name, "asset_cfg": robot_ee},

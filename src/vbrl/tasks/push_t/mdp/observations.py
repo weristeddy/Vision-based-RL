@@ -17,6 +17,14 @@ if TYPE_CHECKING:
 _ROBOT = SceneEntityCfg("robot")
 
 
+# ManiSkill's proprioception carries a target-delta controller's target; without it the
+# policy cannot see how far the commanded pose leads the arm, up to 0.155 rad here.
+def joint_target(env: ManagerBasedRlEnv, action_name: str = "joint_pos") -> torch.Tensor:
+  term = env.action_manager.get_term(action_name)
+  robot: Entity = env.scene[term.cfg.entity_name]
+  return term.target - robot.data.default_joint_pos[:, term.target_ids]
+
+
 def target_pose(
   env: ManagerBasedRlEnv,
   command_name: str,
@@ -62,4 +70,4 @@ def relative_yaw(
   return torch.stack((torch.sin(error), torch.cos(error)), dim=-1)
 
 
-__all__ = ["object_heading", "relative_yaw", "target_pose"]
+__all__ = ["joint_target", "object_heading", "relative_yaw", "target_pose"]

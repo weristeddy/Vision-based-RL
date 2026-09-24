@@ -28,6 +28,10 @@ class TargetRelativeJointPositionAction(BaseAction):
       self._target[ids], joint_ids=self._target_ids, env_ids=ids
     )
 
+  @property
+  def target(self) -> torch.Tensor:
+    return self._target
+
   def process_actions(self, actions: torch.Tensor) -> None:
     super().process_actions(actions)
     self._target = torch.clamp(
