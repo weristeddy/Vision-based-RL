@@ -114,14 +114,14 @@ def test_every_push_t_arm_widens_the_goal_yaw() -> None:
     cfg = load_env_cfg(task_id)
     command = cfg.commands["push_t_goal"]
     scheduled = "goal_yaw_range" in cfg.curriculum
-    assert scheduled, task_id
+    assert scheduled == ("-State-" not in task_id), task_id
     assert command.success_threshold == pytest.approx(0.90), task_id
     # The registered range is always the full circle; the curriculum narrows it
     # at runtime and hands it back, so evaluation is never made easier.
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 5
+  assert seen == 4
   assert GOAL_YAW_STAGES[0]["half_range"] == 0.0
   assert GOAL_YAW_STAGES[-1]["half_range"] == pytest.approx(math.pi)
   assert GOAL_YAW_STAGES[1]["step"] == 48_000

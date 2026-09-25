@@ -147,7 +147,8 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.min_xy_separation == rgb_goal.min_xy_separation
   assert state_goal.success_threshold == rgb_goal.success_threshold
-  assert tuple(state.curriculum) == tuple(rgb.curriculum) == ("goal_yaw_range",)
+  assert state.curriculum == {}
+  assert tuple(rgb.curriculum) == ("goal_yaw_range",)
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
   assert state.episode_length_s == rgb.episode_length_s == 16.0

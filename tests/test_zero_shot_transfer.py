@@ -344,22 +344,18 @@ def test_the_sampled_goal_yaw_reaches_the_command() -> None:
 
   import vbrl.tasks  # noqa: F401
   from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import STATE_TASK_ID
-  from vbrl.tasks.push_t.push_t_env_cfg import GOAL_YAW_STAGES
 
   cfg = load_env_cfg(STATE_TASK_ID, play=False)
   cfg.scene.num_envs = 64
   env = ManagerBasedRlEnv(cfg, device="cuda:0")
   try:
     command = env.command_manager.get_term("push_t_goal")
-    ids = torch.arange(env.num_envs, device=env.device)
-    env.common_step_counter = GOAL_YAW_STAGES[-1]["step"]
-    env.curriculum_manager.compute(env_ids=ids)
-    assert float(command.cfg.target_yaw_range[1]) == pytest.approx(torch.pi, abs=1e-3)
+    assert float(command.cfg.target_yaw_range[1]) == pytest.approx(torch.pi)
     env.reset()
     yaw = command.target_yaw.detach()
     # Dropping `self.target_yaw[env_ids] = target_yaw` leaves this at its zero
-    # initialization, which pins every goal to yaw 0 while target_yaw_range --
-    # and the curriculum that narrows it -- still read as the full circle.
+    # initialization, which pins every goal to yaw 0 while target_yaw_range still
+    # reads as the full circle.
     assert float(yaw.std()) > 1.0
     assert float(yaw.abs().max()) > 2.5
     assert len(torch.unique(yaw)) > env.num_envs // 2

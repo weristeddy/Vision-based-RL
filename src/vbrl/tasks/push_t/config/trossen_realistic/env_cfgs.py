@@ -40,7 +40,6 @@ def trossen_realistic_push_t_state_env_cfg(
     object_name=_OBJECT_NAME,
     play=play,
     action_scale=ACTION_SCALE,
-    goal_yaw_stages=GOAL_YAW_STAGES,
   )
   apply_scene(
     cfg,

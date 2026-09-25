@@ -19,7 +19,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
-    max_iterations=500,
+    max_iterations=1500,
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),
