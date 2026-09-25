@@ -85,12 +85,17 @@ def fingertip_height_excess(
   env: ManagerBasedRlEnv,
   asset_cfg: SceneEntityCfg,
   ceiling: float,
+  sensor_name: str | None = None,
 ) -> torch.Tensor:
   if ceiling <= 0.0:
     raise ValueError("fingertip_height_excess needs ceiling > 0.")
   asset: Entity = env.scene[asset_cfg.name]
   lowest = asset.data.geom_pos_w[:, asset_cfg.geom_ids, 2].min(dim=-1).values
-  return ((lowest - ceiling) / ceiling).clamp_min(0.0)
+  excess = ((lowest - ceiling) / ceiling).clamp_min(0.0)
+  if sensor_name is None:
+    return excess
+  found = _contact(env, sensor_name, "found").found
+  return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
 
 
 def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
