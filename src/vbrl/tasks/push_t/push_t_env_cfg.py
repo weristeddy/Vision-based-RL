@@ -79,15 +79,6 @@ WORKSPACE_Y = (-0.2, 0.2)
 OBJECT_X = (0.2, 0.4)
 TARGET_X = (0.3, 0.5)
 MIN_XY_SEPARATION = 0.15
-# Fingertips 25 mm above the table at x = 0.09, tilted back so link_6 clears link_2.
-START_JOINT_POS = {
-  "joint_0": 0.0,
-  "joint_1": 1.054,
-  "joint_2": 0.564,
-  "joint_3": -1.256,
-  "joint_4": 0.0,
-  "joint_5": 0.0,
-}
 
 
 def _command(
@@ -142,7 +133,6 @@ def build_env_cfg(
   cfg = make_tabletop_env_cfg(
     robot, action_delay=True, fixed_closed_gripper=True
   )
-  cfg.scene.entities["robot"].init_state.joint_pos.update(START_JOINT_POS)
   robot_ee = SceneEntityCfg("robot", site_names=(robot.ee_site,))
   common = {"command_name": _COMMAND, "object_name": object_name}
 

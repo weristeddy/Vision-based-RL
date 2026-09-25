@@ -749,7 +749,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     OBJECT_PRESS_SCALE_N,
     OBJECT_WEIGHT_N,
     SIDE_CONTACT_ALIGN_WEIGHT,
-    START_JOINT_POS,
     TABLE_TOUCH_WEIGHT,
   )
 
@@ -788,8 +787,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
     for name in definition.closed_gripper_joint_pos
   } == dict(definition.closed_gripper_joint_pos)
-  joint_pos = cfg.scene.entities["robot"].init_state.joint_pos
-  assert {name: joint_pos[name] for name in START_JOINT_POS} == START_JOINT_POS
 
   command = cfg.commands["push_t_goal"]
   assert command.success_threshold == pytest.approx(0.90)
