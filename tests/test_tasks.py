@@ -378,27 +378,22 @@ def _push_t_reward_env(target_pos, target_yaw, object_pos, object_yaw, weight=0.
   return env, asset_cfg
 
 
-def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> None:
+def test_push_t_height_ceiling_is_linear_above_the_object() -> None:
   from mjlab.managers import SceneEntityCfg
 
   from vbrl.tasks.push_t.mdp import fingertip_height_excess
 
   robot = SimpleNamespace(
     data=SimpleNamespace(
-      geom_pos_w=torch.tensor([[[0.0, 0.0, 0.048]], [[0.0, 0.0, 0.048]]])
+      geom_pos_w=torch.tensor([[[0.0, 0.0, 0.048]], [[0.0, 0.0, 0.012]]])
     )
   )
-  sensor = SimpleNamespace(data=SimpleNamespace(found=torch.tensor([[0.0], [1.0]])))
-  env = SimpleNamespace(scene={"robot": robot, "ee_object_contact": sensor})
+  env = SimpleNamespace(scene={"robot": robot})
   cfg = SceneEntityCfg("robot")
   cfg.geom_ids = slice(None)
 
   assert torch.allclose(
-    fingertip_height_excess(env, cfg, 0.024), torch.tensor([1.0, 1.0])
-  )
-  assert torch.allclose(
-    fingertip_height_excess(env, cfg, 0.024, "ee_object_contact"),
-    torch.tensor([1.0, 0.0]),
+    fingertip_height_excess(env, cfg, 0.024), torch.tensor([1.0, 0.0])
   )
   with pytest.raises(ValueError, match="ceiling > 0"):
     fingertip_height_excess(env, cfg, 0.0)
@@ -805,6 +800,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
     "side_contact_align",
+    "top_contact",
     "action_path_length",
     "action_rate_l2",
     "at_goal_action",
@@ -815,6 +811,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
   assert cfg.rewards["side_contact_align"].weight == pytest.approx(0.05)
   assert SIDE_CONTACT_ALIGN_WEIGHT == pytest.approx(0.05)
+  assert cfg.rewards["top_contact"].weight == pytest.approx(-0.05)
+  assert cfg.rewards["top_contact"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["side_contact_align"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
   assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
@@ -830,7 +828,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
   assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
   assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
-  assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
+  assert "sensor_name" not in cfg.rewards["ee_height_ceiling"].params
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
   assert "vertical_contact_force" not in cfg.rewards
   assert "object_contact_force" not in cfg.rewards

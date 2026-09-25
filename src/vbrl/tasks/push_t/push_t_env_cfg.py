@@ -37,6 +37,7 @@ EE_HEIGHT_WEIGHT = -0.02
 # A starting size, not a measured one: the penalties cost ~3% of task reward, so this
 # puts the bonus on the same scale.
 SIDE_CONTACT_ALIGN_WEIGHT = 0.05
+TOP_CONTACT_WEIGHT = -0.05
 TABLE_TOUCH_WEIGHT = -2.0 / 3.0
 # The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
 # distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
@@ -191,6 +192,11 @@ def build_env_cfg(
       weight=SIDE_CONTACT_ALIGN_WEIGHT,
       params={"sensor_name": _CONTACT_SENSOR},
     ),
+    "top_contact": RewardTermCfg(
+      func=mdp.top_contact_share,
+      weight=TOP_CONTACT_WEIGHT,
+      params={"sensor_name": _CONTACT_SENSOR},
+    ),
     "action_path_length": RewardTermCfg(
       func=mdp.action_path_length_l1,
       weight=ACTION_PATH_LENGTH_WEIGHT,
@@ -226,7 +232,6 @@ def build_env_cfg(
           "robot", geom_names=robot.fingertip_geom_pattern
         ),
         "ceiling": EE_HEIGHT_CEILING_M,
-        "sensor_name": _CONTACT_SENSOR,
       },
     ),
   }
