@@ -16,20 +16,18 @@ LIFT_CRITIC = (
   "actions",
 )
 PUSH_T_STATE = (
-  "joint_pos",
-  "joint_vel",
-  "joint_target",
-  "ee_to_object",
-  "object_to_goal",
-  "object_heading",
-  "relative_yaw",
-  "actions",
+  "qpos",
+  "qvel",
+  "target_qpos",
+  "tcp_pose",
+  "target_pose",
+  "obj_pose",
 )
 PUSH_T_RGB_ACTOR = (
-  "joint_pos",
-  "joint_vel",
-  "joint_target",
-  "actions",
+  "qpos",
+  "qvel",
+  "target_qpos",
+  "tcp_pose",
   "target_pose",
 )
 
@@ -136,7 +134,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert tuple(state.observations["critic"].terms) == PUSH_T_STATE
   assert "camera" not in state.observations
   assert tuple(rgb.observations["actor"].terms) == PUSH_T_RGB_ACTOR
-  assert tuple(rgb.observations["critic"].terms) == PUSH_T_STATE + ("target_pose",)
+  assert tuple(rgb.observations["critic"].terms) == PUSH_T_STATE
   assert tuple(rgb.observations["camera"].terms) == ("external_cam_rgb",)
   # The two differ by the per-step delta cap alone: the RGB tasks train at the
   # deployable 0.03 so the raw policy output needs no clamp on the arm.
@@ -164,9 +162,8 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   target_pose = rgb.observations["actor"].terms["target_pose"]
   assert target_pose.params["command_name"] == "push_t_goal"
   assert "object_name" not in target_pose.params
-  for privileged in ("ee_to_object", "object_to_goal", "object_heading"):
-    assert privileged not in rgb.observations["actor"].terms
-    assert privileged in rgb.observations["critic"].terms
+  assert "obj_pose" not in rgb.observations["actor"].terms
+  assert "obj_pose" in rgb.observations["critic"].terms
 
 
 def test_rgb_camera_term_preserves_native_uint8_bchw() -> None:

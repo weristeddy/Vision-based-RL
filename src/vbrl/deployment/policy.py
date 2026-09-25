@@ -9,6 +9,10 @@ from vbrl.deployment.config import TARGET_Z_BASE_M
 from vbrl.deployment.kinematics import Kinematics
 
 TERMS = (
+  "qpos",
+  "qvel",
+  "target_qpos",
+  "tcp_pose",
   "joint_pos",
   "joint_vel",
   "joint_target",
@@ -146,6 +150,12 @@ class Policy:
       "joint_vel": self._mirror_gripper(joint_vel),
       "actions": self._last_action,
     }
+    if "qpos" in self.metadata.observation_terms:
+      terms["qpos"] = position
+      terms["qvel"] = terms["joint_vel"]
+      terms["target_qpos"] = self._target[:6]
+    if "tcp_pose" in self.metadata.observation_terms:
+      terms["tcp_pose"] = np.concatenate(self._kinematics.ee_pose(position))
     if "joint_target" in self.metadata.observation_terms:
       terms["joint_target"] = self._target[:6] - self.metadata.default_joint_pos[:6]
     if "goal_position" in self.metadata.observation_terms:

@@ -151,13 +151,8 @@ def max_contact_force_on_face(
   return torch.where(selected, magnitude, 0.0).amax(dim=-1)
 
 
-def contact_force_hinge(
-  env: ManagerBasedRlEnv, sensor_name: str, onset: float, scale: float
-) -> torch.Tensor:
-  if onset < 0.0 or scale <= 0.0:
-    raise ValueError("contact_force_hinge needs onset >= 0 and scale > 0.")
-  excess = (max_contact_force(env, sensor_name) - onset).clamp_min(0.0)
-  return excess / scale
+def table_touch(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+  return (_contact(env, sensor_name, "found").found > 0).any(dim=-1).float()
 
 
 # `episode_success` latches on the first at-goal step, so it says whether the
@@ -171,7 +166,6 @@ __all__ = [
   "action_path_length_l1",
   "at_goal_action_l1",
   "at_goal_share",
-  "contact_force_hinge",
   "fingertip_height_excess",
   "maniskill_dense_reward",
   "max_contact_force",
@@ -179,5 +173,6 @@ __all__ = [
   "object_table_press",
   "peak_object_press",
   "side_contact_align",
+  "table_touch",
   "top_contact_share",
 ]

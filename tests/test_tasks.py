@@ -10,14 +10,12 @@ torch = pytest.importorskip("torch")
 
 
 PUSH_T_STATE_TERMS = (
-  "joint_pos",
-  "joint_vel",
-  "joint_target",
-  "ee_to_object",
-  "object_to_goal",
-  "object_heading",
-  "relative_yaw",
-  "actions",
+  "qpos",
+  "qvel",
+  "target_qpos",
+  "tcp_pose",
+  "target_pose",
+  "obj_pose",
 )
 APPEARANCE_EVENTS = {
   "table_color",
@@ -405,25 +403,22 @@ def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> Non
   with pytest.raises(ValueError, match="ceiling > 0"):
     fingertip_height_excess(env, cfg, 0.0)
 
-def test_push_t_contact_force_hinge_is_zero_below_onset_then_linear() -> None:
-  from vbrl.tasks.push_t.mdp import contact_force_hinge, max_contact_force
+def test_push_t_table_touch_is_binary_over_the_whole_robot() -> None:
+  from vbrl.tasks.push_t.mdp import max_contact_force, table_touch
 
-  def sensor(*newtons: float):
-    force = torch.tensor([[[[n, 0.0, 0.0]]] for n in newtons])  # [B, 1, 1, 3]
-    return SimpleNamespace(
-      data=SimpleNamespace(force=None, force_history=force)
+  force = torch.tensor([[[[n, 0.0, 0.0]]] for n in (0.0, 0.5, 200.0)])
+  sensor = SimpleNamespace(
+    data=SimpleNamespace(
+      found=torch.tensor([[0.0], [1.0], [1.0]]), force=None, force_history=force
     )
-
-  env = SimpleNamespace(scene={"table": sensor(0.0, 5.0, 10.0, 20.0)})
-  assert torch.allclose(
-    max_contact_force(env, "table"), torch.tensor([0.0, 5.0, 10.0, 20.0])
+  )
+  env = SimpleNamespace(scene={"robot_table_contact": sensor})
+  assert torch.equal(
+    table_touch(env, "robot_table_contact"), torch.tensor([0.0, 1.0, 1.0])
   )
   assert torch.allclose(
-    contact_force_hinge(env, "table", onset=5.0, scale=5.0),
-    torch.tensor([0.0, 0.0, 1.0, 3.0]),
+    max_contact_force(env, "robot_table_contact"), torch.tensor([0.0, 0.5, 200.0])
   )
-  with pytest.raises(ValueError, match="onset >= 0 and scale > 0"):
-    contact_force_hinge(env, "table", onset=5.0, scale=0.0)
 
 
 def test_push_t_at_goal_action_penalty_is_zero_until_the_object_is_placed() -> None:
@@ -553,14 +548,10 @@ def test_push_t_side_contact_align_rewards_pushing_a_vertical_face() -> None:
   share = top_contact_share(env, "ee_object_contact")
   assert share.tolist() == [0.0, 1.0, 1.0, 0.0]
 
-def test_push_t_observations_use_mjlab_translation_and_task_yaw_terms() -> None:
+def test_push_t_observations_are_maniskill_poses_in_the_base_frame() -> None:
   from mjlab.managers.scene_entity_config import SceneEntityCfg
-  from mjlab.tasks.manipulation.mdp import (
-    ee_to_object_distance,
-    object_to_goal_distance,
-  )
 
-  from vbrl.tasks.push_t.mdp import object_heading, relative_yaw, target_pose
+  from vbrl.tasks.push_t.mdp import obj_pose, target_pose, tcp_pose
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
 
   command = object.__new__(PushTCommand)
@@ -568,9 +559,11 @@ def test_push_t_observations_use_mjlab_translation_and_task_yaw_terms() -> None:
   command.target_yaw = torch.tensor([math.pi / 2, -math.pi])
   command.observation_offset = torch.zeros(2, 3)
   command.observation_yaw_offset = torch.zeros(2)
+  yaw90 = [math.sqrt(0.5), 0.0, 0.0, math.sqrt(0.5)]
   robot = SimpleNamespace(
     data=SimpleNamespace(
       site_pos_w=torch.tensor([[[0.20, 0.00, 0.10]], [[0.20, 0.00, 0.10]]]),
+      site_quat_w=torch.tensor([[yaw90], [yaw90]]),
       root_link_quat_w=torch.tensor(
         [[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
       ),
@@ -580,12 +573,7 @@ def test_push_t_observations_use_mjlab_translation_and_task_yaw_terms() -> None:
   pushed_object = SimpleNamespace(
     data=SimpleNamespace(
       root_link_pos_w=torch.tensor([[0.30, 0.05, 0.02], [0.40, -0.05, 0.02]]),
-      root_link_quat_w=torch.tensor(
-        [
-          [1.0, 0.0, 0.0, 0.0],
-          [math.sqrt(0.5), 0.0, 0.0, math.sqrt(0.5)],
-        ],
-      ),
+      root_link_quat_w=torch.tensor([[1.0, 0.0, 0.0, 0.0], yaw90]),
     ),
   )
   env = SimpleNamespace(
@@ -596,21 +584,13 @@ def test_push_t_observations_use_mjlab_translation_and_task_yaw_terms() -> None:
   asset_cfg.site_ids = [0]
 
   assert torch.allclose(
-    ee_to_object_distance(env, "object", asset_cfg),
-    torch.tensor([[0.10, 0.05, -0.08], [0.20, -0.05, -0.08]]),
-  )
-  assert torch.allclose(
-    object_to_goal_distance(env, "object", "push_t_goal", asset_cfg),
-    torch.tensor([[0.10, 0.05, 0.0], [0.10, -0.05, 0.0]]),
-  )
-  assert torch.allclose(
-    object_heading(env, "object"),
-    torch.tensor([[0.0, 1.0], [1.0, 0.0]]),
+    tcp_pose(env, asset_cfg),
+    torch.tensor([[0.10, 0.0, 0.10, *yaw90], [0.10, 0.0, 0.10, *yaw90]]),
     atol=1.0e-6,
   )
   assert torch.allclose(
-    relative_yaw(env, "push_t_goal", "object"),
-    torch.tensor([[1.0, 0.0], [1.0, 0.0]]),
+    obj_pose(env, "object"),
+    torch.tensor([[0.20, 0.05, 0.02, 1.0, 0.0, 0.0, 0.0], [0.30, -0.05, 0.02, *yaw90]]),
     atol=1.0e-6,
   )
   assert torch.allclose(
@@ -774,7 +754,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     OBJECT_PRESS_SCALE_N,
     OBJECT_WEIGHT_N,
     SIDE_CONTACT_ALIGN_WEIGHT,
-    TABLE_CONTACT_ONSET_N,
+    TABLE_TOUCH_WEIGHT,
   )
 
   cfg = _push_t()
@@ -806,7 +786,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert isinstance(action, TargetRelativeJointPositionActionCfg)
   assert action.actuator_names == definition.arm_actuator_names
   assert len(action.actuator_names) == 6
-  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.015)
+  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.03)
   assert action.clip is None
   assert {
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
@@ -825,7 +805,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "action_path_length",
     "action_rate_l2",
     "at_goal_action",
-    "table_contact_force",
+    "table_touch",
     "object_table_press",
     "ee_height_ceiling",
   )
@@ -851,7 +831,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
   assert "vertical_contact_force" not in cfg.rewards
   assert "object_contact_force" not in cfg.rewards
-  assert cfg.rewards["table_contact_force"].weight == pytest.approx(-0.01)
+  assert cfg.rewards["table_touch"].weight == TABLE_TOUCH_WEIGHT
+  assert pytest.approx(-2 / 3) == TABLE_TOUCH_WEIGHT
   press = cfg.rewards["object_table_press"].params
   assert press["sensor_name"] == "object_table_contact"
   assert OBJECT_WEIGHT_N == pytest.approx(0.497)
@@ -859,9 +840,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert press["scale"] == pytest.approx(5.0) == OBJECT_PRESS_SCALE_N
   assert cfg.rewards["object_table_press"].weight == pytest.approx(-0.01)
 
-  table_contact = cfg.rewards["table_contact_force"].params
-  assert table_contact["onset"] == pytest.approx(0.0) == TABLE_CONTACT_ONSET_N
-  assert table_contact["scale"] == pytest.approx(5.0)
+  assert cfg.rewards["table_touch"].params["sensor_name"] == "robot_table_contact"
+  table = sensors["robot_table_contact"]
+  assert (table.primary.mode, table.primary.pattern) == ("subtree", "base_link")
+  assert table.secondary.entity == "table"
+  assert cfg.metrics["peak_table_force"].params["sensor_name"] == "robot_table_contact"
 
   assert tuple(cfg.curriculum) == ("goal_yaw_range",)
 

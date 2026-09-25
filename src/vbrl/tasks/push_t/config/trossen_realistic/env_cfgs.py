@@ -4,6 +4,8 @@ from functools import partial
 
 from mjlab.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
+from mjlab.envs.mdp import dr
+from mjlab.managers import EventTermCfg
 
 from vbrl.asset_zoo.objects import PUSH_T_XML
 from vbrl.asset_zoo.robots.definition import CameraView
@@ -102,6 +104,18 @@ def trossen_realistic_push_t_rgb_env_cfg(
   cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(
     GOAL_REAL_RGBA_RANGE if real_goal_colour else ((0.0, 1.0),) * 3
   )
+  if not play:
+    cfg.events["camera_position"].mode = "step"
+    cfg.events["camera_orientation"].mode = "step"
+    cfg.events["camera_fovy"] = EventTermCfg(
+      func=dr.cam_fovy,
+      mode="startup",
+      params={
+        "asset_cfg": cfg.events["camera_position"].params["asset_cfg"],
+        "operation": "add",
+        "ranges": (-2.0, 2.0),
+      },
+    )
   cfg.scene.num_envs = 1 if play else 1024
   cfg.seed = 0
   return cfg

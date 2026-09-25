@@ -14,11 +14,10 @@ from mjlab.managers import (
   TerminationTermCfg,
 )
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
 from vbrl.asset_zoo.robots.definition import RobotDefinition
-from vbrl.tasks.utils import EE_GROUND_CONTACT_SENSOR, make_tabletop_env_cfg
+from vbrl.tasks.utils import make_tabletop_env_cfg
 
 from . import mdp
 from .geometry import HALF_HEIGHT, REST_HEIGHT
@@ -27,7 +26,8 @@ from .goal_marker import GOAL_ENTITY_NAME
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
-ACTION_SCALE = 0.015
+_TABLE_SENSOR = "robot_table_contact"
+ACTION_SCALE = 0.03
 # The object's own height, so it follows the T. Linear, not quadratic: a constant
 # gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
@@ -37,13 +37,7 @@ EE_HEIGHT_WEIGHT = -0.02
 # A starting size, not a measured one: the penalties cost ~3% of task reward, so this
 # puts the bonus on the same scale.
 SIDE_CONTACT_ALIGN_WEIGHT = 0.05
-# No onset: the T is 24 mm tall, so avoiding the table is a height adjustment rather
-# than a change of strategy, which is what makes it safe to apply hard.
-# Both contact penalties are linear: a target-relative action integrates, so a wound-up
-# target presses up to the torque limit, and a quadratic turned that into -170/s.
-TABLE_CONTACT_ONSET_N = 0.0
-TABLE_CONTACT_SCALE_N = 5.0
-TABLE_CONTACT_WEIGHT = -0.01
+TABLE_TOUCH_WEIGHT = -2.0 / 3.0
 # The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
 # distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
 OBJECT_WEIGHT_N = 0.497
@@ -76,14 +70,6 @@ GOAL_YAW_STAGES = (
   {"step": 68_000, "half_range": math.pi * 6 / 8},
   {"step": 72_000, "half_range": math.pi * 7 / 8},
   {"step": 76_000, "half_range": math.pi * 8 / 8},
-)
-
-
-_PRIVILEGED_ACTOR_TERMS = (
-  "ee_to_object",
-  "object_to_goal",
-  "object_heading",
-  "relative_yaw",
 )
 
 
@@ -149,34 +135,18 @@ def build_env_cfg(
   robot_ee = SceneEntityCfg("robot", site_names=(robot.ee_site,))
   common = {"command_name": _COMMAND, "object_name": object_name}
 
-  base_terms = cfg.observations["actor"].terms
   terms = {
-    "joint_pos": base_terms["joint_pos"],
-    "joint_vel": base_terms["joint_vel"],
-    "joint_target": ObservationTermCfg(func=mdp.joint_target),
-    "ee_to_object": ObservationTermCfg(
-      func=mdp.ee_to_object_distance,
-      params={"object_name": object_name, "asset_cfg": robot_ee},
-      noise=Unoise(n_min=-0.01, n_max=0.01),
-      clip=(-2.0, 2.0),
+    "qpos": ObservationTermCfg(func=mdp.qpos),
+    "qvel": ObservationTermCfg(func=mdp.qvel),
+    "target_qpos": ObservationTermCfg(func=mdp.target_qpos),
+    "tcp_pose": ObservationTermCfg(func=mdp.tcp_pose, params={"asset_cfg": robot_ee}),
+    "target_pose": ObservationTermCfg(
+      func=mdp.target_pose,
+      params={"command_name": _COMMAND, "asset_cfg": SceneEntityCfg("robot")},
     ),
-    "object_to_goal": ObservationTermCfg(
-      func=mdp.object_to_goal_distance,
-      params={**common, "asset_cfg": SceneEntityCfg("robot")},
-      noise=Unoise(n_min=-0.01, n_max=0.01),
-      clip=(-2.0, 2.0),
+    "obj_pose": ObservationTermCfg(
+      func=mdp.obj_pose, params={"object_name": object_name}
     ),
-    "object_heading": ObservationTermCfg(
-      func=mdp.object_heading,
-      params={"object_name": object_name},
-      noise=Unoise(n_min=-0.01, n_max=0.01),
-    ),
-    "relative_yaw": ObservationTermCfg(
-      func=mdp.relative_yaw,
-      params=common,
-      noise=Unoise(n_min=-0.01, n_max=0.01),
-    ),
-    "actions": base_terms["actions"],
   }
   cfg.observations["actor"].terms = terms
   cfg.observations["critic"].terms = {**terms}
@@ -224,14 +194,10 @@ def build_env_cfg(
       weight=AT_GOAL_ACTION_WEIGHT,
       params={"command_name": _COMMAND},
     ),
-    "table_contact_force": RewardTermCfg(
-      func=mdp.contact_force_hinge,
-      weight=TABLE_CONTACT_WEIGHT,
-      params={
-        "sensor_name": EE_GROUND_CONTACT_SENSOR,
-        "onset": TABLE_CONTACT_ONSET_N,
-        "scale": TABLE_CONTACT_SCALE_N,
-      },
+    "table_touch": RewardTermCfg(
+      func=mdp.table_touch,
+      weight=TABLE_TOUCH_WEIGHT,
+      params={"sensor_name": _TABLE_SENSOR},
     ),
     "object_table_press": RewardTermCfg(
       func=mdp.object_table_press,
@@ -259,7 +225,7 @@ def build_env_cfg(
     "peak_table_force": MetricsTermCfg(
       func=mdp.max_contact_force,
       reduce="max",
-      params={"sensor_name": EE_GROUND_CONTACT_SENSOR},
+      params={"sensor_name": _TABLE_SENSOR},
     ),
     # A lateral push is bounded by the task (the T slides at ~0.7 N); a press
     # into the top face is bounded only by the arm.
@@ -366,6 +332,14 @@ def build_env_cfg(
       reduce="maxforce",
       num_slots=1,
     ),
+    ContactSensorCfg(
+      name=_TABLE_SENSOR,
+      primary=ContactMatch(mode="subtree", pattern="base_link", entity="robot"),
+      secondary=ContactMatch(mode="body", pattern="table", entity="table"),
+      fields=("found", "force"),
+      reduce="maxforce",
+      num_slots=1,
+    ),
     # `netforce`: the exact quantity is the *total* vertical load the table
     # carries, not the largest of the T's several footprint contacts.
     ContactSensorCfg(
@@ -376,9 +350,6 @@ def build_env_cfg(
       reduce="netforce",
     ),
   )
-  for sensor in cfg.scene.sensors:
-    if sensor.name == EE_GROUND_CONTACT_SENSOR:
-      sensor.reduce = "maxforce"
   cfg.episode_length_s = episode_length_s
   cfg.scale_rewards_by_dt = False
   # Azimuth 180 is the +x side the robot faces. ASSET_ROOT, not the robot's
@@ -394,19 +365,9 @@ def build_env_cfg(
 
   if rgb:
     actor = cfg.observations["actor"]
-    for name in _PRIVILEGED_ACTOR_TERMS:
-      actor.terms.pop(name)
-    target_pose_term = ObservationTermCfg(
-      func=mdp.target_pose,
-      params={
-        "command_name": _COMMAND,
-        "asset_cfg": SceneEntityCfg("robot"),
-      },
-      clip=(-2.0, 2.0),
-    )
-    cfg.observations["critic"].terms["target_pose"] = target_pose_term
-    if goal_in_observation:
-      actor.terms["target_pose"] = target_pose_term
+    actor.terms.pop("obj_pose")
+    if not goal_in_observation:
+      actor.terms.pop("target_pose")
 
   if play:
     cfg.observations["actor"].enable_corruption = False
