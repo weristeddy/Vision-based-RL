@@ -22,6 +22,7 @@ def home(config: Any) -> int:
   policy = load_policy(config)
   arm = TrossenArm(config)
   print(f"Homing    {config.motion.home_seconds:.1f} s")
+  arm.lift(seconds=config.motion.home_seconds)
   arm.move_to(policy.metadata.home_pose, seconds=config.motion.home_seconds)
   print("At home, holding. Ctrl-C to park and release torque.")
   try:
@@ -93,6 +94,7 @@ def run(
   if keyboard_goal:
     print(f"Keys      the arrow keys move the goal\n{HELP}")
   print(f"Homing    {motion.home_seconds:.1f} s")
+  arm.lift(seconds=motion.home_seconds)
   arm.move_to(home, seconds=motion.home_seconds)
 
   home_error = float(np.abs(home - arm.read()[0]).max())

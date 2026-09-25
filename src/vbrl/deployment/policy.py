@@ -15,7 +15,6 @@ TERMS = (
   "tcp_pose",
   "joint_pos",
   "joint_vel",
-  "joint_target",
   "actions",
   "goal_position",
   "target_pose",
@@ -156,8 +155,6 @@ class Policy:
       terms["target_qpos"] = self._target[:6]
     if "tcp_pose" in self.metadata.observation_terms:
       terms["tcp_pose"] = np.concatenate(self._kinematics.ee_pose(position))
-    if "joint_target" in self.metadata.observation_terms:
-      terms["joint_target"] = self._target[:6] - self.metadata.default_joint_pos[:6]
     if "goal_position" in self.metadata.observation_terms:
       ee_position, ee_quaternion = self._kinematics.ee_pose(position)
       self._goal_position = _rotate_by_inverse(

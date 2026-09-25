@@ -5,9 +5,12 @@ from typing import Any
 
 import numpy as np
 
+from vbrl.asset_zoo.robots.trossen_wxai import make_wxai
+
 # The pose the arm rests at unpowered, so the only pose from which releasing
 # torque is safe: idle is not gravity-compensated.
 REST_POSE = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+UPRIGHT_POSE = tuple(make_wxai().home_joint_pos[f"joint_{i}"] for i in range(6))
 LIMIT_MARGIN = 0.02
 GRIPPER_MARGIN = 0.002
 
@@ -72,7 +75,11 @@ class TrossenArm:
     self._last_sent = sent
     return sent
 
+  def lift(self, *, seconds: float) -> None:
+    self.move_to((*UPRIGHT_POSE, self.read()[0][-1]), seconds=seconds)
+
   def park(self, *, seconds: float) -> None:
+    self.lift(seconds=seconds)
     self.move_to(REST_POSE, seconds=seconds)
     time.sleep(0.3)
     self._driver.set_all_modes(self._api.Mode.idle)
@@ -83,4 +90,4 @@ class TrossenArm:
     self._driver.cleanup()
 
 
-__all__ = ["REST_POSE", "TrossenArm"]
+__all__ = ["REST_POSE", "TrossenArm", "UPRIGHT_POSE"]

@@ -1,7 +1,8 @@
 # Deployment commands
 
 Copy-paste reference for running a trained policy on the real arm from the
-Jetson AGX Thor. Every run homes the arm first and parks it afterwards.
+Jetson AGX Thor. Every run lifts the arm to its upright home, lowers it to the
+policy's start pose, and afterwards lifts it again before parking.
 
 `--no-sync` is not optional here. ONNX Runtime is installed outside the
 lockfile by `jetson/setup.sh`, so a plain `uv run` syncs the environment and
