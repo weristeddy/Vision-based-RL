@@ -3,6 +3,19 @@ from __future__ import annotations
 from typing import Any
 
 from mjlab.rl.runner import MjlabOnPolicyRunner
+from rsl_rl.modules import EmpiricalNormalization
+
+
+class GoalYawNormalization(EmpiricalNormalization):
+  def __init__(self, shape: int, yaw_start: int) -> None:
+    super().__init__(shape)
+    self.yaw_start = yaw_start
+
+  def forward(self, x):
+    normalized = (x - self._mean) / (self._std + self.eps)
+    start = self.yaw_start
+    normalized[:, start : start + 2] = x[:, start : start + 2]
+    return normalized
 
 
 def policy_metadata(
@@ -47,6 +60,27 @@ def policy_metadata(
 
 
 class VbrlOnPolicyRunner(MjlabOnPolicyRunner):
+  def __init__(self, env, train_cfg, log_dir=None, device="cpu") -> None:
+    super().__init__(env, train_cfg, log_dir, device)
+    if "camera" not in train_cfg["obs_groups"]["actor"]:
+      return
+    observations = env.unwrapped.observation_manager
+    for group, model in (
+      ("actor", self.alg._raw_actor),
+      ("critic", self.alg._raw_critic),
+    ):
+      names = observations.active_terms[group]
+      if "target_pose" in names and model.obs_normalization:
+        dims = observations.group_obs_term_dim[group]
+        yaw_start = sum(dim[0] for dim in dims[: names.index("target_pose")]) + 3
+        model.obs_normalizer = GoalYawNormalization(model.obs_dim, yaw_start).to(device)
+
+  def load(self, path: str, *args, **kwargs) -> dict:
+    infos = super().load(path, *args, **kwargs)
+    if hasattr(self.alg, "iteration"):
+      self.alg.iteration = self.current_learning_iteration
+    return infos
+
   def save(self, path: str, infos: Any = None) -> None:
     super().save(path, infos)
     policy_dir, filename, onnx_path = self._get_export_paths(path)

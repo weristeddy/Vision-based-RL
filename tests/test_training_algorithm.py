@@ -353,3 +353,22 @@ def test_trainable_storage_recomputes_visual_features_with_gradients() -> None:
   assert batch.observations["camera"].dtype == torch.uint8
   assert any(parameter.grad is not None for parameter in encoder.backbone.parameters())
   assert any(parameter.grad is not None for parameter in encoder.adapter.parameters())
+
+
+def test_entropy_schedule_holds_then_decays_linearly() -> None:
+  algorithm, *_ = _build_test_ppo(
+    VisualPPO,
+    entropy_coef=0.02,
+    entropy_coef_final=0.002,
+    entropy_decay_start=3000,
+    entropy_decay_iterations=2000,
+  )
+  schedule = algorithm.scheduled_entropy_coef
+  assert schedule(0) == schedule(3000) == pytest.approx(0.02)
+  assert schedule(4000) == pytest.approx(0.011)
+  assert schedule(5000) == schedule(15000) == pytest.approx(0.002)
+
+
+def test_entropy_schedule_is_off_by_default() -> None:
+  algorithm, *_ = _build_test_ppo(VisualPPO, entropy_coef=0.02)
+  assert algorithm.scheduled_entropy_coef(10_000) == pytest.approx(0.02)
