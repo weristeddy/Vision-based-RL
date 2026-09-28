@@ -72,13 +72,7 @@ GOAL_YAW_STAGES = (
   {"step": 76_000, "half_range": math.pi * 8 / 8},
 )
 PENALTY_RAMP_STEPS = (16_000, 64_000)
-_RAMPED_PENALTIES = (
-  "object_table_press",
-  "ee_height_ceiling",
-  "table_touch",
-  "action_path_length",
-  "action_rate_l2",
-)
+_RAMPED_PENALTIES = ("object_table_press", "action_path_length", "action_rate_l2")
 
 
 # Offset x ranges held 15 cm apart, so an episode never starts near the goal.
