@@ -21,6 +21,7 @@ from vbrl.tasks.push_t.goal_marker import (
 from vbrl.tasks.push_t.push_t_env_cfg import (
   ACTION_SCALE,
   GOAL_YAW_STAGES,
+  PENALTY_RAMP_STEPS,
   build_env_cfg,
 )
 from vbrl.tasks.utils import add_rgb_camera
@@ -80,6 +81,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
     episode_length_s=episode_length_s,
     goal_outline=goal_outline,
     goal_observation_noise=goal_observation_noise,
+    penalty_ramp=PENALTY_RAMP_STEPS,
   )
   add_rgb_camera(
     cfg,
@@ -104,8 +106,6 @@ def trossen_realistic_push_t_rgb_env_cfg(
     GOAL_REAL_RGBA_RANGE if real_goal_colour else ((0.0, 1.0),) * 3
   )
   if not play:
-    cfg.events["camera_position"].mode = "step"
-    cfg.events["camera_orientation"].mode = "step"
     cfg.events["camera_fovy"] = EventTermCfg(
       func=dr.cam_fovy,
       mode="startup",

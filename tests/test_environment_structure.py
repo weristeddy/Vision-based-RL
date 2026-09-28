@@ -23,6 +23,7 @@ PUSH_T_STATE = (
   "target_pose",
   "obj_pose",
 )
+PUSH_T_CRITIC = (*PUSH_T_STATE, "relative_yaw", "object_to_goal", "ee_to_object")
 PUSH_T_RGB_ACTOR = (
   "qpos",
   "qvel",
@@ -131,10 +132,10 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=ACTION_SCALE)
 
   assert tuple(state.observations["actor"].terms) == PUSH_T_STATE
-  assert tuple(state.observations["critic"].terms) == PUSH_T_STATE
+  assert tuple(state.observations["critic"].terms) == PUSH_T_CRITIC
   assert "camera" not in state.observations
   assert tuple(rgb.observations["actor"].terms) == PUSH_T_RGB_ACTOR
-  assert tuple(rgb.observations["critic"].terms) == PUSH_T_STATE
+  assert tuple(rgb.observations["critic"].terms) == PUSH_T_CRITIC
   assert tuple(rgb.observations["camera"].terms) == ("external_cam_rgb",)
   # The two differ by the per-step delta cap alone: the RGB tasks train at the
   # deployable 0.03 so the raw policy output needs no clamp on the arm.
@@ -148,7 +149,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.min_xy_separation == rgb_goal.min_xy_separation
   assert state_goal.success_threshold == rgb_goal.success_threshold
   assert state.curriculum == {}
-  assert tuple(rgb.curriculum) == ("goal_yaw_range",)
+  assert tuple(rgb.curriculum) == ("goal_yaw_range", "penalty_ramp")
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
   assert state.episode_length_s == rgb.episode_length_s == 16.0

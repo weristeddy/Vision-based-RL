@@ -71,6 +71,14 @@ GOAL_YAW_STAGES = (
   {"step": 72_000, "half_range": math.pi * 7 / 8},
   {"step": 76_000, "half_range": math.pi * 8 / 8},
 )
+PENALTY_RAMP_STEPS = (16_000, 64_000)
+_RAMPED_PENALTIES = (
+  "object_table_press",
+  "ee_height_ceiling",
+  "table_touch",
+  "action_path_length",
+  "action_rate_l2",
+)
 
 
 # Offset x ranges held 15 cm apart, so an episode never starts near the goal.
@@ -128,6 +136,7 @@ def build_env_cfg(
   episode_length_s: float = 16.0,
   goal_outline: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
+  penalty_ramp: tuple[int, int] | None = None,
 ) -> ManagerBasedRlEnvCfg:
   cfg = make_tabletop_env_cfg(
     robot, action_delay=True, fixed_closed_gripper=True
@@ -149,7 +158,25 @@ def build_env_cfg(
     ),
   }
   cfg.observations["actor"].terms = terms
-  cfg.observations["critic"].terms = {**terms}
+  cfg.observations["critic"].terms = {
+    **terms,
+    "target_pose": ObservationTermCfg(
+      func=mdp.target_pose,
+      params={
+        "command_name": _COMMAND,
+        "asset_cfg": SceneEntityCfg("robot"),
+        "calibration_bias": False,
+      },
+    ),
+    "relative_yaw": ObservationTermCfg(func=mdp.relative_yaw, params=common),
+    "object_to_goal": ObservationTermCfg(
+      func=mdp.object_to_goal_distance, params=common
+    ),
+    "ee_to_object": ObservationTermCfg(
+      func=mdp.ee_to_object_distance,
+      params={"object_name": object_name, "asset_cfg": robot_ee},
+    ),
+  }
   cfg.observations["actor"].nan_policy = "sanitize"
   cfg.observations["critic"].nan_policy = "sanitize"
 
@@ -275,6 +302,15 @@ def build_env_cfg(
     cfg.curriculum["goal_yaw_range"] = CurriculumTermCfg(
       func=mdp.goal_yaw_curriculum,
       params={"command_name": _COMMAND, "stages": list(goal_yaw_stages)},
+    )
+  if penalty_ramp is not None:
+    cfg.curriculum["penalty_ramp"] = CurriculumTermCfg(
+      func=mdp.penalty_weight_ramp,
+      params={
+        "reward_names": list(_RAMPED_PENALTIES),
+        "start_step": penalty_ramp[0],
+        "end_step": penalty_ramp[1],
+      },
     )
   cfg.events["arm_joint_position_noise"] = EventTermCfg(
     func=mdp.reset_joints_with_gaussian_offset,

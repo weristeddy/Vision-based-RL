@@ -17,8 +17,6 @@ class VisualPpoCfg(RslRlPpoAlgorithmCfg):
   feature_cache_dtype: str = "bfloat16"
   gradient_accumulation_steps: int = 1
   early_stop_kl: bool = False
-  # Linear from `entropy_coef` to this over `entropy_decay_iterations`, starting at
-  # `entropy_decay_start`. None keeps `entropy_coef` fixed.
   entropy_coef_final: float | None = None
   entropy_decay_start: int = 0
   entropy_decay_iterations: int = 0
@@ -65,7 +63,6 @@ class VisualPPO(PPO):
     self.entropy_coef_final = entropy_coef_final
     self.entropy_decay_start = int(entropy_decay_start)
     self.entropy_decay_iterations = int(entropy_decay_iterations)
-    # The runner overwrites this on resume, so the schedule follows the checkpoint.
     self.iteration = 0
     if entropy_coef_final is not None and (
       entropy_coef_final < 0.0 or self.entropy_decay_iterations < 0

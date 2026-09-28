@@ -57,18 +57,19 @@ def target_pose(
   env: ManagerBasedRlEnv,
   command_name: str,
   asset_cfg: SceneEntityCfg = _ROBOT,
+  calibration_bias: bool = True,
 ) -> torch.Tensor:
   command = push_t_command(env, command_name)
   robot: Entity = env.scene[asset_cfg.name]
   target_position = quat_apply(
     quat_inv(robot.data.root_link_quat_w),
     command.target_pos - robot.data.root_link_pos_w,
-  ) + command.observation_offset
-  target_yaw = wrap_to_pi(
-    command.target_yaw
-    + command.observation_yaw_offset
-    - yaw_from_quat(robot.data.root_link_quat_w)
   )
+  target_yaw = command.target_yaw - yaw_from_quat(robot.data.root_link_quat_w)
+  if calibration_bias:
+    target_position = target_position + command.observation_offset
+    target_yaw = target_yaw + command.observation_yaw_offset
+  target_yaw = wrap_to_pi(target_yaw)
   return torch.cat(
     (
       target_position,
@@ -78,4 +79,21 @@ def target_pose(
   )
 
 
-__all__ = ["obj_pose", "qpos", "qvel", "target_pose", "target_qpos", "tcp_pose"]
+def relative_yaw(
+  env: ManagerBasedRlEnv, command_name: str, object_name: str
+) -> torch.Tensor:
+  command = push_t_command(env, command_name)
+  obj: Entity = env.scene[object_name]
+  error = wrap_to_pi(command.target_yaw - yaw_from_quat(obj.data.root_link_quat_w))
+  return torch.stack((torch.sin(error), torch.cos(error)), dim=-1)
+
+
+__all__ = [
+  "obj_pose",
+  "qpos",
+  "qvel",
+  "relative_yaw",
+  "target_pose",
+  "target_qpos",
+  "tcp_pose",
+]

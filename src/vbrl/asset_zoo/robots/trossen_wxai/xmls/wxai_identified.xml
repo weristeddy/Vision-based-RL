@@ -22,6 +22,7 @@
   <asset>
     <texture type="2d" file="materials/1k_textures/trossen_BaseColor.png"/>
     <material name="trossen_material" texture="trossen_BaseColor"/>
+    <material name="mount_black" rgba="0.095 0.105 0.115 1"/>
     <mesh name="base_link" file="meshes/wxai/base_link.obj"/>
     <mesh name="link_1" file="meshes/wxai/link_1.obj"/>
     <mesh name="link_2" file="meshes/wxai/link_2.obj"/>
@@ -70,7 +71,7 @@
       <camera name="external_cam" pos="0.812099 -0.021484 0.468208"
               quat="0.662909 0.265531 0.247583 0.654788"
               mode="fixed" fovy="54.284"/>
-      <geom name="mount_plate" class="visual" type="box"
+      <geom name="mount_plate" class="visual" type="box" material="mount_black"
             size="0.095 0.04 0.0025" pos="0 0 -0.0025"/>
 
       <inertial pos="-0.00014175 -5.228e-05 0.0317518" quat="0.708444 0.00673042 0.00910019 0.705677" mass="0.459699"

@@ -57,6 +57,9 @@ def test_runner_selects_goal_yaw_in_actor_and_critic(monkeypatch, pixel):
     "tcp_pose": 7,
     "target_pose": 5,
     "obj_pose": 7,
+    "relative_yaw": 2,
+    "object_to_goal": 3,
+    "ee_to_object": 3,
   }
   names = {group: list(cfg.observations[group].terms) for group in ("actor", "critic")}
   dims = {group: [(sizes[name],) for name in terms] for group, terms in names.items()}

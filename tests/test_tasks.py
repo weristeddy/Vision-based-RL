@@ -859,7 +859,13 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.terminations["time_out"].time_out is True
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
-  assert tuple(actor.terms) == tuple(critic.terms) == PUSH_T_STATE_TERMS
+  assert tuple(actor.terms) == PUSH_T_STATE_TERMS
+  assert tuple(critic.terms) == (
+    *PUSH_T_STATE_TERMS,
+    "relative_yaw",
+    "object_to_goal",
+    "ee_to_object",
+  )
   assert actor.enable_corruption is True
   assert critic.enable_corruption is False
   assert actor.nan_policy == critic.nan_policy == "sanitize"

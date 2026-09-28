@@ -227,3 +227,53 @@ def test_every_registered_train_config_is_cloudpickle_serializable() -> None:
     restored = cloudpickle.loads(cloudpickle.dumps(train_cfg))
     assert restored.agent.wandb_tags == train_cfg.agent.wandb_tags
     assert restored.env.scene.num_envs == train_cfg.env.scene.num_envs
+
+
+def test_push_t_rgb_camera_pose_is_drawn_once_per_env() -> None:
+  from vbrl.tasks.push_t.config.trossen_realistic.env_cfgs import (
+    trossen_realistic_push_t_rgb_env_cfg,
+  )
+
+  cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  for name in ("camera_position", "camera_orientation", "camera_fovy"):
+    assert cfg.events[name].mode == "startup", name
+
+
+def test_push_t_rgb_critic_sees_clean_goal_and_relative_pose() -> None:
+  from vbrl.tasks.push_t.config.trossen_realistic.env_cfgs import (
+    trossen_realistic_push_t_rgb_env_cfg,
+  )
+
+  cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  actor = cfg.observations["actor"].terms
+  critic = cfg.observations["critic"].terms
+  assert actor["target_pose"].params.get("calibration_bias", True)
+  assert critic["target_pose"].params["calibration_bias"] is False
+  assert {"relative_yaw", "object_to_goal", "ee_to_object"} <= set(critic)
+  assert not {"relative_yaw", "object_to_goal", "ee_to_object"} & set(actor)
+
+
+def test_push_t_rgb_ramps_contact_penalties_from_zero() -> None:
+  from types import SimpleNamespace
+
+  from vbrl.tasks.push_t.config.trossen_realistic.env_cfgs import (
+    trossen_realistic_push_t_rgb_env_cfg,
+    trossen_realistic_push_t_state_env_cfg,
+  )
+  from vbrl.tasks.push_t.mdp import penalty_weight_ramp
+
+  cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  assert "penalty_ramp" not in trossen_realistic_push_t_state_env_cfg().curriculum
+  term = cfg.curriculum["penalty_ramp"]
+  full = {name: cfg.rewards[name].weight for name in term.params["reward_names"]}
+  env = SimpleNamespace(
+    common_step_counter=0,
+    device="cpu",
+    reward_manager=SimpleNamespace(get_term_cfg=lambda name: cfg.rewards[name]),
+  )
+  ramp = penalty_weight_ramp(term, env)
+  for step, scale in ((0, 0.0), (16_000, 0.0), (40_000, 0.5), (64_000, 1.0), (99_000, 1.0)):
+    env.common_step_counter = step
+    ramp(env, None, **term.params)
+    for name, weight in full.items():
+      assert cfg.rewards[name].weight == pytest.approx(weight * scale), (name, step)
