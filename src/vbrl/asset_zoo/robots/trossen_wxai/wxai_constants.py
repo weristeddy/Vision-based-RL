@@ -12,6 +12,7 @@ XMLS_DIR = Path(__file__).resolve().parent / "xmls"
 WXAI_XML = XMLS_DIR / "wxai.xml"
 WXAI_REALISTIC_XML = XMLS_DIR / "wxai_realistic.xml"
 WXAI_IDENTIFIED_XML = XMLS_DIR / "wxai_identified.xml"
+WXAI_STIFF_XML = XMLS_DIR / "wxai_stiff.xml"
 
 # The arm bolts to a 190 x 80 x 5 mm plate on the tabletop, measured off the real rig
 # (nothing about it is published).
@@ -128,11 +129,22 @@ def make_wxai_identified() -> RobotDefinition:
   )
 
 
+def make_wxai_stiff() -> RobotDefinition:
+  return _definition(
+    "trossen_stiff",
+    WXAI_STIFF_XML,
+    IDENTIFIED_PAD_PATTERN,
+    gravity_compensation=True,
+  )
+
+
 __all__ = [
   "WXAI_IDENTIFIED_XML",
   "WXAI_REALISTIC_XML",
+  "WXAI_STIFF_XML",
   "WXAI_XML",
   "make_wxai",
   "make_wxai_identified",
   "make_wxai_realistic",
+  "make_wxai_stiff",
 ]

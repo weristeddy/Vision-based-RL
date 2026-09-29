@@ -20,11 +20,34 @@ signal.
 
 | marker | drawn as | policies |
 | --- | --- | --- |
-| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
+| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable_g4`, `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
 | **Filled** | solid green T, the same two boxes as the object | `pixelgoal_fixed`, `visualslowstep` |
 | none | — | `lift_cube` |
 
-> **These policies are history, not the current configuration.** They were
+## Identified arm, target-relative control
+
+The current configuration: Menagerie's identified arm, ManiSkill's target-delta
+action with the target in the observation, and uniform goal yaw from the start.
+Hollow outline marker.
+
+```bash
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_g4.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_g4.yaml --max-steps 1000
+```
+
+| manifest | W&B | goal signal | exposure | sim success |
+| --- | --- | --- | --- | --- |
+| `push_t_realtable_g4` | `u6545l3u` | `target_pose` + marker | 12000 us, re-probe | 0.83 with the mean action (256 episodes) |
+
+The ONNX runs DINOv2 in float32 where training used bfloat16 autocast, so its
+actions differ from the PyTorch policy by up to 0.24; success is unchanged
+(0.78 against 0.75 on 64 episodes).
+
+Target-relative control keeps pushing against whatever blocks it, and in
+simulation this policy peaked at 70-100 N of table force in some episodes, so
+keep a hand on the stop.
+
+> **The policies below are history, not the current configuration.** They were
 > trained on `-TrossenRealistic` against the Trossen MJCF, a grey-rendering
 > tabletop, a black background and measured-relative actions. Push-T now
 > registers `-TrossenIdentified` with target-relative actions, so the task IDs
@@ -34,7 +57,7 @@ signal.
 
 ## Hollow outline marker, 15,000 iterations
 
-The current generation. Trained at the 0.03 per-step cap with 16 s episodes and
+The last generation on the Trossen MJCF. Trained at the 0.03 per-step cap with 16 s episodes and
 the linear orientation summand.
 
 ```bash
@@ -107,9 +130,17 @@ This is the one manifest that shapes the action in the manifest itself
 `vbrl-play` serves a Viser scene on port 8080 (`--host`, `--port` to change
 it). The entry point is `vbrl-play`, not `vbrl-visualize`. These policies have
 no local `.pt`, only the exported ONNX, so the weights come from W&B and the
-task ID supplies the architecture -- and Push-T now registers only
-`-TrossenIdentified` IDs, so these commands no longer resolve. They are kept as the
-record of which run produced which policy.
+task ID supplies the architecture. The current policy resolves:
+
+```bash
+uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/u6545l3u \
+  --wandb-checkpoint-name model_14999.pt --num-envs 4
+```
+
+The `-TrossenRealistic` commands further down no longer resolve, because Push-T
+now registers only `-TrossenIdentified` IDs; they are kept as the record of which
+run produced which policy.
 
 The Jetson is headless, so the browser is on the laptop and port 8080 has to
 reach it. Over VS Code Remote-SSH that happens by itself: the PORTS panel

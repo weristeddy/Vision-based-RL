@@ -88,3 +88,7 @@ CLAUDE.md
 
 # Development-host pretrained backbones (the image bakes /opt/vbrl-models).
 .models
+
+# System identification recordings and fit output
+artifacts/deployment/sysid_*.npz
+artifacts/sysid/
