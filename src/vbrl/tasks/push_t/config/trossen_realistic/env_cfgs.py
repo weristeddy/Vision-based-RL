@@ -41,6 +41,7 @@ def trossen_realistic_push_t_state_env_cfg(
     object_name=_OBJECT_NAME,
     play=play,
     action_scale=ACTION_SCALE,
+    penalty_ramp=PENALTY_RAMP_STEPS,
   )
   apply_scene(
     cfg,

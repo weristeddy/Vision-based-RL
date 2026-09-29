@@ -98,15 +98,27 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   assert agent.clip_actions is None
 
 
-def test_state_tasks_keep_native_ppo() -> None:
-  from mjlab.rl import RslRlPpoAlgorithmCfg
+def test_push_t_state_trains_like_the_vision_policy() -> None:
+  from dataclasses import asdict
+
   from mjlab.tasks.registry import load_rl_cfg
 
-  for task_id in ("Mjlab-PushT-State-TrossenIdentified",):
-    agent = load_rl_cfg(task_id)
-    assert type(agent.algorithm) is RslRlPpoAlgorithmCfg
-    assert agent.actor.hidden_dims == (512, 256, 128)
-    assert agent.actor.cnn_cfg is None
+  state = load_rl_cfg("Mjlab-PushT-State-TrossenIdentified")
+  rgb = load_rl_cfg("Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified")
+  batching = (
+    "cache_frozen_features",
+    "feature_cache_dtype",
+    "gradient_accumulation_steps",
+  )
+  a, b = asdict(state.algorithm), asdict(rgb.algorithm)
+  assert {k: v for k, v in a.items() if k not in batching} == {
+    k: v for k, v in b.items() if k not in batching
+  }
+  assert state.algorithm.gradient_accumulation_steps == 1
+  for model in ("actor", "critic"):
+    s, r = getattr(state, model), getattr(rgb, model)
+    assert (s.hidden_dims, s.activation) == (r.hidden_dims, r.activation)
+  assert state.actor.cnn_cfg is None
 
 
 def test_every_sweep_fixes_one_registered_task_and_varies_native_keys_only() -> None:

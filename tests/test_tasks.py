@@ -880,7 +880,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert table.secondary.entity == "table"
   assert cfg.metrics["peak_table_force"].params["sensor_name"] == "robot_table_contact"
 
-  assert cfg.curriculum == {}
+  assert tuple(cfg.curriculum) == ("penalty_ramp",)
 
 
   assert tuple(cfg.terminations) == (

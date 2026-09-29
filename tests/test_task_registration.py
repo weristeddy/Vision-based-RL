@@ -253,7 +253,7 @@ def test_push_t_rgb_critic_sees_clean_goal_and_relative_pose() -> None:
   assert not {"relative_yaw", "object_to_goal", "ee_to_object"} & set(actor)
 
 
-def test_push_t_rgb_ramps_contact_penalties_from_zero() -> None:
+def test_push_t_ramps_contact_penalties_from_zero() -> None:
   from types import SimpleNamespace
 
   from vbrl.tasks.push_t.config.trossen_realistic.env_cfgs import (
@@ -263,7 +263,8 @@ def test_push_t_rgb_ramps_contact_penalties_from_zero() -> None:
   from vbrl.tasks.push_t.mdp import penalty_weight_ramp
 
   cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
-  assert "penalty_ramp" not in trossen_realistic_push_t_state_env_cfg().curriculum
+  state = trossen_realistic_push_t_state_env_cfg().curriculum["penalty_ramp"]
+  assert state.params == cfg.curriculum["penalty_ramp"].params
   term = cfg.curriculum["penalty_ramp"]
   full = {name: cfg.rewards[name].weight for name in term.params["reward_names"]}
   env = SimpleNamespace(

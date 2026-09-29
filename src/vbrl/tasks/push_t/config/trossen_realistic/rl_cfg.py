@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from mjlab.rl import (
-  RslRlModelCfg,
-  RslRlOnPolicyRunnerCfg,
-  RslRlPpoAlgorithmCfg,
-)
+from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg
 
 from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.ppo import VisualPpoCfg
@@ -13,6 +9,40 @@ from vbrl.vision.config import VisionConfig
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
 BETA_ENTROPY_COEF = 0.02
 _RGB_MAX_ITERATIONS = 6000
+_NETWORK = {
+  "hidden_dims": (256, 256, 128),
+  "activation": "relu",
+  "obs_normalization": True,
+}
+_BETA = {"class_name": "BetaDistribution", "action_range": (-1.0, 1.0)}
+
+
+def _algorithm(**vision_batching) -> VisualPpoCfg:
+  return VisualPpoCfg(
+    num_learning_epochs=8,
+    num_mini_batches=16,
+    learning_rate=0.0002,
+    schedule="fixed",
+    # Horizon 1/(1-gamma) = 667 steps against the 800-step episode. lam stays
+    # at 0.9: at 0.95 the GAE window (1/(1-gamma*lam)) runs past
+    # num_steps_per_env, so every advantage leans on the value bootstrap
+    # instead of observed reward.
+    gamma=0.9985,
+    lam=0.9,
+    entropy_coef=BETA_ENTROPY_COEF,
+    # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations
+    # and threw away 71% of the update budget (36.8 of 128 performed).
+    desired_kl=0.1,
+    max_grad_norm=0.5,
+    value_loss_coef=0.5,
+    use_clipped_value_loss=False,
+    clip_param=0.2,
+    normalize_advantage_per_mini_batch=True,
+    optimizer="adam",
+    share_cnn_encoders=False,
+    early_stop_kl=True,
+    **vision_batching,
+  )
 
 
 def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
@@ -38,39 +68,9 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     ),
     clip_actions=None,
     upload_model=True,
-    actor=RslRlModelCfg(
-      hidden_dims=(512, 256, 128),
-      activation="elu",
-      obs_normalization=True,
-      distribution_cfg={
-        "class_name": "BetaDistribution",
-        "action_range": (-1.0, 1.0),
-      },
-      class_name="MLPModel",
-    ),
-    critic=RslRlModelCfg(
-      hidden_dims=(512, 256, 128),
-      activation="elu",
-      obs_normalization=True,
-      class_name="MLPModel",
-    ),
-    algorithm=RslRlPpoAlgorithmCfg(
-      num_learning_epochs=8,
-      num_mini_batches=32,
-      learning_rate=0.0003,
-      schedule="fixed",
-      gamma=0.9985,
-      lam=0.9,
-      entropy_coef=BETA_ENTROPY_COEF,
-      desired_kl=0.01,
-      max_grad_norm=0.5,
-      value_loss_coef=0.5,
-      use_clipped_value_loss=False,
-      clip_param=0.2,
-      normalize_advantage_per_mini_batch=False,
-      optimizer="adam",
-      share_cnn_encoders=False,
-    ),
+    actor=RslRlModelCfg(**_NETWORK, distribution_cfg=_BETA, class_name="MLPModel"),
+    critic=RslRlModelCfg(**_NETWORK, class_name="MLPModel"),
+    algorithm=_algorithm(),
   )
 
 
@@ -111,51 +111,19 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
     clip_actions=None,
     upload_model=True,
     actor=RslRlModelCfg(
-      hidden_dims=(256, 256, 128),
-      activation="relu",
-      obs_normalization=True,
+      **_NETWORK,
       cnn_cfg={
         "vision": vision_data,
         "latent_batchnorm": False,
       },
-      distribution_cfg={
-        "class_name": "BetaDistribution",
-        "action_range": (-1.0, 1.0),
-      },
+      distribution_cfg=_BETA,
       class_name="vbrl.vision.model:VisionModel",
     ),
-    critic=RslRlModelCfg(
-      hidden_dims=(256, 256, 128),
-      activation="relu",
-      obs_normalization=True,
-      class_name="MLPModel",
-    ),
-    algorithm=VisualPpoCfg(
-      num_learning_epochs=8,
-      num_mini_batches=16,
-      learning_rate=0.0002,
-      schedule="fixed",
-      # Horizon 1/(1-gamma) = 667 steps against the 800-step episode. lam stays
-      # at 0.9: at 0.95 the GAE window (1/(1-gamma*lam)) runs past
-      # num_steps_per_env, so every advantage leans on the value bootstrap
-      # instead of observed reward.
-      gamma=0.9985,
-      lam=0.9,
-      entropy_coef=BETA_ENTROPY_COEF,
-      # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations
-      # and threw away 71% of the update budget (36.8 of 128 performed).
-      desired_kl=0.1,
-      max_grad_norm=0.5,
-      value_loss_coef=0.5,
-      use_clipped_value_loss=False,
-      clip_param=0.2,
-      normalize_advantage_per_mini_batch=True,
-      optimizer="adam",
-      share_cnn_encoders=False,
+    critic=RslRlModelCfg(**_NETWORK, class_name="MLPModel"),
+    algorithm=_algorithm(
       cache_frozen_features=vision.frozen,
       feature_cache_dtype="bfloat16",
       gradient_accumulation_steps=8,
-      early_stop_kl=True,
     ),
   )
 
