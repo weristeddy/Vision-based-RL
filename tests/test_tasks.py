@@ -421,6 +421,36 @@ def test_push_t_table_touch_is_binary_over_the_whole_robot() -> None:
   )
 
 
+def test_push_t_object_speed_is_planar_and_squared() -> None:
+  from vbrl.tasks.push_t.mdp import object_speed_l2
+
+  velocity = torch.tensor([[0.3, 0.4, 2.0], [0.0, 0.0, 0.0]])
+  obj = SimpleNamespace(data=SimpleNamespace(root_link_lin_vel_w=velocity))
+  env = SimpleNamespace(scene={"object": obj})
+  assert torch.allclose(object_speed_l2(env, "object"), torch.tensor([0.25, 0.0]))
+
+
+def test_push_t_at_goal_static_rewards_a_still_arm_only_at_the_goal() -> None:
+  from mjlab.managers import SceneEntityCfg
+
+  from vbrl.tasks.push_t.mdp import at_goal_static
+  from vbrl.tasks.push_t.mdp.commands import PushTCommand
+
+  command = object.__new__(PushTCommand)
+  command.get_at_goal = lambda: torch.tensor([True, True, False])
+  robot = SimpleNamespace(
+    data=SimpleNamespace(joint_vel=torch.tensor([[0.0, 0.0], [0.3, 0.4], [0.0, 0.0]]))
+  )
+  env = SimpleNamespace(
+    scene={"robot": robot},
+    command_manager=SimpleNamespace(get_term=lambda name: command),
+  )
+  cfg = SceneEntityCfg("robot")
+  cfg.joint_ids = slice(None)
+  expected = torch.tensor([1.0, 1.0 - math.tanh(2.5), 0.0])
+  assert torch.allclose(at_goal_static(env, "push_t_goal", cfg), expected)
+
+
 def test_push_t_at_goal_action_penalty_is_zero_until_the_object_is_placed() -> None:
   from vbrl.tasks.push_t.mdp import at_goal_action_l1
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
@@ -805,6 +835,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "action_path_length",
     "action_rate_l2",
     "at_goal_action",
+    "object_speed",
+    "at_goal_static",
     "table_touch",
     "object_table_press",
     "ee_height_ceiling",
@@ -820,6 +852,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "action_acc_l2" not in cfg.rewards
   assert "joint_vel_hinge" not in cfg.rewards
   assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)
+  assert cfg.rewards["at_goal_static"].weight == pytest.approx(0.5)
+  assert cfg.rewards["object_speed"].weight == 0.0
   assert AT_GOAL_ACTION_WEIGHT == pytest.approx(-0.05)
 
   from vbrl.tasks.push_t.geometry import HALF_HEIGHT

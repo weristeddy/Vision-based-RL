@@ -53,6 +53,8 @@ ACTION_RATE_WEIGHT = -0.002
 # Cut post-success drift 55% (2.33 -> 1.05 mm per step). -0.2 was tried and is wrong:
 # the term cannot distort behaviour *at* goal, but it lowers the goal state's value.
 AT_GOAL_ACTION_WEIGHT = -0.05
+AT_GOAL_STATIC_WEIGHT = 0.5
+OBJECT_SPEED_WEIGHT = 0.0
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
 # Environment steps at num_steps_per_env=16: pinned for 3,000 iterations, then 8
@@ -214,6 +216,19 @@ def build_env_cfg(
       func=mdp.at_goal_action_l1,
       weight=AT_GOAL_ACTION_WEIGHT,
       params={"command_name": _COMMAND},
+    ),
+    "object_speed": RewardTermCfg(
+      func=mdp.object_speed_l2,
+      weight=OBJECT_SPEED_WEIGHT,
+      params={"object_name": object_name},
+    ),
+    "at_goal_static": RewardTermCfg(
+      func=mdp.at_goal_static,
+      weight=AT_GOAL_STATIC_WEIGHT,
+      params={
+        "command_name": _COMMAND,
+        "asset_cfg": SceneEntityCfg("robot", joint_names=robot.arm_actuator_names),
+      },
     ),
     "table_touch": RewardTermCfg(
       func=mdp.table_touch,

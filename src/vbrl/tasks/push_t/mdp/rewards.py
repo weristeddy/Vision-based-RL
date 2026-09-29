@@ -108,6 +108,20 @@ def at_goal_action_l1(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor
   return action * command.get_at_goal().to(action.dtype)
 
 
+def object_speed_l2(env: ManagerBasedRlEnv, object_name: str) -> torch.Tensor:
+  obj: Entity = env.scene[object_name]
+  return torch.sum(torch.square(obj.data.root_link_lin_vel_w[:, :2]), dim=-1)
+
+
+def at_goal_static(
+  env: ManagerBasedRlEnv, command_name: str, asset_cfg: SceneEntityCfg
+) -> torch.Tensor:
+  command = push_t_command(env, command_name)
+  vel = env.scene[asset_cfg.name].data.joint_vel[:, asset_cfg.joint_ids]
+  static = 1.0 - torch.tanh(5.0 * torch.linalg.vector_norm(vel, dim=-1))
+  return static * command.get_at_goal().to(static.dtype)
+
+
 # Zero-set is "do not press down", so pushing stays free at any magnitude --
 # unlike every earlier attempt, whose zero-set was "do not touch the object".
 def object_table_press(
@@ -165,11 +179,13 @@ def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
 __all__ = [
   "action_path_length_l1",
   "at_goal_action_l1",
+  "at_goal_static",
   "at_goal_share",
   "fingertip_height_excess",
   "maniskill_dense_reward",
   "max_contact_force",
   "max_contact_force_on_face",
+  "object_speed_l2",
   "object_table_press",
   "peak_object_press",
   "side_contact_align",
