@@ -52,19 +52,15 @@ EXPECTED_TASK_IDS = frozenset(
     # The same pair on the rig scene: one fixed table texture, no texture DR.
     "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-StateRelative-TrossenIdentified",
-    "Mjlab-PushT-State-TrossenFitted",
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenFitted",
-    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenFitted",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_45_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_41_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 45
+  assert len(EXPECTED_TASK_IDS) == 41
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -102,7 +98,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     seen_external += bool(external)
 
   # Lift-Cube is a wrist-camera task, so its 36 visual IDs declare `cam` alone.
-  assert seen_external == 6
+  assert seen_external == 4
 
 
 def test_every_push_t_arm_widens_the_goal_yaw() -> None:
@@ -118,14 +114,14 @@ def test_every_push_t_arm_widens_the_goal_yaw() -> None:
     cfg = load_env_cfg(task_id)
     command = cfg.commands["push_t_goal"]
     scheduled = "goal_yaw_range" in cfg.curriculum
-    assert scheduled == ("-State" not in task_id), task_id
+    assert scheduled == ("-State-" not in task_id), task_id
     assert command.success_threshold == pytest.approx(0.90), task_id
     # The registered range is always the full circle; the curriculum narrows it
     # at runtime and hands it back, so evaluation is never made easier.
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
     seen += scheduled
 
-  assert seen == 6
+  assert seen == 4
   assert GOAL_YAW_STAGES[0]["half_range"] == 0.0
   assert GOAL_YAW_STAGES[-1]["half_range"] == pytest.approx(math.pi)
   assert GOAL_YAW_STAGES[1]["step"] == 48_000
@@ -150,7 +146,7 @@ def test_every_visual_id_names_a_row_of_the_architecture_table() -> None:
 
   registered = vbrl_task_ids()
   for task_id in registered:
-    if "-State" in task_id:
+    if task_id.endswith(("-State-Trossen", "-State-TrossenIdentified")):
       continue
     token = re.sub(r"^Mjlab-\w+-\w+-|-\w+$", "", task_id)
     assert token in ARCHITECTURES, task_id

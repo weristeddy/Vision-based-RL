@@ -54,11 +54,9 @@ class DeploymentConfig:
   camera_width: int = 424
   camera_height: int = 240
   camera_exposure_us: float | None = None
-  camera_white_balance_k: float | None = None
   command_goal_time_s: float = 0.0
   arm_model: str = "wxai_v0"
   motor_parameters: str = "wxai_v0_20260317"
-  position_kp: tuple[float, ...] | None = None
   motion: Motion = field(default_factory=Motion)
 
   def validate(self) -> None:
@@ -87,25 +85,12 @@ class DeploymentConfig:
         f"camera_exposure_us must be positive or null; got "
         f"{self.camera_exposure_us}."
       )
-    if self.camera_white_balance_k is not None and not (
-      2800.0 <= self.camera_white_balance_k <= 6500.0
-    ):
-      raise ValueError(
-        "camera_white_balance_k must be in [2800, 6500] or null; got "
-        f"{self.camera_white_balance_k}."
-      )
     if self.command_goal_time_s < 0.0:
       raise ValueError(
         f"command_goal_time_s must be >= 0; got {self.command_goal_time_s}."
       )
     if self.control_hz <= 0.0:
       raise ValueError(f"control_hz must be positive; got {self.control_hz}.")
-    if self.position_kp is not None and (
-      len(self.position_kp) != 6 or min(self.position_kp) <= 0.0
-    ):
-      raise ValueError(
-        f"position_kp must be 6 positive values or null; got {self.position_kp}."
-      )
     self.motion.validate()
 
 
@@ -130,9 +115,8 @@ def load_config(path: str | Path) -> DeploymentConfig:
         f"valid are {sorted(known)}."
       )
 
-  for name in ("goal", "position_kp"):
-    if document.get(name) is not None:
-      document[name] = tuple(float(value) for value in document[name])
+  if "goal" in document:
+    document["goal"] = tuple(float(value) for value in document["goal"])
   config = DeploymentConfig(**document, motion=Motion(**motion_fields))
   config.validate()
   return config

@@ -38,10 +38,6 @@ class RealSenseCamera:
       # drives the sensor to saturation -- 42% of pixels pinned at 255 on the first.
       sensor.set_option(rs.option.enable_auto_exposure, 0)
       sensor.set_option(rs.option.exposure, float(config.camera_exposure_us))
-    if config.camera_white_balance_k is not None:
-      # Auto white balance re-neutralizes the wood whenever the room light changes.
-      sensor.set_option(rs.option.enable_auto_white_balance, 0)
-      sensor.set_option(rs.option.white_balance, float(config.camera_white_balance_k))
 
     self._lock = threading.Lock()
     self._frame = self._crop(self._await_frame())

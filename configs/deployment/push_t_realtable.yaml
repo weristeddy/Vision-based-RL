@@ -16,7 +16,7 @@ arm_ip: 192.168.1.2
 goal_space: push_t_xy_yaw
 goal: [0.38442, 0.01567, 0.0124]
 
-camera_exposure_us: 12000
+camera_exposure_us: 7000
 
 control_hz: 50.0
 

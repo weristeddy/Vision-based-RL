@@ -129,7 +129,6 @@ def build_env_cfg(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   action_scale: float = ACTION_SCALE,
-  relative_actions: bool = False,
   episode_length_s: float = 16.0,
   goal_outline: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
@@ -177,13 +176,8 @@ def build_env_cfg(
   cfg.observations["actor"].nan_policy = "sanitize"
   cfg.observations["critic"].nan_policy = "sanitize"
 
-  action = (
-    mdp.MeasuredRelativeJointPositionActionCfg
-    if relative_actions
-    else mdp.TargetRelativeJointPositionActionCfg
-  )
   cfg.actions = {
-    "joint_pos": action(
+    "joint_pos": mdp.TargetRelativeJointPositionActionCfg(
       entity_name="robot",
       actuator_names=robot.arm_actuator_names,
       scale=action_scale,

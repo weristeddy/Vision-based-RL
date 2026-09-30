@@ -1,10 +1,7 @@
 import functools
-from collections.abc import Callable
 
 from mjlab.tasks.registry import register_mjlab_task
 
-from vbrl.asset_zoo.robots.definition import RobotDefinition
-from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_fitted, make_wxai_stiff
 from vbrl.tasks.push_t.push_t_env_cfg import ACTION_SCALE
 from vbrl.training.runner import VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
@@ -32,7 +29,6 @@ def _register(
   goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
-  make_robot: Callable[[], RobotDefinition] = make_wxai_stiff,
 ) -> None:
   env = functools.partial(
     trossen_realistic_push_t_rgb_env_cfg,
@@ -44,7 +40,6 @@ def _register(
     goal_outline=goal_outline,
     real_goal_colour=real_goal_colour,
     goal_observation_noise=goal_observation_noise,
-    make_robot=make_robot,
   )
   register_mjlab_task(
     task_id,
@@ -62,20 +57,6 @@ register_mjlab_task(
   trossen_realistic_push_t_state_env_cfg(),
   trossen_realistic_push_t_state_env_cfg(play=True),
   trossen_realistic_push_t_state_ppo_runner_cfg(),
-  VbrlOnPolicyRunner,
-)
-register_mjlab_task(
-  "Mjlab-PushT-StateRelative-TrossenIdentified",
-  trossen_realistic_push_t_state_env_cfg(relative_actions=True),
-  trossen_realistic_push_t_state_env_cfg(play=True, relative_actions=True),
-  trossen_realistic_push_t_state_ppo_runner_cfg("Mjlab-PushT-StateRelative-TrossenIdentified"),
-  VbrlOnPolicyRunner,
-)
-register_mjlab_task(
-  "Mjlab-PushT-State-TrossenFitted",
-  trossen_realistic_push_t_state_env_cfg(make_robot=make_wxai_fitted),
-  trossen_realistic_push_t_state_env_cfg(play=True, make_robot=make_wxai_fitted),
-  trossen_realistic_push_t_state_ppo_runner_cfg("Mjlab-PushT-State-TrossenFitted"),
   VbrlOnPolicyRunner,
 )
 # The marker is a hollow frame so it cannot read as a second copy of the object,
@@ -118,21 +99,5 @@ _register(
   "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
   "DinoV2ViTS14-Afa6",
   goal_in_observation=False,
-  **_REAL_TABLE,
-)
-
-# The same two scenes on the arm fitted to the rig's own recordings.
-_register(
-  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenFitted",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  make_robot=make_wxai_fitted,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenFitted",
-  "DinoV2ViTS14-Afa6",
-  goal_in_observation=False,
-  make_robot=make_wxai_fitted,
   **_REAL_TABLE,
 )

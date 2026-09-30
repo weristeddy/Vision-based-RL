@@ -5,12 +5,7 @@ from typing import TYPE_CHECKING
 
 import torch
 from mjlab.actuator.actuator import TransmissionType
-from mjlab.envs.mdp.actions.actions import (
-  BaseAction,
-  BaseActionCfg,
-  RelativeJointPositionAction,
-  RelativeJointPositionActionCfg,
-)
+from mjlab.envs.mdp.actions.actions import BaseAction, BaseActionCfg
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -71,30 +66,7 @@ class TargetRelativeJointPositionActionCfg(BaseActionCfg):
     return TargetRelativeJointPositionAction(self, env)
 
 
-class MeasuredRelativeJointPositionAction(RelativeJointPositionAction):
-  def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
-    super().reset(env_ids)
-    ids = slice(None) if env_ids is None else env_ids
-    self._entity.set_joint_position_target(
-      self._entity.data.joint_pos[ids][:, self._target_ids],
-      joint_ids=self._target_ids,
-      env_ids=ids,
-    )
-
-  @property
-  def target(self) -> torch.Tensor:
-    return self._entity.data.joint_pos_target[:, self._target_ids]
-
-
-@dataclass(kw_only=True)
-class MeasuredRelativeJointPositionActionCfg(RelativeJointPositionActionCfg):
-  def build(self, env: ManagerBasedRlEnv) -> MeasuredRelativeJointPositionAction:
-    return MeasuredRelativeJointPositionAction(self, env)
-
-
 __all__ = [
-  "MeasuredRelativeJointPositionAction",
-  "MeasuredRelativeJointPositionActionCfg",
   "TargetRelativeJointPositionAction",
   "TargetRelativeJointPositionActionCfg",
 ]

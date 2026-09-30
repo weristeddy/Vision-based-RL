@@ -45,9 +45,7 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
   )
 
 
-def trossen_realistic_push_t_state_ppo_runner_cfg(
-  task_id: str = STATE_TASK_ID,
-) -> RslRlOnPolicyRunnerCfg:
+def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
@@ -58,11 +56,11 @@ def trossen_realistic_push_t_state_ppo_runner_cfg(
     },
     save_interval=50,
     experiment_name="push_t_state_trossen_realistic_sim2real_dr",
-    run_name=wandb_task_tag(task_id),
+    run_name=wandb_task_tag(STATE_TASK_ID),
     logger="wandb",
     wandb_project="mjlab",
     wandb_tags=(
-      wandb_task_tag(task_id),
+      wandb_task_tag(STATE_TASK_ID),
       "push_t",
       "state",
       "success_90",

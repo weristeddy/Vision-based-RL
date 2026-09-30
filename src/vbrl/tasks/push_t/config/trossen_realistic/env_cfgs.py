@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from functools import partial
 
 from mjlab.entity import EntityCfg
@@ -9,7 +8,7 @@ from mjlab.envs.mdp import dr
 from mjlab.managers import EventTermCfg
 
 from vbrl.asset_zoo.objects import PUSH_T_XML
-from vbrl.asset_zoo.robots.definition import CameraView, RobotDefinition
+from vbrl.asset_zoo.robots.definition import CameraView
 from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_stiff
 from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.push_t.goal_marker import (
@@ -34,18 +33,14 @@ _CAMERA: CameraView = "external"
 
 
 def trossen_realistic_push_t_state_env_cfg(
-  *,
-  play: bool = False,
-  make_robot: Callable[[], RobotDefinition] = make_wxai_stiff,
-  relative_actions: bool = False,
+  *, play: bool = False
 ) -> ManagerBasedRlEnvCfg:
-  robot = make_robot()
+  robot = make_wxai_stiff()
   cfg = build_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,
     play=play,
     action_scale=ACTION_SCALE,
-    relative_actions=relative_actions,
     penalty_ramp=PENALTY_RAMP_STEPS,
   )
   apply_scene(
@@ -72,9 +67,8 @@ def trossen_realistic_push_t_rgb_env_cfg(
   goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
-  make_robot: Callable[[], RobotDefinition] = make_wxai_stiff,
 ) -> ManagerBasedRlEnvCfg:
-  robot = make_robot()
+  robot = make_wxai_stiff()
   cfg = build_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,

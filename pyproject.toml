@@ -112,11 +112,8 @@ deploy = [
 # stay out of rl.sif exactly as before.
 dev = [
   "build>=1.2,<2",
-  "colorama>=0.4.6",
   "mypy>=1.17,<2",
-  "plotly>=7.1.0",
   "ruff>=0.12,<1",
-  "tabulate>=0.10.0",
 ]
 
 [[tool.uv.index]]

@@ -44,26 +44,6 @@ def with_d405(api: Any, standard: Any) -> Any:
   return end_effector
 
 
-def with_position_kp(api: Any, standard: Any, position_kp: Any) -> Any:
-  def pid(source: Any, kp: float | None = None) -> Any:
-    target = api.PIDParameter()
-    target.kp = source.kp if kp is None else kp
-    target.ki, target.kd, target.imax = source.ki, source.kd, source.imax
-    return target
-
-  parameters = []
-  for joint, modes in enumerate(standard):
-    joint_modes = {}
-    for mode, source in modes.items():
-      motor = api.MotorParameter()
-      override = mode == api.Mode.position and joint < len(position_kp)
-      motor.position = pid(source.position, position_kp[joint] if override else None)
-      motor.velocity = pid(source.velocity)
-      joint_modes[mode] = motor
-    parameters.append(joint_modes)
-  return parameters
-
-
 class TrossenArm:
   def __init__(self, config: Any) -> None:
     import trossen_arm
@@ -76,14 +56,9 @@ class TrossenArm:
       config.arm_ip,
       True,  # clear a stale fault so a crashed run can reconnect
     )
-    motor_parameters = getattr(
-      trossen_arm.StandardMotorParameters, config.motor_parameters
+    self._driver.set_motor_parameters(
+      getattr(trossen_arm.StandardMotorParameters, config.motor_parameters)
     )
-    if config.position_kp is not None:
-      motor_parameters = with_position_kp(
-        trossen_arm, motor_parameters, config.position_kp
-      )
-    self._driver.set_motor_parameters(motor_parameters)
     self._motion = config.motion
     # 0 applies each command at once. A linear ramp (0.001 < goal time <= 0.2 s)
     # also drives the joint at the ramp's speed, which the simulator does not model.
@@ -103,9 +78,6 @@ class TrossenArm:
       np.asarray(self._driver.get_all_positions(), dtype=np.float64),
       np.asarray(self._driver.get_all_velocities(), dtype=np.float64),
     )
-
-  def output(self) -> Any:
-    return self._driver.get_robot_output()
 
   def move_to(self, pose: Any, *, seconds: float) -> None:
     pose = np.clip(np.asarray(pose, dtype=np.float64), self._low, self._high)
