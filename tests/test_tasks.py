@@ -48,7 +48,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 41
+  assert len(task_ids) == 44
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     visual = agent.actor.cnn_cfg is not None
@@ -847,8 +847,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["side_contact_align"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["action_path_length"].weight == pytest.approx(-0.002)
   assert ACTION_PATH_LENGTH_WEIGHT == pytest.approx(-0.002)
-  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
-  assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
+  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.02)
+  assert ACTION_RATE_WEIGHT == pytest.approx(-0.02)
   assert "action_acc_l2" not in cfg.rewards
   assert "joint_vel_hinge" not in cfg.rewards
   assert cfg.rewards["at_goal_action"].weight == pytest.approx(-0.05)

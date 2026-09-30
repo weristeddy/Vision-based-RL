@@ -114,6 +114,11 @@ def _parser() -> argparse.ArgumentParser:
   parser.add_argument("--num-envs", type=int, default=1)
   parser.add_argument("--seed", type=int, default=0)
   parser.add_argument("--no-terminations", action="store_true")
+  parser.add_argument(
+    "--action-scale",
+    type=float,
+    help="The run's --env.actions.joint-pos.scale when it overrode the registered one.",
+  )
   parser.add_argument("--host", default="0.0.0.0")
   parser.add_argument("--port", type=int, default=8080)
   parser.add_argument("--frame-rate", type=float, default=60.0)
@@ -233,6 +238,7 @@ def main(argv: Sequence[str] | None = None) -> int:
       scene=args.scene,
       eval_dr=args.eval_dr or "fixed",
       drop_terminations=args.no_terminations,
+      action_scale=args.action_scale,
       # One shot of many envs is lit by whichever env the recorder makes primary, so a
       # randomized sun colour would tint every recording differently.
       fixed_lighting=args.record is not None,

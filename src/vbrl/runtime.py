@@ -167,6 +167,7 @@ def build_env(
   auto_reset: bool | None = None,
   drop_terminations: bool = False,
   fixed_lighting: bool = False,
+  action_scale: float | None = None,
 ) -> Any:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
@@ -189,6 +190,8 @@ def build_env(
     cfg.auto_reset = auto_reset
   if drop_terminations:
     cfg.terminations = {}
+  if action_scale is not None:
+    cfg.actions["joint_pos"].scale = action_scale
   return ManagerBasedRlEnv(cfg=cfg, device=device)
 
 

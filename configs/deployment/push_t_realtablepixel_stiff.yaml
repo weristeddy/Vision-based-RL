@@ -1,0 +1,26 @@
+version: 1
+
+# W&B run rtu81ivl, iteration 10000: stiff arm, target-relative actions at
+# 0.02, at-goal stillness reward, T speed penalty. Sim: 0.81 episode success
+# over the last 200 iterations before 11,700. RealTablePixel, pixel-only
+# (29 inputs, no target_pose), so it needs the hollow outline marker.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_realtablepixel_tspeed_stiff_10000.onnx
+
+arm_ip: 192.168.1.2
+
+# Not read by the policy: the goal reaches it only through the marker. Kept
+# because the schema range-checks it and the trace logs it.
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+# Re-probe before a session: python -m vbrl.deployment.camera
+camera_exposure_us: 7000
+
+control_hz: 50.0
+
+motion:
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 8.0
+  home_seconds: 3.0

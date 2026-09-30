@@ -87,9 +87,12 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   assert agent.actor.hidden_dims == (256, 256, 128)
   assert agent.actor.activation == "relu"
   assert agent.actor.distribution_cfg == {
-    "class_name": "BetaDistribution",
-    "action_range": pytest.approx((-1.0, 1.0)),
+    "class_name": "GaussianDistribution",
+    "init_std": pytest.approx(0.6065306597),
+    "std_type": "log",
+    "std_range": pytest.approx((0.05, 1.0)),
   }
+  assert agent.algorithm.entropy_coef == pytest.approx(0.001)
   assert isinstance(agent.algorithm, VisualPpoCfg)
   assert agent.algorithm.cache_frozen_features is True
   assert agent.algorithm.feature_cache_dtype == "bfloat16"

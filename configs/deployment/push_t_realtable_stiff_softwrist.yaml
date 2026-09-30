@@ -1,0 +1,30 @@
+version: 1
+
+# W&B run q0yd31jj, iteration 10000: stiff arm, target-relative actions at
+# 0.02, at-goal stillness reward. Sim: 0.86 episode success over the last 200
+# iterations before 12,000. RealTable, goal-conditioned (34 inputs + camera).
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_realtable_stiff_10000.onnx
+
+arm_ip: 192.168.1.2
+
+# An input: target_pose is in the observation, so these numbers and the
+# marker on the table must agree. Re-solve after moving it:
+#   python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+# Re-probe before a session: python -m vbrl.deployment.camera
+camera_exposure_us: 9000
+
+control_hz: 50.0
+
+# The SDK's position loop closes the wrist in 12.5/25/25 ms; the stiff model the
+# policy trained on takes 50/100/100 ms (kv/kp). Joints 0-2 already match (62 vs 50).
+position_kp: [16.0, 16.0, 16.0, 20.0, 10.0, 10.0]
+
+motion:
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 8.0
+  home_seconds: 3.0

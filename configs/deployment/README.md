@@ -20,9 +20,39 @@ signal.
 
 | marker | drawn as | policies |
 | --- | --- | --- |
-| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable_g4`, `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
+| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable_stiff`, `realtablepixel_stiff`, `realtable_g4`, `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
 | **Filled** | solid green T, the same two boxes as the object | `pixelgoal_fixed`, `visualslowstep` |
 | none | — | `lift_cube` |
+
+## Stiff arm, 10,000 iterations
+
+Trained on `wxai_stiff.xml` at a 0.02 per-step cap with the at-goal stillness
+reward. Hollow outline marker for both.
+
+```bash
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_stiff.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_stiff.yaml --max-steps 1000 --log artifacts/deployment/realtable_stiff_run1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel_stiff.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel_stiff.yaml --max-steps 1000 --log artifacts/deployment/realtablepixel_stiff_run1.npz
+```
+
+| manifest | W&B | goal signal | exposure | sim success |
+| --- | --- | --- | --- | --- |
+| `push_t_realtable_stiff` | `q0yd31jj` | `target_pose` + marker | 7000 us, re-probe | 0.86 during training |
+| `push_t_realtablepixel_stiff` | `rtu81ivl` | marker only | 7000 us, re-probe | 0.81 during training |
+
+These runs overrode the registered 0.03 cap with
+`--env.actions.joint-pos.scale 0.02`, so `vbrl-play` and `vbrl-export-onnx`
+need `--action-scale 0.02` for them; the manifests' ONNX files carry 0.02.
+
+```bash
+uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/q0yd31jj \
+  --wandb-checkpoint-name model_10000.pt --action-scale 0.02 --num-envs 4
+uv run --no-sync vbrl-play Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/rtu81ivl \
+  --wandb-checkpoint-name model_10000.pt --action-scale 0.02 --num-envs 4
+```
 
 ## Identified arm, target-relative control
 

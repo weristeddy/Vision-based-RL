@@ -46,10 +46,10 @@ OBJECT_PRESS_SCALE_N = 5.0
 # 5.4% of task reward on the behaviour it corrects -- the largest penalty here,
 # intended: it is the only one the policy can zero out without giving up the task.
 OBJECT_PRESS_WEIGHT = -0.01
-# `action_rate_l2` is upstream Lift-Cube's -0.01 at a fifth, because for a Gaussian
-# policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
 ACTION_PATH_LENGTH_WEIGHT = -0.002
-ACTION_RATE_WEIGHT = -0.002
+# At -0.002 it was under 1% of the return, so a mean action that reversed every step
+# cost nothing and chattered on hardware. Ramped in with the other penalties.
+ACTION_RATE_WEIGHT = -0.02
 # Cut post-success drift 55% (2.33 -> 1.05 mm per step). -0.2 was tried and is wrong:
 # the term cannot distort behaviour *at* goal, but it lowers the goal state's value.
 AT_GOAL_ACTION_WEIGHT = -0.05

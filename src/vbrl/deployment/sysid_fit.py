@@ -9,7 +9,7 @@ JOINTS = tuple(f"joint_{i}" for i in range(6))
 SENSORS = tuple(f"{joint}_{kind}" for kind in ("pos", "vel") for joint in JOINTS)
 TIMESTEP = 0.005
 WINDOW_S = 4.0
-SENSOR_HZ = 100.0
+SENSOR_HZ = 200.0
 MAX_DELAY_S = 0.04
 SCALE = np.r_[np.full(6, 0.005), np.full(6, 0.1)]
 
@@ -132,12 +132,15 @@ def main() -> None:
 
   parser = argparse.ArgumentParser()
   parser.add_argument("--fit", nargs="+", type=Path, default=[
-    Path("artifacts/deployment/sysid_run0.npz"), Path("artifacts/deployment/sysid_run1.npz"),
+    Path("artifacts/deployment/sysid_run0.npz"),
+    Path("artifacts/deployment/sysid_run1.npz"),
+    Path("artifacts/deployment/sysid_broadband0.npz"),
   ])
   parser.add_argument("--holdout", nargs="+", type=Path, default=[
     Path("artifacts/deployment/sysid_run2.npz"),
     Path("artifacts/deployment/sysid_task0.npz"),
     Path("artifacts/deployment/sysid_task1.npz"),
+    Path("artifacts/deployment/sysid_broadband1.npz"),
   ])
   parser.add_argument("--out", type=Path, default=Path("artifacts/sysid/trossen_identified"))
   parser.add_argument("--max-iters", type=int, default=100)

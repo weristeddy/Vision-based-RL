@@ -56,6 +56,7 @@ class DeploymentConfig:
   camera_exposure_us: float | None = None
   arm_model: str = "wxai_v0"
   motor_parameters: str = "wxai_v0_20260317"
+  position_kp: tuple[float, ...] | None = None
   motion: Motion = field(default_factory=Motion)
 
   def validate(self) -> None:
@@ -86,6 +87,12 @@ class DeploymentConfig:
       )
     if self.control_hz <= 0.0:
       raise ValueError(f"control_hz must be positive; got {self.control_hz}.")
+    if self.position_kp is not None and (
+      len(self.position_kp) != 6 or min(self.position_kp) <= 0.0
+    ):
+      raise ValueError(
+        f"position_kp must be 6 positive values or null; got {self.position_kp}."
+      )
     self.motion.validate()
 
 
@@ -110,8 +117,9 @@ def load_config(path: str | Path) -> DeploymentConfig:
         f"valid are {sorted(known)}."
       )
 
-  if "goal" in document:
-    document["goal"] = tuple(float(value) for value in document["goal"])
+  for name in ("goal", "position_kp"):
+    if document.get(name) is not None:
+      document[name] = tuple(float(value) for value in document[name])
   config = DeploymentConfig(**document, motion=Motion(**motion_fields))
   config.validate()
   return config

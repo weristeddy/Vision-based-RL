@@ -24,6 +24,7 @@ def main(argv: Sequence[str] | None = None) -> int:
   parser.add_argument("--wandb-checkpoint-name", help="model_N.pt")
   parser.add_argument("--output", required=True, help="must be below ckpts/")
   parser.add_argument("--device", default="cuda:0")
+  parser.add_argument("--action-scale", type=float)
   arguments = parser.parse_args(argv)
 
   ref = CheckpointRef.from_args(arguments)
@@ -31,7 +32,13 @@ def main(argv: Sequence[str] | None = None) -> int:
   destination = checkpoint_path(arguments.output)
   destination.parent.mkdir(parents=True, exist_ok=True)
 
-  env = build_env(arguments.task_id, device=arguments.device, num_envs=1, seed=0)
+  env = build_env(
+    arguments.task_id,
+    device=arguments.device,
+    num_envs=1,
+    seed=0,
+    action_scale=arguments.action_scale,
+  )
   _, runner, _, path = load_trained_policy(
     env, task_id=arguments.task_id, device=arguments.device, ref=ref
   )

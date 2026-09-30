@@ -16,7 +16,7 @@ goal: [0.38442, 0.01567, 0.0124]
 
 # Re-probe before a session (python -m vbrl.deployment.camera): the real-table
 # appearance was corrected on 2026-09-23, so older exposures do not carry over.
-camera_exposure_us: 7000
+camera_exposure_us: 9000
 
 control_hz: 50.0
 

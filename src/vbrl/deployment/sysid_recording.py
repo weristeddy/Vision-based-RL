@@ -19,6 +19,8 @@ PERIOD_S = 10.0
 PERIODS = 2
 HARMONICS = np.arange(1, 25)
 FADE_S = 2.0
+RANDOM_S = 20.0
+PULL = 0.05
 MAX_STEP = 0.03
 TRANSITION_STEP = 0.01
 MIN_HEIGHT_M = 0.04
@@ -37,6 +39,18 @@ def multisine(rng, control_hz: float):
   wave *= np.minimum(AMPLITUDE / np.abs(wave).max(0), MAX_STEP / np.abs(np.diff(wave, axis=0)).max(0))
   envelope = np.sin(0.5 * np.pi * np.clip(np.minimum(t, t[-1] - t) / FADE_S, 0, 1)) ** 2
   return wave * envelope[:, None]
+
+
+def random_walk(rng, control_hz: float):
+  offset, walk = np.zeros(6), []
+  for step in rng.uniform(-1.0, 1.0, (int(RANDOM_S * control_hz), 6)):
+    offset = (1.0 - PULL) * offset + step
+    walk.append(offset)
+  walk = np.array(walk)
+  t = np.arange(len(walk)) / control_hz
+  envelope = np.sin(0.5 * np.pi * np.clip(np.minimum(t, t[-1] - t) / FADE_S, 0, 1)) ** 2
+  walk *= envelope[:, None]
+  return walk * MAX_STEP / np.abs(np.diff(walk, axis=0)).max()
 
 
 def transition(start, stop):
@@ -71,20 +85,23 @@ def make_check():
   return safe
 
 
-def trajectory(seed: int, control_hz: float, safe):
+def trajectory(seed: int, control_hz: float, safe, broadband: bool = False):
   rng = np.random.default_rng(seed)
   home = np.array(POSES["home"])
   parts, scales = [home[None]], {}
   for name, pose in POSES.items():
     pose = np.array(pose)
     parts.append(transition(parts[-1][-1], pose))
-    for level in LEVELS:
-      wave = level * multisine(rng, control_hz)
+    if broadband:
+      segments = [random_walk(rng, control_hz)]
+    else:
+      segments = [level * multisine(rng, control_hz) for level in LEVELS]
+    for index, wave in enumerate(segments):
       scale = next((s for s in np.linspace(1.0, 0.1, 10) if safe(pose + s * wave)), None)
       if scale is None:
         raise ValueError(f"No safe amplitude around the {name} pose.")
       parts.append(pose + scale * wave)
-      scales[name, level] = scale
+      scales[name, index] = scale
   parts.append(transition(parts[-1][-1], home))
   targets = np.concatenate(parts)
   if not safe(targets):
@@ -148,13 +165,16 @@ def main() -> None:
   parser.add_argument("manifest")
   parser.add_argument("--out", default="artifacts/deployment/sysid_run0.npz")
   parser.add_argument("--seed", type=int, default=0)
+  parser.add_argument("--broadband", action="store_true")
   parser.add_argument("--check", action="store_true")
   arguments = parser.parse_args()
 
   config = load_config(arguments.manifest)
-  targets, scales = trajectory(arguments.seed, config.control_hz, make_check())
-  for (name, level), scale in scales.items():
-    print(f"{name:<6} level {level:<5} amplitude x{scale:.1f}")
+  targets, scales = trajectory(
+    arguments.seed, config.control_hz, make_check(), arguments.broadband
+  )
+  for (name, index), scale in scales.items():
+    print(f"{name:<6} segment {index} amplitude x{scale:.1f}")
   step = np.abs(np.diff(targets, axis=0)).max(0)
   print(
     f"{len(targets) / config.control_hz:.0f} s; largest step {np.round(step, 3).tolist()} rad; "
