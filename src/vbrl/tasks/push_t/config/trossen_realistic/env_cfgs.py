@@ -37,6 +37,7 @@ def trossen_realistic_push_t_state_env_cfg(
   *,
   play: bool = False,
   make_robot: Callable[[], RobotDefinition] = make_wxai_stiff,
+  relative_actions: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   robot = make_robot()
   cfg = build_env_cfg(
@@ -44,6 +45,7 @@ def trossen_realistic_push_t_state_env_cfg(
     object_name=_OBJECT_NAME,
     play=play,
     action_scale=ACTION_SCALE,
+    relative_actions=relative_actions,
     penalty_ramp=PENALTY_RAMP_STEPS,
   )
   apply_scene(

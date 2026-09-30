@@ -65,6 +65,13 @@ register_mjlab_task(
   VbrlOnPolicyRunner,
 )
 register_mjlab_task(
+  "Mjlab-PushT-StateRelative-TrossenIdentified",
+  trossen_realistic_push_t_state_env_cfg(relative_actions=True),
+  trossen_realistic_push_t_state_env_cfg(play=True, relative_actions=True),
+  trossen_realistic_push_t_state_ppo_runner_cfg("Mjlab-PushT-StateRelative-TrossenIdentified"),
+  VbrlOnPolicyRunner,
+)
+register_mjlab_task(
   "Mjlab-PushT-State-TrossenFitted",
   trossen_realistic_push_t_state_env_cfg(make_robot=make_wxai_fitted),
   trossen_realistic_push_t_state_env_cfg(play=True, make_robot=make_wxai_fitted),
