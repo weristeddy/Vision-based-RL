@@ -73,7 +73,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg(
       "success_90",
       "sim2real_dr",
     ),
-    clip_actions=None,
+    clip_actions=1.0,
     upload_model=True,
     actor=RslRlModelCfg(**_NETWORK, distribution_cfg=_GAUSSIAN, class_name="MLPModel"),
     critic=RslRlModelCfg(**_NETWORK, class_name="MLPModel"),
@@ -115,7 +115,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "goal_yaw_curriculum",
       "visual_goal",
     ),
-    clip_actions=None,
+    clip_actions=1.0,
     upload_model=True,
     actor=RslRlModelCfg(
       **_NETWORK,

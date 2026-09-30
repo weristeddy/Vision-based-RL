@@ -98,7 +98,7 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   assert agent.algorithm.feature_cache_dtype == "bfloat16"
   assert agent.algorithm.gradient_accumulation_steps == 8
   assert agent.algorithm.early_stop_kl is True
-  assert agent.clip_actions is None
+  assert agent.clip_actions == pytest.approx(1.0)
 
 
 def test_push_t_state_trains_like_the_vision_policy() -> None:
