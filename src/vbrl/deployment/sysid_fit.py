@@ -11,6 +11,7 @@ TIMESTEP = 0.005
 WINDOW_S = 4.0
 SENSOR_HZ = 200.0
 MAX_DELAY_S = 0.04
+HOLD_EDGE_S = 1e-4
 SCALE = np.r_[np.full(6, 0.005), np.full(6, 0.1)]
 
 
@@ -18,7 +19,8 @@ def load(path: Path):
   data = np.load(path)
   return (
     data["command_time"], data["sent"], data["sample_time"],
-    data["positions"], data["velocities"], float(data["goal_time"]),
+    data["positions"], data["velocities"],
+    1.0 / float(data["control_hz"]), float(data["goal_time"]),
   )
 
 
@@ -45,19 +47,24 @@ def make_spec():
 def windows(path: Path, model):
   from mujoco import sysid
 
-  command_time, sent, sample_time, positions, velocities, goal_time = load(path)
+  command_time, sent, sample_time, positions, velocities, period, goal_time = load(path)
   measured = np.c_[positions[:, :6], velocities[:, :6]]
-  per_window = int(round(WINDOW_S / goal_time))
+  per_window = int(round(WINDOW_S / period))
   grid = np.arange(1, int(WINDOW_S * SENSOR_HZ)) / SENSOR_HZ
   gaps = np.diff(command_time)
   for start in range(1, len(command_time) - per_window, per_window):
     stop = start + per_window
-    if np.abs(gaps[start - 1 : stop] - goal_time).max() > 0.015:
+    if np.abs(gaps[start - 1 : stop] - period).max() > 0.015:
       continue
     t0 = command_time[start]
-    control = sysid.TimeSeries(
-      np.r_[0.0, command_time[start:stop] - t0 + goal_time], sent[start - 1 : stop]
-    )
+    times = command_time[start:stop] - t0
+    if goal_time > 0.0:
+      control = sysid.TimeSeries(np.r_[0.0, times + goal_time], sent[start - 1 : stop])
+    else:
+      control = sysid.TimeSeries(
+        np.stack((times, times + HOLD_EDGE_S), 1).ravel(),
+        np.stack((sent[start - 1 : stop - 1], sent[start:stop]), 1).reshape(-1, sent.shape[1]),
+      )
     data = np.stack([np.interp(t0 + grid, sample_time, column) for column in measured.T], 1)
     sensors = sysid.TimeSeries.from_names(grid, data, model, names=list(SENSORS))
     qpos, qvel = np.zeros(model.nq), np.zeros(model.nv)

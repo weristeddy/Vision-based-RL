@@ -146,7 +146,7 @@ def record(config, targets, out: Path) -> None:
     np.savez(
       out,
       control_hz=config.control_hz,
-      goal_time=period,
+      goal_time=config.command_goal_time_s,
       command_time=command_time[:commands],
       sent=sent[:commands],
       sample_time=sample_time[:count],

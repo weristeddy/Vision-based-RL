@@ -55,6 +55,7 @@ class DeploymentConfig:
   camera_height: int = 240
   camera_exposure_us: float | None = None
   camera_white_balance_k: float | None = None
+  command_goal_time_s: float = 0.0
   arm_model: str = "wxai_v0"
   motor_parameters: str = "wxai_v0_20260317"
   position_kp: tuple[float, ...] | None = None
@@ -92,6 +93,10 @@ class DeploymentConfig:
       raise ValueError(
         "camera_white_balance_k must be in [2800, 6500] or null; got "
         f"{self.camera_white_balance_k}."
+      )
+    if self.command_goal_time_s < 0.0:
+      raise ValueError(
+        f"command_goal_time_s must be >= 0; got {self.command_goal_time_s}."
       )
     if self.control_hz <= 0.0:
       raise ValueError(f"control_hz must be positive; got {self.control_hz}.")

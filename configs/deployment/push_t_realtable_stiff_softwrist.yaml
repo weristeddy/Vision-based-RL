@@ -14,7 +14,10 @@ goal_space: push_t_xy_yaw
 goal: [0.38442, 0.01567, 0.0124]
 
 # Re-probe before a session: python -m vbrl.deployment.camera
-camera_exposure_us: 9000
+# Matched to the sim's table colour (201/143/92) on 2026-09-30: auto white
+# balance rendered the wood neutral grey, a colour the policy never saw.
+camera_exposure_us: 6000
+camera_white_balance_k: 5700
 
 control_hz: 50.0
 

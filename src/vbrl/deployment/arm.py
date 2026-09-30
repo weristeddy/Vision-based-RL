@@ -85,7 +85,9 @@ class TrossenArm:
       )
     self._driver.set_motor_parameters(motor_parameters)
     self._motion = config.motion
-    self._goal_time = 1.0 / config.control_hz
+    # 0 applies each command at once. A linear ramp (0.001 < goal time <= 0.2 s)
+    # also drives the joint at the ramp's speed, which the simulator does not model.
+    self._goal_time = config.command_goal_time_s
 
     limits = self._driver.get_joint_limits()
     self._low = np.array([limit.position_min for limit in limits])

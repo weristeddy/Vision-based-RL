@@ -50,12 +50,20 @@ class TargetRelativeJointPositionAction(BaseAction):
 
   def apply_actions(self) -> None:
     self._substep += 1
-    setpoint = torch.lerp(self._previous, self._target, self._substep / self._substeps)
+    setpoint = (
+      torch.lerp(self._previous, self._target, self._substep / self._substeps)
+      if self.cfg.interpolate
+      else self._target
+    )
     self._entity.set_joint_position_target(setpoint, joint_ids=self._target_ids)
 
 
 @dataclass(kw_only=True)
 class TargetRelativeJointPositionActionCfg(BaseActionCfg):
+  # False holds the new target for the whole step, as the Trossen SDK applies a
+  # command sent with goal time 0.
+  interpolate: bool = True
+
   def __post_init__(self) -> None:
     self.transmission_type = TransmissionType.JOINT
 
