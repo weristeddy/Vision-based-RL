@@ -145,12 +145,12 @@
                   <body name="camera_mount_d405" pos="0.012 0 0">
                     <inertial pos="0.0302338 0.00679835 0.0500669" quat="0.501514 0.851949 0.0948108 -0.116954"
                       mass="0.0451801" diaginertia="3.52003e-05 2.55005e-05 1.80592e-05"/>
-                    <geom class="visual" group="1" mesh="camera_mount_d405"/>
+                    <geom class="visual" mesh="camera_mount_d405"/>
                     <geom class="collision" mesh="camera_mount_d405_collision"/>
                     <geom class="collision" mesh="camera_mount_d405_collision.001"/>
                     <body name="camera_link" pos="0.046650 0.009 0.054272" quat="0.984808 0 0.173648 0">
                       <inertial pos="0 0 0" mass="0.072" diaginertia="2.117e-05 1.3758e-05 1.3758e-05"/>
-                      <geom pos="0.0038 -0.009 0" quat="0.5 0.5 0.5 0.5" class="visual" group="1" mesh="d405"/>
+                      <geom pos="0.0038 -0.009 0" quat="0.5 0.5 0.5 0.5" class="visual" mesh="d405"/>
                       <geom class="collision" type="box" size="0.0115 0.021 0.021" pos="-0.0078 -0.009 0"/>
                     </body>
                   </body>
