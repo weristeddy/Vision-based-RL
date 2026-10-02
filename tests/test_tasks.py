@@ -818,6 +818,16 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert len(action.actuator_names) == 6
   assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.03)
   assert action.clip is None
+  # Held, like the deployment's goal-time-0 command at the same 50 Hz, on the arm
+  # whose gains and friction were measured on the rig.
+  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML
+  from vbrl.deployment.config import DeploymentConfig
+
+  assert action.interpolate is False
+  deployment = DeploymentConfig(onnx_file="", arm_ip="")
+  assert deployment.command_goal_time_s == 0.0
+  assert deployment.control_hz == 1.0 / (cfg.sim.mujoco.timestep * cfg.decimation)
+  assert cfg.scene.entities["robot"].spec_fn.args[0] == str(WXAI_MEASURED_XML)
   assert {
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
     for name in definition.closed_gripper_joint_pos

@@ -182,6 +182,9 @@ def build_env_cfg(
       actuator_names=robot.arm_actuator_names,
       scale=action_scale,
       preserve_order=True,
+      # The deployment sends each target with goal time 0, which the controller
+      # applies at once and holds until the next one.
+      interpolate=False,
     )
   }
   cfg.commands = {
