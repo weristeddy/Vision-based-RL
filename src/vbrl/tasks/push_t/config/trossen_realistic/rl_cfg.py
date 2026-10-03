@@ -15,6 +15,12 @@ _NETWORK = {
   "obs_normalization": True,
 }
 _BETA = {"class_name": "BetaDistribution", "action_range": (-1.0, 1.0)}
+_GAUSSIAN = {
+  "class_name": "GaussianDistribution",
+  "init_std": 0.6065306597,
+  "std_type": "log",
+  "std_range": (0.05, 1.0),
+}
 
 
 def _algorithm(**vision_batching) -> VisualPpoCfg:
@@ -66,9 +72,11 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       "success_90",
       "sim2real_dr",
     ),
-    clip_actions=None,
+    clip_actions=1.0,
     upload_model=True,
-    actor=RslRlModelCfg(**_NETWORK, distribution_cfg=_BETA, class_name="MLPModel"),
+    actor=RslRlModelCfg(
+      **_NETWORK, distribution_cfg=_GAUSSIAN, class_name="MLPModel"
+    ),
     critic=RslRlModelCfg(**_NETWORK, class_name="MLPModel"),
     algorithm=_algorithm(),
   )
