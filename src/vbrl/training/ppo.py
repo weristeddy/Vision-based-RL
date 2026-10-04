@@ -20,6 +20,7 @@ class VisualPpoCfg(RslRlPpoAlgorithmCfg):
   entropy_coef_final: float | None = None
   entropy_decay_start: int = 0
   entropy_decay_iterations: int = 0
+  bound_loss_coef: float = 0.0
   class_name: str = "vbrl.training.ppo:VisualPPO"
 
 
@@ -56,9 +57,11 @@ class VisualPPO(PPO):
     entropy_coef_final: float | None = None,
     entropy_decay_start: int = 0,
     entropy_decay_iterations: int = 0,
+    bound_loss_coef: float = 0.0,
     **kwargs,
   ) -> None:
     super().__init__(*args, **kwargs)
+    self.bound_loss_coef = float(bound_loss_coef)
     self.initial_entropy_coef = float(self.entropy_coef)
     self.entropy_coef_final = entropy_coef_final
     self.entropy_decay_start = int(entropy_decay_start)
@@ -148,6 +151,7 @@ class VisualPPO(PPO):
     mean_entropy = 0.0
     mean_approx_kl = 0.0
     mean_clip_fraction = 0.0
+    mean_saturation = 0.0
     performed_updates = 0
     diagnostic_batches = 0
     stopped_early = False
@@ -172,6 +176,7 @@ class VisualPPO(PPO):
       logical_value = 0.0
       logical_surrogate = 0.0
       logical_entropy = 0.0
+      logical_saturation = 0.0
       logical_kl = torch.zeros((), device=self.device)
       logical_approx_kl = torch.zeros((), device=self.device)
       logical_clip_fraction = torch.zeros((), device=self.device)
@@ -225,15 +230,23 @@ class VisualPPO(PPO):
         else:
           value_loss = (returns - values).pow(2).mean()
         entropy_mean = entropy.mean()
+        # Only the part of the mean past the action bound: the deployed action is
+        # the mean, and one that lives in the clip is a bang-bang controller.
+        action_mean = self.actor.output_mean
+        excess = (action_mean.abs() - 1.0).clamp(min=0.0)
         loss = (
           surrogate_loss
           + self.value_loss_coef * value_loss
           - self.entropy_coef * entropy_mean
+          + self.bound_loss_coef * excess.pow(2).sum(dim=-1).mean()
         )
         (loss / self.gradient_accumulation_steps).backward()
         logical_value += value_loss.item() / self.gradient_accumulation_steps
         logical_surrogate += surrogate_loss.item() / self.gradient_accumulation_steps
         logical_entropy += entropy_mean.item() / self.gradient_accumulation_steps
+        logical_saturation += (
+          (excess > 0.0).float().mean().item() / self.gradient_accumulation_steps
+        )
 
       if self.is_multi_gpu:
         torch.distributed.all_reduce(logical_approx_kl)
@@ -284,6 +297,7 @@ class VisualPPO(PPO):
       mean_value_loss += logical_value
       mean_surrogate_loss += logical_surrogate
       mean_entropy += logical_entropy
+      mean_saturation += logical_saturation
       performed_updates += 1
 
     self.storage.clear()
@@ -297,6 +311,7 @@ class VisualPPO(PPO):
       "clip_fraction": mean_clip_fraction / diagnostics,
       "performed_updates": float(performed_updates),
       "kl_stopped_early": float(stopped_early),
+      "mean_action_saturation": mean_saturation / updates,
     }
 
   @staticmethod
