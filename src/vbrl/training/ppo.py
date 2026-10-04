@@ -21,6 +21,7 @@ class VisualPpoCfg(RslRlPpoAlgorithmCfg):
   entropy_decay_start: int = 0
   entropy_decay_iterations: int = 0
   bound_loss_coef: float = 0.0
+  action_head_init_scale: float | None = None
   class_name: str = "vbrl.training.ppo:VisualPPO"
 
 
@@ -58,10 +59,15 @@ class VisualPPO(PPO):
     entropy_decay_start: int = 0,
     entropy_decay_iterations: int = 0,
     bound_loss_coef: float = 0.0,
+    action_head_init_scale: float | None = None,
     **kwargs,
   ) -> None:
     super().__init__(*args, **kwargs)
     self.bound_loss_coef = float(bound_loss_coef)
+    if action_head_init_scale is not None:
+      with torch.no_grad():
+        self.actor.mlp[-1].weight.mul_(action_head_init_scale)
+        self.actor.mlp[-1].bias.zero_()
     self.initial_entropy_coef = float(self.entropy_coef)
     self.entropy_coef_final = entropy_coef_final
     self.entropy_decay_start = int(entropy_decay_start)
@@ -115,7 +121,11 @@ class VisualPPO(PPO):
   def update(self) -> dict[str, float]:
     self.entropy_coef = self.scheduled_entropy_coef(self.iteration)
     self.iteration += 1
-    if self.gradient_accumulation_steps == 1 and not self.early_stop_kl:
+    if (
+      self.gradient_accumulation_steps == 1
+      and not self.early_stop_kl
+      and not self.bound_loss_coef
+    ):
       losses = super().update()
     else:
       losses = self._update_with_gradient_accumulation()
@@ -230,8 +240,6 @@ class VisualPPO(PPO):
         else:
           value_loss = (returns - values).pow(2).mean()
         entropy_mean = entropy.mean()
-        # Only the part of the mean past the action bound: the deployed action is
-        # the mean, and one that lives in the clip is a bang-bang controller.
         action_mean = self.actor.output_mean
         excess = (action_mean.abs() - 1.0).clamp(min=0.0)
         loss = (

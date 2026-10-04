@@ -7,19 +7,16 @@ from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
-BETA_ENTROPY_COEF = 0.02
 _RGB_MAX_ITERATIONS = 6000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
   "activation": "relu",
   "obs_normalization": True,
 }
-_BETA = {"class_name": "BetaDistribution", "action_range": (-1.0, 1.0)}
 _GAUSSIAN = {
   "class_name": "GaussianDistribution",
   "init_std": 0.6065306597,
   "std_type": "log",
-  "std_range": (0.05, 1.0),
 }
 
 
@@ -35,7 +32,9 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
     # instead of observed reward.
     gamma=0.9985,
     lam=0.9,
-    entropy_coef=BETA_ENTROPY_COEF,
+    entropy_coef=0.0,
+    action_head_init_scale=0.01,
+    bound_loss_coef=0.1,
     # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations
     # and threw away 71% of the update budget (36.8 of 128 performed).
     desired_kl=0.1,
@@ -116,7 +115,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "goal_yaw_curriculum",
       "visual_goal",
     ),
-    clip_actions=None,
+    clip_actions=1.0,
     upload_model=True,
     actor=RslRlModelCfg(
       **_NETWORK,
@@ -124,7 +123,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
         "vision": vision_data,
         "latent_batchnorm": False,
       },
-      distribution_cfg=_BETA,
+      distribution_cfg=_GAUSSIAN,
       class_name="vbrl.vision.model:VisionModel",
     ),
     critic=RslRlModelCfg(**_NETWORK, class_name="MLPModel"),
