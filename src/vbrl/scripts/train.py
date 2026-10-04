@@ -33,6 +33,8 @@ class TrainConfig(MjlabTrainConfig):
   """Weight of MJLab's `action_rate_l2`."""
   object_press_weight: float | None = None
   """Weight of the downward-press penalty."""
+  joint_vel_weight: float | None = None
+  """Weight of MJLab's `joint_vel_l2` on the arm joints."""
   goal_yaw_pin_iterations: int | None = None
   """Iterations the goal yaw stays pinned before the range starts widening."""
   goal_yaw_rungs: int | None = None
@@ -49,6 +51,7 @@ def _retune_penalty_weights(cfg: TrainConfig) -> None:
   overrides = (
     ("action_rate_l2", "--action-rate-weight", cfg.action_rate_weight),
     ("object_table_press", "--object-press-weight", cfg.object_press_weight),
+    ("joint_vel_l2", "--joint-vel-weight", cfg.joint_vel_weight),
   )
   for name, flag, weight in overrides:
     if weight is None:

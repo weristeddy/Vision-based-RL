@@ -45,6 +45,7 @@ def test_train_config_exposes_the_flags_sweeps_and_cluster_scripts_use() -> None
     "min_action_std",
     "action_rate_weight",
     "object_press_weight",
+    "joint_vel_weight",
     "goal_yaw_rungs",
   } <= fields
   assert config.gpu_ids == [0]

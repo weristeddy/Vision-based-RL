@@ -34,9 +34,6 @@ EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
 # Raising it is measured and reverted: -0.1 takes success to 0.008, and -0.05
 # moved the lowest pad only 27.6 -> 26.2 mm for 8-19% of overlap.
 EE_HEIGHT_WEIGHT = -0.02
-# A starting size, not a measured one: the penalties cost ~3% of task reward, so this
-# puts the bonus on the same scale.
-SIDE_CONTACT_ALIGN_WEIGHT = 0.05
 TABLE_TOUCH_WEIGHT = -2.0 / 3.0
 # The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
 # distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
@@ -48,13 +45,9 @@ OBJECT_PRESS_SCALE_N = 5.0
 OBJECT_PRESS_WEIGHT = -0.01
 # `action_rate_l2` is upstream Lift-Cube's -0.01 at a fifth, because for a Gaussian
 # policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
-ACTION_PATH_LENGTH_WEIGHT = -0.002
 ACTION_RATE_WEIGHT = -0.002
-# Cut post-success drift 55% (2.33 -> 1.05 mm per step). -0.2 was tried and is wrong:
-# the term cannot distort behaviour *at* goal, but it lowers the goal state's value.
-AT_GOAL_ACTION_WEIGHT = -0.05
+JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
-OBJECT_SPEED_WEIGHT = 0.0
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
 # Environment steps at num_steps_per_env=16: pinned for 3,000 iterations, then 8
@@ -74,7 +67,7 @@ GOAL_YAW_STAGES = (
   {"step": 76_000, "half_range": math.pi * 8 / 8},
 )
 PENALTY_RAMP_STEPS = (16_000, 64_000)
-_RAMPED_PENALTIES = ("object_table_press", "action_path_length", "action_rate_l2")
+_RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
 
 
 # Offset x ranges held 15 cm apart, so an episode never starts near the goal.
@@ -202,28 +195,16 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
-    "side_contact_align": RewardTermCfg(
-      func=mdp.side_contact_align,
-      weight=SIDE_CONTACT_ALIGN_WEIGHT,
-      params={"sensor_name": _CONTACT_SENSOR},
-    ),
-    "action_path_length": RewardTermCfg(
-      func=mdp.action_path_length_l1,
-      weight=ACTION_PATH_LENGTH_WEIGHT,
-    ),
     "action_rate_l2": RewardTermCfg(
       func=mdp.action_rate_l2,
       weight=ACTION_RATE_WEIGHT,
     ),
-    "at_goal_action": RewardTermCfg(
-      func=mdp.at_goal_action_l1,
-      weight=AT_GOAL_ACTION_WEIGHT,
-      params={"command_name": _COMMAND},
-    ),
-    "object_speed": RewardTermCfg(
-      func=mdp.object_speed_l2,
-      weight=OBJECT_SPEED_WEIGHT,
-      params={"object_name": object_name},
+    "joint_vel_l2": RewardTermCfg(
+      func=mdp.joint_vel_l2,
+      weight=JOINT_VEL_WEIGHT,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", joint_names=robot.arm_actuator_names)
+      },
     ),
     "at_goal_static": RewardTermCfg(
       func=mdp.at_goal_static,

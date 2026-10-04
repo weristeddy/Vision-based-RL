@@ -67,10 +67,6 @@ def maniskill_dense_reward(
   return reward / _MAX_REWARD
 
 
-def side_contact_align(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
-  data = _contact(env, sensor_name, "found", "normal")
-  alignment = 1.0 - data.normal[..., 2].abs().clamp(0.0, 1.0)
-  return torch.where(data.found > 0, alignment, 0.0).amax(dim=-1)
 
 
 def top_contact_share(
@@ -98,19 +94,10 @@ def fingertip_height_excess(
   return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
 
 
-def action_path_length_l1(env: ManagerBasedRlEnv) -> torch.Tensor:
-  return torch.sum(torch.abs(env.action_manager.action), dim=1)
 
 
-def at_goal_action_l1(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-  command = push_t_command(env, command_name)
-  action = torch.sum(torch.abs(env.action_manager.action), dim=1)
-  return action * command.get_at_goal().to(action.dtype)
 
 
-def object_speed_l2(env: ManagerBasedRlEnv, object_name: str) -> torch.Tensor:
-  obj: Entity = env.scene[object_name]
-  return torch.sum(torch.square(obj.data.root_link_lin_vel_w[:, :2]), dim=-1)
 
 
 def at_goal_static(
@@ -177,18 +164,14 @@ def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
 
 
 __all__ = [
-  "action_path_length_l1",
-  "at_goal_action_l1",
   "at_goal_static",
   "at_goal_share",
   "fingertip_height_excess",
   "maniskill_dense_reward",
   "max_contact_force",
   "max_contact_force_on_face",
-  "object_speed_l2",
   "object_table_press",
   "peak_object_press",
-  "side_contact_align",
   "table_touch",
   "top_contact_share",
 ]

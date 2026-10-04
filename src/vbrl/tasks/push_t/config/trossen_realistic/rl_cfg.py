@@ -34,7 +34,7 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
     lam=0.9,
     entropy_coef=0.005,
     action_head_init_scale=0.01,
-    bound_loss_coef=0.1,
+    bound_loss_coef=1.0,
     # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations
     # and threw away 71% of the update budget (36.8 of 128 performed).
     desired_kl=0.1,
