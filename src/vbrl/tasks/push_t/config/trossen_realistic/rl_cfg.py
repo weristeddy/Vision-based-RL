@@ -15,7 +15,7 @@ _NETWORK = {
 }
 _GAUSSIAN = {
   "class_name": "GaussianDistribution",
-  "init_std": 0.6065306597,
+  "init_std": 1.0,
   "std_type": "log",
 }
 
@@ -32,7 +32,7 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
     # instead of observed reward.
     gamma=0.9985,
     lam=0.9,
-    entropy_coef=0.0,
+    entropy_coef=0.005,
     action_head_init_scale=0.01,
     bound_loss_coef=0.1,
     # ManiSkill3's value. At 0.05 the early stop fired on 97.9% of iterations

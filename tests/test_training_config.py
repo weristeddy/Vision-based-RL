@@ -88,10 +88,10 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
   assert agent.actor.activation == "relu"
   assert agent.actor.distribution_cfg == {
     "class_name": "GaussianDistribution",
-    "init_std": pytest.approx(0.6065306597),
+    "init_std": 1.0,
     "std_type": "log",
   }
-  assert agent.algorithm.entropy_coef == 0.0
+  assert agent.algorithm.entropy_coef == 0.005
   assert agent.algorithm.action_head_init_scale == 0.01
   assert agent.algorithm.bound_loss_coef > 0.0
   assert isinstance(agent.algorithm, VisualPpoCfg)
