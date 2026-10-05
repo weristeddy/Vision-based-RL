@@ -21,14 +21,10 @@ CAMERA_GEOM_GROUPS: Mapping[CameraGeometry, tuple[int, ...]] = {
 }
 
 
-def _load_mjcf(path: str, gravity_compensation: bool) -> Any:
+def _load_mjcf(path: str) -> Any:
   import mujoco
 
-  spec = mujoco.MjSpec.from_file(path)
-  if gravity_compensation:
-    for body in spec.worldbody.find_all(mujoco.mjtObj.mjOBJ_BODY):
-      body.gravcomp = 1.0
-  return spec
+  return mujoco.MjSpec.from_file(path)
 
 
 @dataclass(frozen=True)
@@ -56,7 +52,6 @@ class RobotDefinition:
   viewer_body: str
   cameras: Mapping[CameraView, RobotCameraDefinition]
   home_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
-  gravity_compensation: bool = False
 
   def make_entity_cfg(
     self,
@@ -78,7 +73,7 @@ class RobotDefinition:
         joint_pos=joint_pos,
         joint_vel={".*": 0.0},
       ),
-      spec_fn=partial(_load_mjcf, str(self.xml_path), self.gravity_compensation),
+      spec_fn=partial(_load_mjcf, str(self.xml_path)),
       articulation=self.articulation_factory(action_delay),
       collisions=self.collision_factory(),
     )

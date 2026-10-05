@@ -6,12 +6,12 @@ from .definition import (
   RobotCameraDefinition,
   RobotDefinition,
 )
-from .trossen_wxai import make_wxai, make_wxai_identified, make_wxai_realistic
+from .trossen_wxai import make_wxai, make_wxai_measured, make_wxai_realistic
 
 ROBOTS: Mapping[str, Callable[[], RobotDefinition]] = {
   "trossen": make_wxai,
   "trossen_realistic": make_wxai_realistic,
-  "trossen_identified": make_wxai_identified,
+  "trossen_measured": make_wxai_measured,
 }
 
 
@@ -37,6 +37,6 @@ __all__ = [
   "get_robot",
   "list_robots",
   "make_wxai",
-  "make_wxai_identified",
+  "make_wxai_measured",
   "make_wxai_realistic",
 ]
