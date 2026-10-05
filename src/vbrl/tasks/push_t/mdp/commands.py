@@ -129,28 +129,17 @@ class PushTCommand(LiftingCommand):
     object_pos = sample_xyz(object_range, (n, 3))
     target_range = self.cfg.target_position_range
     target_pos = sample_xyz(target_range, (n, 3))
-    lower = target_pos.new_tensor([target_range.x[0], target_range.y[0]])
-    upper = target_pos.new_tensor([target_range.x[1], target_range.y[1]])
-
-    floor = target_pos.new_full((n,), self.cfg.min_xy_separation)
-    ceiling = target_pos.new_full(
-      (n,), float(torch.linalg.vector_norm(upper - lower))
-    )
-
-    pending = torch.ones(n, dtype=torch.bool, device=self.device)
+    # Uniform over the goal rectangle, independent of the start; only a goal
+    # closer than min_xy_separation to the object is drawn again.
     for _ in range(_MAX_GOAL_DRAWS):
-      if not bool(pending.any()):
-        break
-      angle = sample_uniform(0.0, 2.0 * math.pi, (n,), device=self.device)
-      radius = floor + (ceiling - floor) * torch.rand(n, device=self.device)
-      drawn = object_pos[:, :2] + radius[:, None] * torch.stack(
-        (angle.cos(), angle.sin()), dim=-1
+      close = (
+        torch.linalg.vector_norm(target_pos[:, :2] - object_pos[:, :2], dim=-1)
+        < self.cfg.min_xy_separation
       )
-      target_pos[:, :2] = torch.where(pending[:, None], drawn, target_pos[:, :2])
-      pending = pending & ((drawn < lower) | (drawn > upper)).any(dim=-1)
+      if not bool(close.any()):
+        break
+      target_pos[close] = sample_xyz(target_range, (int(close.sum()), 3))
     else:
-      # Unreachable for any sane band, but a floor wider than the rectangle can
-      # hold would otherwise spin forever rather than say so.
       raise RuntimeError(
         f"Goal sampling did not converge in {_MAX_GOAL_DRAWS} draws: no goal "
         f"satisfies min_xy_separation={self.cfg.min_xy_separation} inside "
