@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from vbrl.tasks.push_t.push_t_env_cfg import ACTION_SCALE
-
 pytest.importorskip("mjlab")
 
 
@@ -129,7 +127,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   )
 
   state = trossen_realistic_push_t_state_env_cfg()
-  rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=ACTION_SCALE)
+  rgb = trossen_realistic_push_t_rgb_env_cfg()
 
   assert tuple(state.observations["actor"].terms) == PUSH_T_STATE
   assert tuple(state.observations["critic"].terms) == PUSH_T_CRITIC
@@ -144,7 +142,6 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.goal_marker_name is None
   assert rgb_goal.goal_marker_name == "goal_marker"
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
-  assert state_goal.min_xy_separation == rgb_goal.min_xy_separation
   assert state_goal.success_threshold == rgb_goal.success_threshold
   assert tuple(state.curriculum) == ("penalty_ramp",)
   assert tuple(rgb.curriculum) == ("penalty_ramp",)
@@ -154,7 +151,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert (rgb_ramp["start_step"], rgb_ramp["end_step"]) == (64_000, 112_000)
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
-  assert state.episode_length_s == rgb.episode_length_s == 10.0
+  assert state.episode_length_s == rgb.episode_length_s == 6.0
   assert state.decimation == rgb.decimation == 10
 
   camera = _camera(rgb, "external_cam")
@@ -195,7 +192,7 @@ def test_rgb_camera_term_preserves_native_uint8_bchw() -> None:
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "collision"}),
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "visual"}),
     ("trossen_realistic_push_t_state_env_cfg", {}),
-    ("trossen_realistic_push_t_rgb_env_cfg", {"action_scale": ACTION_SCALE}),
+    ("trossen_realistic_push_t_rgb_env_cfg", {}),
   ),
   ids=("lift-collision", "lift-visual", "push-t-state", "push-t-rgb"),
 )

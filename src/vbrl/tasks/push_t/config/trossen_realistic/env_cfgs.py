@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from functools import partial
-
 from mjlab.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
@@ -19,8 +17,6 @@ from vbrl.tasks.push_t.goal_marker import (
   goal_marker_spec,
 )
 from vbrl.tasks.push_t.push_t_env_cfg import (
-  ACTION_SCALE,
-  EPISODE_LENGTH_S,
   PENALTY_RAMP_STEPS,
   VISUAL_PENALTY_RAMP_STEPS,
   build_env_cfg,
@@ -41,7 +37,6 @@ def trossen_realistic_push_t_state_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,
     play=play,
-    action_scale=ACTION_SCALE,
     penalty_ramp=PENALTY_RAMP_STEPS,
   )
   apply_scene(
@@ -59,13 +54,9 @@ def trossen_realistic_push_t_state_env_cfg(
 
 def trossen_realistic_push_t_rgb_env_cfg(
   *,
-  action_scale: float,
   play: bool = False,
   goal_in_observation: bool = True,
-  fixed_target: tuple[float, float, float] | None = None,
   scene: str = "real_texture",
-  episode_length_s: float = EPISODE_LENGTH_S,
-  goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> ManagerBasedRlEnvCfg:
@@ -77,10 +68,6 @@ def trossen_realistic_push_t_rgb_env_cfg(
     play=play,
     visual_goal=True,
     goal_in_observation=goal_in_observation,
-    fixed_target=fixed_target,
-    action_scale=action_scale,
-    episode_length_s=episode_length_s,
-    goal_outline=goal_outline,
     goal_observation_noise=goal_observation_noise,
     penalty_ramp=VISUAL_PENALTY_RAMP_STEPS,
   )
@@ -100,9 +87,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
     object_xml=PUSH_T_XML,
     object_name=_OBJECT_NAME,
   )
-  cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(
-    spec_fn=partial(goal_marker_spec, goal_outline)
-  )
+  cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(spec_fn=goal_marker_spec)
   cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(
     GOAL_REAL_RGBA_RANGE if real_goal_colour else ((0.0, 1.0),) * 3
   )

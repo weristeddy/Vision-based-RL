@@ -221,7 +221,7 @@ def test_push_t_rgb_camera_pose_is_drawn_once_per_env() -> None:
     trossen_realistic_push_t_rgb_env_cfg,
   )
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  cfg = trossen_realistic_push_t_rgb_env_cfg()
   for name in ("camera_position", "camera_orientation", "camera_fovy"):
     assert cfg.events[name].mode == "startup", name
 
@@ -231,7 +231,7 @@ def test_push_t_rgb_critic_sees_clean_goal_and_relative_pose() -> None:
     trossen_realistic_push_t_rgb_env_cfg,
   )
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  cfg = trossen_realistic_push_t_rgb_env_cfg()
   actor = cfg.observations["actor"].terms
   critic = cfg.observations["critic"].terms
   assert actor["target_pose"].params.get("calibration_bias", True)
@@ -249,7 +249,7 @@ def test_push_t_ramps_contact_penalties_from_zero() -> None:
   )
   from vbrl.tasks.push_t.mdp import penalty_weight_ramp
 
-  rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  rgb = trossen_realistic_push_t_rgb_env_cfg()
   cfg = trossen_realistic_push_t_state_env_cfg()
   term = cfg.curriculum["penalty_ramp"]
   assert (

@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 import torch
 from mjlab.entity import Entity
-from mjlab.sensor import ContactSensor
 
 from vbrl.scenes.presets import TABLE_CENTER, TABLE_HALF_EXTENTS
 
@@ -51,27 +50,9 @@ def invalid_object_state(
   )
 
 
-def forceful_top_contact(
-  env: ManagerBasedRlEnv,
-  sensor_name: str,
-  force_threshold: float,
-  verticality_threshold: float = 0.7,
-) -> torch.Tensor:
-  if force_threshold <= 0.0:
-    raise ValueError("forceful_top_contact needs force_threshold > 0.")
-  sensor: ContactSensor = env.scene[sensor_name]
-  data = sensor.data
-  if data.found is None or data.force is None or data.normal is None:
-    raise RuntimeError(
-      f"Contact sensor {sensor_name!r} requires found, force, and normal."
-    )
-  vertical = data.normal[..., 2].abs() > verticality_threshold
-  force = torch.linalg.vector_norm(data.force, dim=-1)
-  return ((data.found > 0) & vertical & (force > force_threshold)).any(dim=-1)
 
 
 __all__ = [
-  "forceful_top_contact",
   "invalid_object_state",
   "object_off_table",
 ]

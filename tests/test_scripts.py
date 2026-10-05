@@ -40,13 +40,7 @@ def test_train_config_exposes_the_flags_sweeps_and_cluster_scripts_use() -> None
   fields = set(TrainConfig.__dataclass_fields__)
 
   assert {"env", "agent", "video", "gpu_ids", "log_root"} <= fields
-  assert {
-    "label",
-    "min_action_std",
-    "action_rate_weight",
-    "object_press_weight",
-    "joint_vel_weight",
-  } <= fields
+  assert "label" in fields
   assert config.gpu_ids == [0]
   assert config.env.scene.num_envs > 0
   assert {"VBRL*", "WANDB*", "HF*"} <= set(WORKER_ENV)

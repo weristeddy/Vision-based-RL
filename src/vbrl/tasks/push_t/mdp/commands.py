@@ -27,7 +27,6 @@ if TYPE_CHECKING:
   from mjlab.viewer.debug_visualizer import DebugVisualizer
 
 
-_MAX_GOAL_DRAWS = 512
 
 
 class PushTCommand(LiftingCommand):
@@ -127,29 +126,8 @@ class PushTCommand(LiftingCommand):
       return sample_uniform(lower, upper, shape, device=self.device)
 
     object_pos = sample_xyz(object_range, (n, 3))
-    target_range = self.cfg.target_position_range
-    target_pos = sample_xyz(target_range, (n, 3))
-    # Uniform over the goal rectangle, independent of the start; only a goal
-    # closer than min_xy_separation to the object is drawn again.
-    for _ in range(_MAX_GOAL_DRAWS):
-      close = (
-        torch.linalg.vector_norm(target_pos[:, :2] - object_pos[:, :2], dim=-1)
-        < self.cfg.min_xy_separation
-      )
-      if not bool(close.any()):
-        break
-      target_pos[close] = sample_xyz(target_range, (int(close.sum()), 3))
-    else:
-      raise RuntimeError(
-        f"Goal sampling did not converge in {_MAX_GOAL_DRAWS} draws: no goal "
-        f"satisfies min_xy_separation={self.cfg.min_xy_separation} inside "
-        f"{target_range.x} x {target_range.y}."
-      )
-
+    target_pos = sample_xyz(self.cfg.target_position_range, (n, 3))
     origins = self._env.scene.env_origins[env_ids]
-    if self.cfg.fixed_target is not None:
-      target_pos[:, 0] = self.cfg.fixed_target[0]
-      target_pos[:, 1] = self.cfg.fixed_target[1]
     self.target_pos[env_ids] = target_pos + origins
     if self.cfg.observation_position_noise > 0.0:
       bound = self.cfg.observation_position_noise
@@ -174,8 +152,6 @@ class PushTCommand(LiftingCommand):
       (n,),
       device=self.device,
     )
-    if self.cfg.fixed_target is not None:
-      target_yaw = torch.full_like(target_yaw, self.cfg.fixed_target[2])
     self.target_yaw[env_ids] = target_yaw
     zeros = torch.zeros(n, device=self.device)
     pose = torch.cat(
@@ -235,8 +211,6 @@ class PushTCommand(LiftingCommand):
 
 @dataclass(kw_only=True)
 class PushTCommandCfg(LiftingCommandCfg):
-  fixed_target: tuple[float, float, float] | None = None
-  min_xy_separation: float = 0.15
   # A calibration error is a fixed bias for a whole deployment session, not
   # per-step jitter, so these are drawn once per episode. Measured chain on the
   # rig: 1.33 mm extrinsic repeatability, ~0.4 mm tag detection, +/-1 mm

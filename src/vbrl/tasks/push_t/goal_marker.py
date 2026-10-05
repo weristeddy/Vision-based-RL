@@ -69,18 +69,13 @@ def _outline_boxes(thickness: float):
   ]
 
 
-def goal_marker_spec(outline: bool = False) -> mujoco.MjSpec:
+def goal_marker_spec() -> mujoco.MjSpec:
   import mujoco
 
   spec = mujoco.MjSpec()
   spec.add_material(name=GOAL_MATERIAL_NAME, rgba=GOAL_RGBA)
   body = spec.worldbody.add_body(name=GOAL_ENTITY_NAME, mocap=True)
-  parts = (
-    _outline_boxes(GOAL_OUTLINE_THICKNESS)
-    if outline
-    else [(p.center_xy, p.half_extents_xy) for p in FOOTPRINT_PARTS]
-  )
-  for index, (centre, half) in enumerate(parts):
+  for index, (centre, half) in enumerate(_outline_boxes(GOAL_OUTLINE_THICKNESS)):
     body.add_geom(
       name=f"{GOAL_ENTITY_NAME}_{index}",
       type=mujoco.mjtGeom.mjGEOM_BOX,

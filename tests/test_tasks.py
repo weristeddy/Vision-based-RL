@@ -143,9 +143,6 @@ def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None
     resampling_time_range=(5.0, 5.0),
     footprint_parts=FOOTPRINT_PARTS,
   )
-  # Real draws: the sampler redraws whatever lands off the table, so the call
-  # count is not fixed and a scripted sequence would run out.
-  cfg.min_xy_separation = 0.02
   cfg.target_position_range = PushTCommandCfg.TargetPositionRangeCfg(
     x=(0.25, 0.45), y=(-0.2, 0.2), z=(0.012, 0.012)
   )
@@ -183,10 +180,11 @@ def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None
 
   PushTCommand._resample_command(fake_command, torch.arange(worlds))
 
+  # Start and goal are drawn independently, so some land close together.
   separation = torch.linalg.vector_norm(
     fake_command.target_pos[:, :2] - written["pose"][:, :2], dim=-1
   )
-  assert torch.all(separation >= cfg.min_xy_separation - 1e-6)
+  assert float(separation.min()) < 0.03
   goals = fake_command.target_pos[:, :2]
   lower = torch.tensor([cfg.target_position_range.x[0], cfg.target_position_range.y[0]])
   upper = torch.tensor([cfg.target_position_range.x[1], cfg.target_position_range.y[1]])
@@ -208,55 +206,6 @@ def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None
   assert torch.equal(command[:, :3], fake_command.target_pos)
   assert torch.equal(command[:, 3], fake_command.target_yaw)
 
-
-def test_push_t_goal_sampling_converges_for_a_wide_separation_floor() -> None:
-  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
-  from vbrl.tasks.push_t.mdp.commands import PushTCommand, PushTCommandCfg
-
-  worlds = 2048
-  cfg = PushTCommandCfg(
-    entity_name="object",
-    resampling_time_range=(5.0, 5.0),
-    footprint_parts=FOOTPRINT_PARTS,
-    min_xy_separation=0.15,
-  )
-  cfg.object_pose_range = PushTCommandCfg.ObjectPoseRangeCfg(
-    x=(0.20, 0.40), y=(-0.2, 0.2), z=(0.013, 0.013), yaw=(-math.pi, math.pi)
-  )
-  cfg.target_position_range = PushTCommandCfg.TargetPositionRangeCfg(
-    x=(0.30, 0.50), y=(-0.2, 0.2), z=(0.012, 0.012)
-  )
-  written: dict[str, torch.Tensor] = {}
-  fake = SimpleNamespace(
-    _goal_marker=None,
-    cfg=cfg,
-    device="cpu",
-    episode_success=torch.ones(worlds),
-    target_pos=torch.zeros(worlds, 3),
-    target_yaw=torch.zeros(worlds),
-    _overlap_cache_step=1,
-    _env=SimpleNamespace(scene=SimpleNamespace(env_origins=torch.zeros(worlds, 3))),
-    object=SimpleNamespace(
-      write_root_link_pose_to_sim=lambda pose, env_ids: written.update(
-        pose=pose.clone()
-      ),
-      write_root_link_velocity_to_sim=lambda velocity, env_ids: None,
-    ),
-  )
-  for _ in range(5):
-    PushTCommand._resample_command(fake, torch.arange(worlds))
-    separation = torch.linalg.vector_norm(
-      fake.target_pos[:, :2] - written["pose"][:, :2], dim=-1
-    )
-    assert torch.all(separation >= cfg.min_xy_separation - 1e-6)
-    goals = fake.target_pos[:, :2]
-    lower = torch.tensor(
-      [cfg.target_position_range.x[0], cfg.target_position_range.y[0]]
-    )
-    upper = torch.tensor(
-      [cfg.target_position_range.x[1], cfg.target_position_range.y[1]]
-    )
-    assert torch.all(goals >= lower - 1e-6) and torch.all(goals <= upper + 1e-6)
 
 
 def test_push_t_reward_is_maniskill_dense_with_a_linear_orientation_summand() -> None:
@@ -443,26 +392,6 @@ def test_push_t_at_goal_static_rewards_a_still_arm_only_at_the_goal() -> None:
   assert torch.allclose(at_goal_static(env, "push_t_goal", cfg), expected)
 
 
-
-def test_push_t_forceful_top_contact_terminates_only_on_hard_vertical_press() -> None:
-  from vbrl.tasks.push_t.mdp import forceful_top_contact
-
-  sensor = SimpleNamespace(
-    data=SimpleNamespace(
-      found=torch.tensor([[1.0], [1.0], [1.0], [0.0]]),
-      force=torch.tensor(
-        [[[40.0, 0.0, 0.0]], [[40.0, 0.0, 0.0]], [[2.0, 0.0, 0.0]], [[40.0, 0.0, 0.0]]]
-      ),
-      normal=torch.tensor(
-        [[[1.0, 0.0, 0.0]], [[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]]
-      ),
-    )
-  )
-  env = SimpleNamespace(scene={"ee_object_contact": sensor})
-  out = forceful_top_contact(env, "ee_object_contact", force_threshold=5.0)
-  assert out.tolist() == [False, True, False, False]
-  with pytest.raises(ValueError, match="force_threshold > 0"):
-    forceful_top_contact(env, "ee_object_contact", force_threshold=0.0)
 
 
 def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
@@ -773,7 +702,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "force" in sensors["object_table_contact"].fields
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
-  assert cfg.episode_length_s == 10.0
+  assert cfg.episode_length_s == 6.0
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 10
   assert cfg.scale_rewards_by_dt is False
@@ -801,7 +730,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML
   from vbrl.deployment.config import DeploymentConfig
 
-  assert action.interpolate is False
   deployment = DeploymentConfig(onnx_file="", arm_ip="")
   assert deployment.command_goal_time_s == 0.0
   assert 1.0 / (cfg.sim.mujoco.timestep * cfg.decimation) == pytest.approx(20.0)
@@ -813,7 +741,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
 
   command = cfg.commands["push_t_goal"]
   assert command.success_threshold == pytest.approx(0.90)
-  assert command.min_xy_separation == pytest.approx(0.15)
   assert command.resampling_time_range == (1.0e9, 1.0e9)
   assert command.mask_resolution == 64
 
@@ -870,7 +797,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "invalid_object_state",
     "nan_detection",
   )
-  assert "forceful_top_contact" not in cfg.terminations
   assert cfg.terminations["time_out"].time_out is True
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
@@ -902,5 +828,5 @@ def test_push_t_play_only_disables_actor_noise_and_curriculum() -> None:
 
   assert cfg.observations["actor"].enable_corruption is False
   assert cfg.curriculum == {}
-  assert cfg.episode_length_s == 10.0
+  assert cfg.episode_length_s == 6.0
   assert cfg.commands["push_t_goal"].resampling_time_range == (1.0e9, 1.0e9)

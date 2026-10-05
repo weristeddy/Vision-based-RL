@@ -47,9 +47,7 @@ def test_runner_selects_goal_yaw_in_actor_and_critic(monkeypatch, pixel):
     trossen_realistic_push_t_rgb_env_cfg,
   )
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg(
-    action_scale=0.03, goal_in_observation=not pixel
-  )
+  cfg = trossen_realistic_push_t_rgb_env_cfg(goal_in_observation=not pixel)
   sizes = {
     "qpos": 8,
     "qvel": 8,

@@ -31,7 +31,8 @@ _TABLE_SENSOR = "robot_table_contact"
 # and the same recipe reached 0.64 mean-action success against 0.96 here.
 DECIMATION = 10
 ACTION_SCALE = 0.075
-EPISODE_LENGTH_S = 10.0
+EPISODE_LENGTH_S = 6.0
+SUCCESS_THRESHOLD = 0.90
 # The object's own height, so it follows the T. Linear, not quadratic: a constant
 # gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
@@ -44,16 +45,12 @@ TABLE_TOUCH_WEIGHT = -2.0 / 3.0
 OBJECT_WEIGHT_N = 0.497
 OBJECT_PRESS_ONSET_N = OBJECT_WEIGHT_N + 1.0
 OBJECT_PRESS_SCALE_N = 5.0
-# 5.4% of task reward on the behaviour it corrects -- the largest penalty here,
-# intended: it is the only one the policy can zero out without giving up the task.
 OBJECT_PRESS_WEIGHT = -0.01
 # `action_rate_l2` is upstream Lift-Cube's -0.01 at a fifth, because for a Gaussian
 # policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
 ACTION_RATE_WEIGHT = -0.002
 JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
-# Terminating on forceful top contact is deliberately not wired in, though
-# `mdp.forceful_top_contact` stays reachable.
 PENALTY_RAMP_STEPS = (16_000, 64_000)
 # Iterations 4,000 to 7,000 at num_steps_per_env=16, after the slowest visual
 # runs pass 0.1 success, and the same for every encoder so a sweep stays fair.
@@ -61,18 +58,14 @@ VISUAL_PENALTY_RAMP_STEPS = (64_000, 112_000)
 _RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
 
 
-# Offset x ranges held 15 cm apart, so an episode never starts near the goal.
 WORKSPACE_Y = (-0.2, 0.2)
 OBJECT_X = (0.2, 0.4)
 TARGET_X = (0.3, 0.5)
-MIN_XY_SEPARATION = 0.15
 
 
 def _command(
   object_name: str,
-  success_threshold: float,
   goal_marker_name: str | None = None,
-  fixed_target: tuple[float, float, float] | None = None,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
 ) -> mdp.PushTCommandCfg:
   return mdp.PushTCommandCfg(
@@ -81,7 +74,7 @@ def _command(
     difficulty="dynamic",
     resampling_time_range=(1.0e9, 1.0e9),
     debug_vis=True,
-    success_threshold=success_threshold,
+    success_threshold=SUCCESS_THRESHOLD,
     object_pose_range=mdp.PushTCommandCfg.ObjectPoseRangeCfg(
       x=OBJECT_X,
       y=WORKSPACE_Y,
@@ -94,8 +87,6 @@ def _command(
       z=(HALF_HEIGHT, HALF_HEIGHT),
     ),
     target_yaw_range=(-math.pi, math.pi),
-    min_xy_separation=MIN_XY_SEPARATION,
-    fixed_target=fixed_target,
     observation_position_noise=goal_observation_noise[0],
     observation_yaw_noise=goal_observation_noise[1],
   )
@@ -107,13 +98,8 @@ def build_env_cfg(
   object_name: str,
   rgb: bool = False,
   play: bool = False,
-  success_threshold: float = 0.90,
   visual_goal: bool = False,
   goal_in_observation: bool = True,
-  fixed_target: tuple[float, float, float] | None = None,
-  action_scale: float = ACTION_SCALE,
-  episode_length_s: float = EPISODE_LENGTH_S,
-  goal_outline: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
   penalty_ramp: tuple[int, int] | None = None,
 ) -> ManagerBasedRlEnvCfg:
@@ -163,19 +149,14 @@ def build_env_cfg(
     "joint_pos": mdp.TargetRelativeJointPositionActionCfg(
       entity_name="robot",
       actuator_names=robot.arm_actuator_names,
-      scale=action_scale,
+      scale=ACTION_SCALE,
       preserve_order=True,
-      # The deployment sends each target with goal time 0, which the controller
-      # applies at once and holds until the next one.
-      interpolate=False,
     )
   }
   cfg.commands = {
     _COMMAND: _command(
       object_name,
-      success_threshold,
       goal_marker_name=GOAL_ENTITY_NAME if visual_goal else None,
-      fixed_target=fixed_target,
       goal_observation_noise=goal_observation_noise,
     )
   }
@@ -364,7 +345,7 @@ def build_env_cfg(
       reduce="netforce",
     ),
   )
-  cfg.episode_length_s = episode_length_s
+  cfg.episode_length_s = EPISODE_LENGTH_S
   cfg.decimation = DECIMATION
   cfg.scale_rewards_by_dt = False
   # Azimuth 180 is the +x side the robot faces. ASSET_ROOT, not the robot's

@@ -26,46 +26,14 @@ WORKER_ENV = (
 class TrainConfig(MjlabTrainConfig):
   label: str = ""
   """Extra W&B tag and run-name prefix, for telling one sweep arm from another."""
-  min_action_std: float | None = None
-  """Lower bound of the policy's action-std range."""
-  action_rate_weight: float | None = None
-  """Weight of MJLab's `action_rate_l2`."""
-  object_press_weight: float | None = None
-  """Weight of the downward-press penalty."""
-  joint_vel_weight: float | None = None
-  """Weight of MJLab's `joint_vel_l2` on the arm joints."""
 
   @staticmethod
   def from_task(task_id: str) -> TrainConfig:
     return TrainConfig(env=load_env_cfg(task_id), agent=load_rl_cfg(task_id))
 
 
-def _retune_penalty_weights(cfg: TrainConfig) -> None:
-  overrides = (
-    ("action_rate_l2", "--action-rate-weight", cfg.action_rate_weight),
-    ("object_table_press", "--object-press-weight", cfg.object_press_weight),
-    ("joint_vel_l2", "--joint-vel-weight", cfg.joint_vel_weight),
-  )
-  for name, flag, weight in overrides:
-    if weight is None:
-      continue
-    if weight > 0.0:
-      raise ValueError(f"{flag} must be <= 0; got {weight}.")
-    term = (cfg.env.rewards or {}).get(name)
-    if term is None:
-      raise ValueError(f"This task has no `{name}` reward term.")
-    term.weight = weight
 
 
-
-
-def _install_action_std_floor(cfg: TrainConfig) -> None:
-  if cfg.min_action_std is None:
-    return
-  distribution = cfg.agent.actor.distribution_cfg
-  low, high = distribution.get("std_range") or (None, 1e6)
-  distribution["std_range"] = (cfg.min_action_std, high)
-  print(f"[INFO] Action std range {low} -> {cfg.min_action_std} (upper {high}).")
 
 
 def _apply_label(cfg: TrainConfig) -> None:
@@ -77,8 +45,6 @@ def _apply_label(cfg: TrainConfig) -> None:
 
 
 def apply_overrides(cfg: TrainConfig) -> None:
-  _retune_penalty_weights(cfg)
-  _install_action_std_floor(cfg)
   _apply_label(cfg)
 
 
