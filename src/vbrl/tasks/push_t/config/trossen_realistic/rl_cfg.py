@@ -7,7 +7,7 @@ from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
-_RGB_MAX_ITERATIONS = 6000
+_RGB_MAX_ITERATIONS = 15000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
   "activation": "relu",
@@ -55,7 +55,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
-    max_iterations=1500,
+    max_iterations=8000,
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),

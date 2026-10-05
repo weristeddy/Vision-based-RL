@@ -171,3 +171,16 @@ def test_every_sweep_flag_path_parses_against_the_train_cli() -> None:
       config=mjlab.TYRO_FLAGS,
     )
     assert parsed.env.scene.num_envs == 1024, name
+
+
+def test_push_t_penalty_ramps_finish_well_inside_the_budget() -> None:
+  from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
+
+  for task_id in (
+    "Mjlab-PushT-State-TrossenIdentified",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
+  ):
+    ramp = load_env_cfg(task_id).curriculum["penalty_ramp"].params
+    agent = load_rl_cfg(task_id)
+    full_weight = ramp["end_step"] / agent.num_steps_per_env
+    assert full_weight <= 0.5 * agent.max_iterations, task_id
