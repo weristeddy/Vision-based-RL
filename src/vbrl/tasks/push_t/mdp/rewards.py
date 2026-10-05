@@ -67,8 +67,6 @@ def maniskill_dense_reward(
   return reward / _MAX_REWARD
 
 
-
-
 def top_contact_share(
   env: ManagerBasedRlEnv, sensor_name: str, verticality_threshold: float = _VERTICAL
 ) -> torch.Tensor:
@@ -94,12 +92,6 @@ def fingertip_height_excess(
   return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
 
 
-
-
-
-
-
-
 def at_goal_static(
   env: ManagerBasedRlEnv, command_name: str, asset_cfg: SceneEntityCfg
 ) -> torch.Tensor:
@@ -117,7 +109,10 @@ def object_table_press(
   if scale <= 0.0:
     raise ValueError("object_table_press needs scale > 0.")
   data = _contact(env, sensor_name, "force")
-  return ((_press(data) - onset) / scale).clamp_min(0.0)
+  # Squared: a light touch on the top face stays nearly free, a hard press does
+  # not. Capped so one jammed contact cannot dominate an update.
+  excess = ((_press(data) - onset) / scale).clamp_min(0.0)
+  return excess.square().clamp_max(100.0)
 
 
 def peak_object_press(

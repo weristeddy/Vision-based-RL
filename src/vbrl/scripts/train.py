@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import sys
 from dataclasses import dataclass
 
@@ -35,12 +34,6 @@ class TrainConfig(MjlabTrainConfig):
   """Weight of the downward-press penalty."""
   joint_vel_weight: float | None = None
   """Weight of MJLab's `joint_vel_l2` on the arm joints."""
-  goal_yaw_pin_iterations: int | None = None
-  """Iterations the goal yaw stays pinned before the range starts widening."""
-  goal_yaw_rungs: int | None = None
-  """Rungs the goal-yaw range widens in."""
-  goal_yaw_rung_iterations: int | None = None
-  """Iterations between rungs."""
 
   @staticmethod
   def from_task(task_id: str) -> TrainConfig:
@@ -64,49 +57,6 @@ def _retune_penalty_weights(cfg: TrainConfig) -> None:
     term.weight = weight
 
 
-def _rebuild_goal_yaw_stages(cfg: TrainConfig) -> None:
-  requested = (
-    cfg.goal_yaw_pin_iterations,
-    cfg.goal_yaw_rungs,
-    cfg.goal_yaw_rung_iterations,
-  )
-  if all(value is None for value in requested):
-    return
-  term = (cfg.env.curriculum or {}).get("goal_yaw_range")
-  if term is None:
-    raise ValueError(
-      "This task has no goal-yaw curriculum, so --goal-yaw-* cannot apply."
-    )
-
-  per_iteration = cfg.agent.num_steps_per_env
-  registered = list(term.params["stages"])
-  pin = cfg.goal_yaw_pin_iterations
-  if pin is None:
-    pin = registered[1]["step"] // per_iteration if len(registered) > 1 else 0
-  rungs = cfg.goal_yaw_rungs or max(1, len(registered) - 1)
-  gap = cfg.goal_yaw_rung_iterations
-  if gap is None:
-    gap = (
-      (registered[2]["step"] - registered[1]["step"]) // per_iteration
-      if len(registered) > 2
-      else 0
-    )
-  if pin < 0 or rungs < 1 or gap < 0:
-    raise ValueError(f"Need pin >= 0, rungs >= 1, gap >= 0; got {pin}, {rungs}, {gap}.")
-
-  term.params["stages"] = [{"step": 0, "half_range": 0.0}] + [
-    {
-      "step": (pin + (rung - 1) * gap) * per_iteration,
-      "half_range": math.pi * rung / rungs,
-    }
-    for rung in range(1, rungs + 1)
-  ]
-  full = term.params["stages"][-1]["step"] // per_iteration
-  print(
-    f"[INFO] Goal-yaw curriculum: pinned for {pin} iterations, then {rungs} "
-    f"rung(s) every {gap}; full circle at iteration {full} of "
-    f"{cfg.agent.max_iterations}."
-  )
 
 
 def _install_action_std_floor(cfg: TrainConfig) -> None:
@@ -128,7 +78,6 @@ def _apply_label(cfg: TrainConfig) -> None:
 
 def apply_overrides(cfg: TrainConfig) -> None:
   _retune_penalty_weights(cfg)
-  _rebuild_goal_yaw_stages(cfg)
   _install_action_std_floor(cfg)
   _apply_label(cfg)
 

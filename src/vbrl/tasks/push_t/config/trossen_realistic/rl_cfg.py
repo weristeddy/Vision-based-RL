@@ -26,11 +26,12 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
     num_mini_batches=16,
     learning_rate=0.0002,
     schedule="fixed",
-    # Horizon 1/(1-gamma) = 667 steps against the 800-step episode. lam stays
+    # Horizon 1/(1-gamma) = 267 steps (13 s at 20 Hz) against the 200-step
+    # episode. lam stays
     # at 0.9: at 0.95 the GAE window (1/(1-gamma*lam)) runs past
     # num_steps_per_env, so every advantage leans on the value bootstrap
     # instead of observed reward.
-    gamma=0.9985,
+    gamma=0.99625,
     lam=0.9,
     entropy_coef=0.005,
     action_head_init_scale=0.01,
@@ -112,7 +113,6 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "sim2real_dr",
       "real_texture",
       "external_cam",
-      "goal_yaw_curriculum",
       "visual_goal",
     ),
     clip_actions=1.0,

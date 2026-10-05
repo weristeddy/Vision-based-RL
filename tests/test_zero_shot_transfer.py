@@ -396,7 +396,7 @@ def test_the_arm_can_actually_push_the_object() -> None:
     env.reset()
     held = robot.data.joint_pos[:, :6].clone()
     drift = torch.zeros((), device=env.device)
-    for _ in range(200):
+    for _ in range(int(0.5 * env.max_episode_length)):
       env.step(torch.zeros_like(action))
       drift = torch.maximum(drift, (robot.data.joint_pos[:, :6] - held).abs().max())
     assert float(drift) < 0.005, (

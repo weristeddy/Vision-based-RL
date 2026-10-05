@@ -37,6 +37,7 @@ def policy_metadata(
   finally:
     exporter_utils.JointPositionAction = JointPositionAction
 
+  metadata["control_hz"] = 1.0 / base.step_dt
   action_cfg = next(iter(base.cfg.actions.values()))
   metadata["action_type"] = {
     RelativeJointPositionActionCfg: "relative",

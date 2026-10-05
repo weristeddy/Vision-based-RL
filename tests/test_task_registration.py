@@ -101,32 +101,19 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
   assert seen_external == 4
 
 
-def test_every_push_t_arm_widens_the_goal_yaw() -> None:
+def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:
   from mjlab.tasks.registry import load_env_cfg
 
   from vbrl.tasks import vbrl_task_ids
-  from vbrl.tasks.push_t.push_t_env_cfg import GOAL_YAW_STAGES
 
-  seen = 0
   for task_id in vbrl_task_ids():
     if not task_id.startswith("Mjlab-PushT-"):
       continue
     cfg = load_env_cfg(task_id)
     command = cfg.commands["push_t_goal"]
-    scheduled = "goal_yaw_range" in cfg.curriculum
-    assert scheduled == ("-State-" not in task_id), task_id
+    assert "goal_yaw_range" not in cfg.curriculum, task_id
     assert command.success_threshold == pytest.approx(0.90), task_id
-    # The registered range is always the full circle; the curriculum narrows it
-    # at runtime and hands it back, so evaluation is never made easier.
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
-    seen += scheduled
-
-  assert seen == 4
-  assert GOAL_YAW_STAGES[0]["half_range"] == 0.0
-  assert GOAL_YAW_STAGES[-1]["half_range"] == pytest.approx(math.pi)
-  assert GOAL_YAW_STAGES[1]["step"] == 48_000
-  assert GOAL_YAW_STAGES[-1]["step"] == 76_000
-  assert len(GOAL_YAW_STAGES) == 9
 
 
 def test_a_play_environment_never_carries_a_curriculum() -> None:
@@ -262,10 +249,13 @@ def test_push_t_ramps_contact_penalties_from_zero() -> None:
   )
   from vbrl.tasks.push_t.mdp import penalty_weight_ramp
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
-  state = trossen_realistic_push_t_state_env_cfg().curriculum["penalty_ramp"]
-  assert state.params == cfg.curriculum["penalty_ramp"].params
+  rgb = trossen_realistic_push_t_rgb_env_cfg(action_scale=0.03)
+  cfg = trossen_realistic_push_t_state_env_cfg()
   term = cfg.curriculum["penalty_ramp"]
+  assert (
+    term.params["reward_names"]
+    == rgb.curriculum["penalty_ramp"].params["reward_names"]
+  )
   full = {name: cfg.rewards[name].weight for name in term.params["reward_names"]}
   env = SimpleNamespace(
     common_step_counter=0,

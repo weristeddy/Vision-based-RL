@@ -20,8 +20,9 @@ from vbrl.tasks.push_t.goal_marker import (
 )
 from vbrl.tasks.push_t.push_t_env_cfg import (
   ACTION_SCALE,
-  GOAL_YAW_STAGES,
+  EPISODE_LENGTH_S,
   PENALTY_RAMP_STEPS,
+  VISUAL_PENALTY_RAMP_STEPS,
   build_env_cfg,
 )
 from vbrl.tasks.utils import add_rgb_camera
@@ -63,7 +64,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   scene: str = "real_texture",
-  episode_length_s: float = 16.0,
+  episode_length_s: float = EPISODE_LENGTH_S,
   goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
@@ -74,7 +75,6 @@ def trossen_realistic_push_t_rgb_env_cfg(
     object_name=_OBJECT_NAME,
     rgb=True,
     play=play,
-    goal_yaw_stages=GOAL_YAW_STAGES,
     visual_goal=True,
     goal_in_observation=goal_in_observation,
     fixed_target=fixed_target,
@@ -82,7 +82,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
     episode_length_s=episode_length_s,
     goal_outline=goal_outline,
     goal_observation_noise=goal_observation_noise,
-    penalty_ramp=PENALTY_RAMP_STEPS,
+    penalty_ramp=VISUAL_PENALTY_RAMP_STEPS,
   )
   add_rgb_camera(
     cfg,

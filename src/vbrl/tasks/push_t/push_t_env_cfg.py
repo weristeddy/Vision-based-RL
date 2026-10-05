@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import (
@@ -27,7 +26,12 @@ _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _OBJECT_TABLE_SENSOR = "object_table_contact"
 _TABLE_SENSOR = "robot_table_contact"
-ACTION_SCALE = 0.03
+# 20 Hz: one decision per arm response time. At 50 Hz the measured shoulder
+# (110-200 ms lag, 4-14 mrad friction deadband) swallowed most per-step actions,
+# and the same recipe reached 0.64 mean-action success against 0.96 here.
+DECIMATION = 10
+ACTION_SCALE = 0.075
+EPISODE_LENGTH_S = 10.0
 # The object's own height, so it follows the T. Linear, not quadratic: a constant
 # gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
 EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
@@ -50,23 +54,10 @@ JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
 # Terminating on forceful top contact is deliberately not wired in, though
 # `mdp.forceful_top_contact` stays reachable.
-# Environment steps at num_steps_per_env=16: pinned for 3,000 iterations, then 8
-# rungs of 22.5 degrees every 250, full circle at 4,750. Both numbers are
-# measured. The pin has to outlast incompetence -- at 1,500 iterations overlap
-# was 0.051 and widening from there went nowhere -- and 45-degree rungs made yaw
-# error worse in 8 of the 15 runs trained on them.
-GOAL_YAW_STAGES = (
-  {"step": 0, "half_range": 0.0},
-  {"step": 48_000, "half_range": math.pi * 1 / 8},
-  {"step": 52_000, "half_range": math.pi * 2 / 8},
-  {"step": 56_000, "half_range": math.pi * 3 / 8},
-  {"step": 60_000, "half_range": math.pi * 4 / 8},
-  {"step": 64_000, "half_range": math.pi * 5 / 8},
-  {"step": 68_000, "half_range": math.pi * 6 / 8},
-  {"step": 72_000, "half_range": math.pi * 7 / 8},
-  {"step": 76_000, "half_range": math.pi * 8 / 8},
-)
 PENALTY_RAMP_STEPS = (16_000, 64_000)
+# Iterations 4,000 to 7,000 at num_steps_per_env=16, after the slowest visual
+# runs pass 0.1 success, and the same for every encoder so a sweep stays fair.
+VISUAL_PENALTY_RAMP_STEPS = (64_000, 112_000)
 _RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
 
 
@@ -117,12 +108,11 @@ def build_env_cfg(
   rgb: bool = False,
   play: bool = False,
   success_threshold: float = 0.90,
-  goal_yaw_stages: Sequence[Mapping[str, float]] | None = None,
   visual_goal: bool = False,
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   action_scale: float = ACTION_SCALE,
-  episode_length_s: float = 16.0,
+  episode_length_s: float = EPISODE_LENGTH_S,
   goal_outline: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
   penalty_ramp: tuple[int, int] | None = None,
@@ -291,11 +281,6 @@ def build_env_cfg(
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
   )
   cfg.curriculum = {}
-  if goal_yaw_stages is not None:
-    cfg.curriculum["goal_yaw_range"] = CurriculumTermCfg(
-      func=mdp.goal_yaw_curriculum,
-      params={"command_name": _COMMAND, "stages": list(goal_yaw_stages)},
-    )
   if penalty_ramp is not None:
     cfg.curriculum["penalty_ramp"] = CurriculumTermCfg(
       func=mdp.penalty_weight_ramp,
@@ -380,6 +365,7 @@ def build_env_cfg(
     ),
   )
   cfg.episode_length_s = episode_length_s
+  cfg.decimation = DECIMATION
   cfg.scale_rewards_by_dt = False
   # Azimuth 180 is the +x side the robot faces. ASSET_ROOT, not the robot's
   # `viewer_body`: that body is the gripper, so the view would swing with the arm.

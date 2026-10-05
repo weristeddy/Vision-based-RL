@@ -2,7 +2,7 @@ import functools
 
 from mjlab.tasks.registry import register_mjlab_task
 
-from vbrl.tasks.push_t.push_t_env_cfg import ACTION_SCALE
+from vbrl.tasks.push_t.push_t_env_cfg import ACTION_SCALE, EPISODE_LENGTH_S
 from vbrl.training.runner import VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
 
@@ -25,7 +25,7 @@ def _register(
   goal_in_observation: bool = True,
   fixed_target: tuple[float, float, float] | None = None,
   scene: str = "real_texture",
-  episode_length_s: float = 16.0,
+  episode_length_s: float = EPISODE_LENGTH_S,
   goal_outline: bool = False,
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),

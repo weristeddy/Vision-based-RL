@@ -137,8 +137,6 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert tuple(rgb.observations["actor"].terms) == PUSH_T_RGB_ACTOR
   assert tuple(rgb.observations["critic"].terms) == PUSH_T_CRITIC
   assert tuple(rgb.observations["camera"].terms) == ("external_cam_rgb",)
-  # The two differ by the per-step delta cap alone: the RGB tasks train at the
-  # deployable 0.03 so the raw policy output needs no clamp on the arm.
   state_action, rgb_action = state.actions["joint_pos"], rgb.actions["joint_pos"]
   assert state_action.scale == rgb_action.scale
   assert state_action.actuator_names == rgb_action.actuator_names
@@ -149,10 +147,15 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.min_xy_separation == rgb_goal.min_xy_separation
   assert state_goal.success_threshold == rgb_goal.success_threshold
   assert tuple(state.curriculum) == ("penalty_ramp",)
-  assert tuple(rgb.curriculum) == ("goal_yaw_range", "penalty_ramp")
+  assert tuple(rgb.curriculum) == ("penalty_ramp",)
+  state_ramp = state.curriculum["penalty_ramp"].params
+  rgb_ramp = rgb.curriculum["penalty_ramp"].params
+  assert (state_ramp["start_step"], state_ramp["end_step"]) == (16_000, 64_000)
+  assert (rgb_ramp["start_step"], rgb_ramp["end_step"]) == (64_000, 112_000)
   assert state.rewards == rgb.rewards
   assert state.terminations == rgb.terminations
-  assert state.episode_length_s == rgb.episode_length_s == 16.0
+  assert state.episode_length_s == rgb.episode_length_s == 10.0
+  assert state.decimation == rgb.decimation == 10
 
   camera = _camera(rgb, "external_cam")
   assert camera.camera_name == "robot/external_cam"

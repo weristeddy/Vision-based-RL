@@ -487,7 +487,18 @@ def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
   assert float(out[0]) == 0.0
   assert float(out[1]) == 0.0
   assert float(out[2]) == pytest.approx(0.0)
-  assert float(out[3]) == pytest.approx(28.0 / 5.0)
+  assert float(out[3]) == pytest.approx((28.0 / 5.0) ** 2)
+
+  jammed = SimpleNamespace(
+    scene={
+      "object_table_contact": SimpleNamespace(
+        data=SimpleNamespace(force=torch.tensor([[[0.0, 0.0, -(W + 500.0)]]]))
+      )
+    }
+  )
+  assert float(
+    object_table_press(jammed, "object_table_contact", onset=W + 2.0, scale=5.0)[0]
+  ) == pytest.approx(100.0)
 
   press = peak_object_press(env, "object_table_contact", weight_n=W)
   assert press.tolist() == pytest.approx([0.0, 0.0, 2.0, 30.0])
@@ -762,9 +773,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "force" in sensors["object_table_contact"].fields
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
-  assert cfg.episode_length_s == 16.0
+  assert cfg.episode_length_s == 10.0
   assert cfg.sim.mujoco.timestep == 0.005
-  assert cfg.decimation == 4
+  assert cfg.decimation == 10
   assert cfg.scale_rewards_by_dt is False
   assert set(cfg.metrics) == {
     "peak_table_force",
@@ -783,17 +794,17 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert isinstance(action, TargetRelativeJointPositionActionCfg)
   assert action.actuator_names == definition.arm_actuator_names
   assert len(action.actuator_names) == 6
-  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.03)
+  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.075)
   assert action.clip is None
-  # Held, like the deployment's goal-time-0 command at the same 50 Hz, on the arm
-  # whose gains and friction were measured on the rig.
+  # Held, like the deployment's goal-time-0 command, on the arm whose gains and
+  # friction were measured on the rig.
   from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML
   from vbrl.deployment.config import DeploymentConfig
 
   assert action.interpolate is False
   deployment = DeploymentConfig(onnx_file="", arm_ip="")
   assert deployment.command_goal_time_s == 0.0
-  assert deployment.control_hz == 1.0 / (cfg.sim.mujoco.timestep * cfg.decimation)
+  assert 1.0 / (cfg.sim.mujoco.timestep * cfg.decimation) == pytest.approx(20.0)
   assert cfg.scene.entities["robot"].spec_fn.args[0] == str(WXAI_MEASURED_XML)
   assert {
     name: cfg.scene.entities["robot"].init_state.joint_pos[name]
@@ -891,5 +902,5 @@ def test_push_t_play_only_disables_actor_noise_and_curriculum() -> None:
 
   assert cfg.observations["actor"].enable_corruption is False
   assert cfg.curriculum == {}
-  assert cfg.episode_length_s == 16.0
+  assert cfg.episode_length_s == 10.0
   assert cfg.commands["push_t_goal"].resampling_time_range == (1.0e9, 1.0e9)
