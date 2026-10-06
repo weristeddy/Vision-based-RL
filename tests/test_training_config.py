@@ -90,6 +90,7 @@ def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
     "class_name": "GaussianDistribution",
     "init_std": 1.0,
     "std_type": "log",
+    "std_range": (0.0, 1.5),
   }
   assert agent.algorithm.entropy_coef == 0.005
   assert agent.algorithm.action_head_init_scale == 0.01

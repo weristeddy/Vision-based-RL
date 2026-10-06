@@ -13,10 +13,14 @@ _NETWORK = {
   "activation": "relu",
   "obs_normalization": True,
 }
+# Above std ~1 the +/-1 clip hides further noise, so nothing pulls a weakly used
+# joint's std back down and the entropy bonus drove one to 1e6 in visual runs.
+# The ceiling sits above init_std so a used joint never touches the hard clamp.
 _GAUSSIAN = {
   "class_name": "GaussianDistribution",
   "init_std": 1.0,
   "std_type": "log",
+  "std_range": (0.0, 1.5),
 }
 
 
