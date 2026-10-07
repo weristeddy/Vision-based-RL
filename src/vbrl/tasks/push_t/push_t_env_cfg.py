@@ -51,11 +51,17 @@ OBJECT_PRESS_WEIGHT = -0.01
 ACTION_RATE_WEIGHT = -0.002
 JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
+NEAR_GOAL_SPEED_LENGTH_M = 0.03
 PENALTY_RAMP_STEPS = (16_000, 64_000)
 # Iterations 4,000 to 7,000 at num_steps_per_env=16, after the slowest visual
 # runs pass 0.1 success, and the same for every encoder so a sweep stays fair.
 VISUAL_PENALTY_RAMP_STEPS = (64_000, 112_000)
-_RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
+_RAMPED_PENALTIES = (
+  "object_table_press",
+  "action_rate_l2",
+  "joint_vel_l2",
+  "near_goal_ee_speed",
+)
 
 
 WORKSPACE_Y = (-0.2, 0.2)
@@ -183,6 +189,15 @@ def build_env_cfg(
       params={
         "command_name": _COMMAND,
         "asset_cfg": SceneEntityCfg("robot", joint_names=robot.arm_actuator_names),
+      },
+    ),
+    "near_goal_ee_speed": RewardTermCfg(
+      func=mdp.near_goal_ee_speed,
+      weight=0.0,
+      params={
+        **common,
+        "asset_cfg": robot_ee,
+        "length_scale": NEAR_GOAL_SPEED_LENGTH_M,
       },
     ),
     "table_touch": RewardTermCfg(

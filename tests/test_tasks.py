@@ -749,10 +749,13 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "action_rate_l2",
     "joint_vel_l2",
     "at_goal_static",
+    "near_goal_ee_speed",
     "table_touch",
     "object_table_press",
     "ee_height_ceiling",
   )
+  assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
+  assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
   assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)

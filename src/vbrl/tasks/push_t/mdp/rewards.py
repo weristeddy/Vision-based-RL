@@ -101,6 +101,24 @@ def at_goal_static(
   return static * command.get_at_goal().to(static.dtype)
 
 
+# Gated on position error alone, so a T in place with its yaw off still gets
+# slow corrective pushes.
+def near_goal_ee_speed(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  object_name: str,
+  asset_cfg: SceneEntityCfg,
+  length_scale: float,
+) -> torch.Tensor:
+  command = push_t_command(env, command_name)
+  goal_distance = torch.linalg.vector_norm(
+    command.target_pos[:, :2] - env.scene[object_name].data.root_link_pos_w[:, :2],
+    dim=-1,
+  )
+  speed = env.scene[asset_cfg.name].data.site_lin_vel_w[:, asset_cfg.site_ids[0]]
+  return torch.exp(-goal_distance / length_scale) * speed.square().sum(dim=-1)
+
+
 # Zero-set is "do not press down", so pushing stays free at any magnitude --
 # unlike every earlier attempt, whose zero-set was "do not touch the object".
 def object_table_press(
@@ -165,6 +183,7 @@ __all__ = [
   "maniskill_dense_reward",
   "max_contact_force",
   "max_contact_force_on_face",
+  "near_goal_ee_speed",
   "object_table_press",
   "peak_object_press",
   "table_touch",
