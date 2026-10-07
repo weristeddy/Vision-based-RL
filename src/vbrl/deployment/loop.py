@@ -172,8 +172,7 @@ def run(
         trace["target"].append(np.asarray(target, dtype=np.float32))
         trace["sent"].append(np.asarray(sent, dtype=np.float32))
         trace["time"].append(time.perf_counter() - started_at)
-        if step % 10 == 0:
-          frames.append(np.asarray(frame, dtype=np.uint8))
+        frames.append(np.asarray(frame, dtype=np.uint8))
 
       step += 1
       deadline += period

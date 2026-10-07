@@ -104,12 +104,14 @@ class Policy:
     *,
     goal: tuple[float, float, float],
     smoothing: float = 1.0,
+    gain: float = 1.0,
   ) -> None:
     self.metadata = PolicyMetadata.from_onnx(onnx_session)
     self._onnx = onnx_session
     self._kinematics = Kinematics()
     self._goal = np.asarray(goal, dtype=np.float64)
     self._smoothing = smoothing
+    self._gain = gain
     self._last_action = np.zeros(self.metadata.action_dim)
     self._network_action = np.zeros(self.metadata.action_dim)
     self._goal_position = np.full(3, np.inf)
@@ -184,7 +186,8 @@ class Policy:
       bound = self.metadata.clip_actions
       raw_action = np.clip(raw_action, -bound, bound)
     self._last_action = (
-      self._smoothing * raw_action + (1.0 - self._smoothing) * self._last_action
+      self._smoothing * self._gain * raw_action
+      + (1.0 - self._smoothing) * self._last_action
     )
     return self._last_action
 
@@ -242,6 +245,7 @@ def load_policy(config: Any) -> Policy:
     onnx_session,
     goal=config.goal,
     smoothing=config.motion.action_smoothing,
+    gain=config.motion.action_gain,
   )
 
 

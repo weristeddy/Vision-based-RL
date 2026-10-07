@@ -9,7 +9,7 @@ lockfile by `jetson/setup.sh`, so a plain `uv run` syncs the environment and
 removes it. The alternative is `source .venv/bin/activate` once, after which
 `vbrl-deploy ...` works on its own.
 
-At 50 Hz, `--max-steps 1000` is 20 s.
+`--max-steps 400` is 20 s at 20 Hz (the older 50 Hz policies need 1000).
 
 ## Which marker has to be on the table
 
@@ -20,45 +20,44 @@ signal.
 
 | marker | drawn as | policies |
 | --- | --- | --- |
-| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable_stiff`, `realtablepixel_stiff`, `realtable_g4`, `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
+| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable_slow`, `realtablepixel_slow`, `goaloutline_slow`, `realtable_g4`, `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
 | **Filled** | solid green T, the same two boxes as the object | `pixelgoal_fixed`, `visualslowstep` |
 | none | — | `lift_cube` |
 
-## Stiff arm, 10,000 iterations
+## Measured arm, 20 Hz, 15,000 iterations
 
-Trained on `wxai_stiff.xml` at a 0.02 per-step cap with the at-goal stillness
-reward. Hollow outline marker for both.
+The current configuration. Trained on `wxai_measured.xml` at 20 Hz with target
+actions at 0.035 per step and 10 s episodes, a Gaussian actor with its std
+capped at 1.5. Hollow outline marker for all three.
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_stiff.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_stiff.yaml --max-steps 1000 --log artifacts/deployment/realtable_stiff_run1.npz
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel_stiff.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel_stiff.yaml --max-steps 1000 --log artifacts/deployment/realtablepixel_stiff_run1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --max-steps 400
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel_slow.yaml --max-steps 400
+uv run --no-sync vbrl-deploy configs/deployment/push_t_goaloutline_slow.yaml --max-steps 400
 ```
 
-| manifest | W&B | goal signal | exposure | sim success |
+| manifest | W&B | scene | goal signal | training success |
 | --- | --- | --- | --- | --- |
-| `push_t_realtable_stiff` | `q0yd31jj` | `target_pose` + marker | 7000 us, re-probe | 0.86 during training |
-| `push_t_realtablepixel_stiff` | `rtu81ivl` | marker only | 7000 us, re-probe | 0.81 during training |
+| `push_t_realtable_slow` | `kreek7ud` | RealTable | `target_pose` + marker | 0.84 |
+| `push_t_realtablepixel_slow` | `8mqxbt06` | RealTablePixel | marker only | 0.62 |
+| `push_t_goaloutline_slow` | `g177vptm` | GoalOutline, randomized table textures | `target_pose` + marker | 0.34 |
 
-These runs overrode the registered 0.03 cap with
-`--env.actions.joint-pos.scale 0.02`, so `vbrl-play` and `vbrl-export-onnx`
-need `--action-scale 0.02` for them; the manifests' ONNX files carry 0.02.
+The runs overrode the registered scale and episode length with
+`--env.actions.joint-pos.scale 0.035 --env.episode-length-s 10`, so the ONNX
+files were exported with `--action-scale 0.035`. None of the three has
+succeeded on the real arm yet: on the real camera image the policy picks
+different push directions than in simulation.
 
-```bash
-uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/q0yd31jj \
-  --wandb-checkpoint-name model_10000.pt --action-scale 0.02 --num-envs 4
-uv run --no-sync vbrl-play Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/rtu81ivl \
-  --wandb-checkpoint-name model_10000.pt --action-scale 0.02 --num-envs 4
-```
+`--action-gain` scales each action before smoothing and before it is added to
+the target; `--action-smoothing` is the weight of the new action in the moving
+average, so 1.0 is no smoothing. Both override the manifest's `motion:` block.
 
 ## Identified arm, target-relative control
 
-The current configuration: Menagerie's identified arm, ManiSkill's target-delta
-action with the target in the observation, and uniform goal yaw from the start.
-Hollow outline marker.
+Menagerie's identified arm, ManiSkill's target-delta action at 0.03 with the
+target in the observation, and uniform goal yaw from the start. Hollow outline
+marker.
 
 ```bash
 uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_g4.yaml --dry-run
@@ -67,7 +66,7 @@ uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_g4.yaml --max-s
 
 | manifest | W&B | goal signal | exposure | sim success |
 | --- | --- | --- | --- | --- |
-| `push_t_realtable_g4` | `u6545l3u` | `target_pose` + marker | 12000 us, re-probe | 0.83 with the mean action (256 episodes) |
+| `push_t_realtable_g4` | `u6545l3u` | `target_pose` + marker | 11000 us, 5700 K | 0.83 with the mean action (256 episodes) |
 
 The ONNX runs DINOv2 in float32 where training used bfloat16 autocast, so its
 actions differ from the PyTorch policy by up to 0.24; success is unchanged
@@ -160,7 +159,9 @@ This is the one manifest that shapes the action in the manifest itself
 `vbrl-play` serves a Viser scene on port 8080 (`--host`, `--port` to change
 it). The entry point is `vbrl-play`, not `vbrl-visualize`. These policies have
 no local `.pt`, only the exported ONNX, so the weights come from W&B and the
-task ID supplies the architecture. The current policy resolves:
+task ID supplies the architecture. The current policies resolve with the
+W&B runs under [Measured arm, 20 Hz](#measured-arm-20-hz-15000-iterations)
+(add `--action-scale 0.035`), and G4 with:
 
 ```bash
 uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
@@ -218,9 +219,9 @@ so this is for a handful of envs, not a training-sized batch.
 ## Before and after a run
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable.yaml --home
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable.yaml --park
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --home
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --park
 ```
 
 `--dry-run` homes the arm, reads the sensors and evaluates the policy without
@@ -252,3 +253,10 @@ the goal. Re-probe before a session rather than trusting the number here:
 ```bash
 uv run --no-sync python -m vbrl.deployment.camera
 ```
+
+The policies trained since 2026-09-23 (the stiff-arm runs and G4) saw the warm
+table, 201/143/92 in sim, and need `camera_white_balance_k: 5700`. Auto white
+balance renders the wood grey and they fail on it. 11000 us at 5700 K gave
+191/139/90 with the room lights on; with the lights off the same exposure is
+far too dark. The older policies below the history note leave white balance
+on auto.

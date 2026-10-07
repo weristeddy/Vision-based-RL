@@ -241,6 +241,7 @@ def test_the_action_fed_back_as_an_observation_stays_inside_its_training_band() 
     policy._last_action = np.zeros(6)
     policy._network_action = np.zeros(6)
     policy._smoothing = 1.0
+    policy._gain = 1.0
     # Divergent the way the real loop is: gain 1.5 > 1, so only a bound on what
     # gets fed back can stop it.
     policy._infer = lambda observation: 1.5 * observation["obs"][0] + 2.0

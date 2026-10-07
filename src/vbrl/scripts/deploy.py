@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from collections.abc import Sequence
 
 
@@ -33,7 +34,7 @@ def main(argv: Sequence[str] | None = None) -> int:
   parser.add_argument(
     "--log",
     help="Write a per-step trace to this .npz: action, joint_pos, joint_vel, "
-    "the commanded target, what the rate clamp actually sent, and every 10th "
+    "the commanded target, what the rate clamp actually sent, and every "
     "camera frame.",
   )
   parser.add_argument(
@@ -46,9 +47,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     action="store_true",
     help="bring the arm down to rest and release torque, then exit",
   )
+  parser.add_argument(
+    "--action-gain", type=float, help="overrides motion.action_gain from the manifest"
+  )
+  parser.add_argument(
+    "--action-smoothing",
+    type=float,
+    help="overrides motion.action_smoothing from the manifest",
+  )
   arguments = parser.parse_args(argv)
 
   config = load_config(arguments.manifest)
+  overrides = {
+    name: value
+    for name, value in (
+      ("action_gain", arguments.action_gain),
+      ("action_smoothing", arguments.action_smoothing),
+    )
+    if value is not None
+  }
+  if overrides:
+    config = dataclasses.replace(
+      config, motion=dataclasses.replace(config.motion, **overrides)
+    )
+    config.motion.validate()
   if arguments.home:
     return home(config)
   if arguments.park:

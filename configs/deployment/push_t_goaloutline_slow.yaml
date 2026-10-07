@@ -1,0 +1,23 @@
+version: 1
+
+# W&B run g177vptm, iteration 14999: measured arm, Gaussian actor, target actions at
+# 0.035 and 20 Hz with the setpoint held for the whole step, 10 s episodes.
+# GoalOutline (randomized table textures), goal-conditioned. Training success 0.34.
+onnx_file: ckpts/push_t/dinov2_vits14_afa6_goaloutline_slow_14999.onnx
+
+arm_ip: 192.168.1.2
+
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+camera_exposure_us: 11000
+camera_white_balance_k: 5700
+
+control_hz: 20.0
+
+motion:
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 6.0
+  home_seconds: 3.0

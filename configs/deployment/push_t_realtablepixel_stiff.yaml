@@ -14,7 +14,11 @@ goal_space: push_t_xy_yaw
 goal: [0.38442, 0.01567, 0.0124]
 
 # Re-probe before a session: python -m vbrl.deployment.camera
-camera_exposure_us: 7000
+# Matched to the sim's warm table (201/143/92) with the room lights on,
+# 2026-10-01: auto white balance renders the wood grey, which these policies
+# never saw.
+camera_exposure_us: 11000
+camera_white_balance_k: 5700
 
 control_hz: 50.0
 

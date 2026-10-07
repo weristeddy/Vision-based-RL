@@ -19,6 +19,7 @@ TARGET_Z_BASE_M = 0.0070
 @dataclass(frozen=True)
 class Motion:
   action_smoothing: float = 0.25
+  action_gain: float = 1.0
   max_joint_step: float | None = 0.035
   max_gripper_step: float = 0.005
   max_arm_action: float = 6.0
@@ -29,6 +30,8 @@ class Motion:
       raise ValueError(
         f"action_smoothing must be in (0, 1]; got {self.action_smoothing}."
       )
+    if not 0.0 < self.action_gain <= 1.0:
+      raise ValueError(f"action_gain must be in (0, 1]; got {self.action_gain}.")
     if self.max_joint_step is not None and self.max_joint_step <= 0.0:
       raise ValueError(
         f"max_joint_step must be positive or null; got {self.max_joint_step}."
@@ -54,6 +57,7 @@ class DeploymentConfig:
   camera_width: int = 424
   camera_height: int = 240
   camera_exposure_us: float | None = None
+  camera_white_balance_k: float | None = None
   command_goal_time_s: float = 0.0
   arm_model: str = "wxai_v0"
   motor_parameters: str = "wxai_v0_20260317"
@@ -88,6 +92,13 @@ class DeploymentConfig:
     if self.command_goal_time_s < 0.0:
       raise ValueError(
         f"command_goal_time_s must be >= 0; got {self.command_goal_time_s}."
+      )
+    if self.camera_white_balance_k is not None and not (
+      2800.0 <= self.camera_white_balance_k <= 6500.0
+    ):
+      raise ValueError(
+        "camera_white_balance_k must be in [2800, 6500] or null; got "
+        f"{self.camera_white_balance_k}."
       )
     if self.control_hz <= 0.0:
       raise ValueError(f"control_hz must be positive; got {self.control_hz}.")
