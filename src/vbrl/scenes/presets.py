@@ -198,10 +198,11 @@ _RED_PLASTIC_OBJECT = MaterialBank(
 _REAL_TABLE_BANK = MaterialBank(kind="image", prefix="real_table", image=REAL_TABLE)
 # Measured off the rig: the object's bordeaux (#68392c) and the printed marker's
 # green (#046147). Both keep colour DR, narrowed to what the camera really sees.
-# Albedo, not observed colour. Tuned until the rendered object matched the rig
-# at 0.426/0.192/0.090; the previous range rendered 0.452/0.247/0.192, with
-# blue 2.1x too high.
-REAL_TABLE_OBJECT_COLOUR_RANGE = ((0.22, 0.44), (0.055, 0.215), (0.0, 0.115))
+# Albedo, not observed colour: the 5-95 % range that made the rendered T match
+# the rig's T pixel for pixel across 120 renders on 2026-10-07 (median
+# 0.20/0.068/0.011), with margin. The previous 0.22-0.44/0.055-0.215/0-0.115
+# left 63 % of those matches outside it.
+REAL_TABLE_OBJECT_COLOUR_RANGE = ((0.14, 0.36), (0.04, 0.11), (0.0, 0.03))
 
 
 def _ood_table(preset: TexturePreset) -> MaterialBank:
