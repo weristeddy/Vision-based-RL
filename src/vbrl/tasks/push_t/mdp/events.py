@@ -15,10 +15,10 @@ if TYPE_CHECKING:
 
 # ManiSkill3's vision-based sim-to-real setup.
 ROBOT_JOINT_POSITION_STD_RAD = 0.02
-# Object/table sliding coefficient, set from the literature rather than measured on this
-# rig: printed PLA on unsanded wood spans roughly 0.37-0.75, and the real T is visibly.
-OBJECT_TABLE_FRICTION_MEAN = 0.55
-OBJECT_TABLE_FRICTION_STD = 0.12
+# Object/table sliding coefficient, not measured on this rig. At 0.55 the real T
+# kept sliding after the fingertip left it, which it never did in simulation.
+OBJECT_TABLE_FRICTION_MEAN = 0.35
+OBJECT_TABLE_FRICTION_STD = 0.10
 
 OBJECT_COLLISION_GEOMS = r"push_t_(crossbar|stem)_collision"
 TABLE_COLLISION_GEOM = ("table_top",)
