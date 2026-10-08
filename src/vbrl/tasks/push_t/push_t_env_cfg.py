@@ -56,12 +56,7 @@ PENALTY_RAMP_STEPS = (16_000, 64_000)
 # Iterations 4,000 to 7,000 at num_steps_per_env=16, after the slowest visual
 # runs pass 0.1 success, and the same for every encoder so a sweep stays fair.
 VISUAL_PENALTY_RAMP_STEPS = (64_000, 112_000)
-_RAMPED_PENALTIES = (
-  "object_table_press",
-  "action_rate_l2",
-  "joint_vel_l2",
-  "near_goal_ee_speed",
-)
+_RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
 
 
 WORKSPACE_Y = (-0.2, 0.2)
@@ -282,6 +277,16 @@ def build_env_cfg(
       func=mdp.penalty_weight_ramp,
       params={
         "reward_names": list(_RAMPED_PENALTIES),
+        "start_step": penalty_ramp[0],
+        "end_step": penalty_ramp[1],
+      },
+    )
+    # Its own entry so a run can move it alone: tyro parses the shared ramp's
+    # reward_names as a single string.
+    cfg.curriculum["near_goal_speed_ramp"] = CurriculumTermCfg(
+      func=mdp.penalty_weight_ramp,
+      params={
+        "reward_names": ["near_goal_ee_speed"],
         "start_step": penalty_ramp[0],
         "end_step": penalty_ramp[1],
       },

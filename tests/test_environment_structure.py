@@ -143,8 +143,8 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert rgb_goal.goal_marker_name == "goal_marker"
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.success_threshold == rgb_goal.success_threshold
-  assert tuple(state.curriculum) == ("penalty_ramp",)
-  assert tuple(rgb.curriculum) == ("penalty_ramp",)
+  assert tuple(state.curriculum) == ("penalty_ramp", "near_goal_speed_ramp")
+  assert tuple(rgb.curriculum) == ("penalty_ramp", "near_goal_speed_ramp")
   state_ramp = state.curriculum["penalty_ramp"].params
   rgb_ramp = rgb.curriculum["penalty_ramp"].params
   assert (state_ramp["start_step"], state_ramp["end_step"]) == (16_000, 64_000)
