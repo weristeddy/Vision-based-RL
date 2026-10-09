@@ -44,7 +44,10 @@ def policy_metadata(
     TargetRelativeJointPositionActionCfg: "target",
   }.get(type(action_cfg), "absolute")
   term = base.action_manager.get_term("joint_pos")
-  if metadata["action_type"] == "target":
+  if isinstance(action_cfg, TargetRelativeJointPositionActionCfg):
+    if action_cfg.reference == "measured":
+      metadata["action_type"] = "relative"
+    metadata["ramp_s"] = float(action_cfg.ramp_s)
     metadata["target_low"] = term.low[0].cpu().tolist()
     metadata["target_high"] = term.high[0].cpu().tolist()
   # The clip is as much of the contract as the scale: without it Push-T sent
