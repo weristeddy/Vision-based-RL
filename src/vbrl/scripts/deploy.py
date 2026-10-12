@@ -5,6 +5,11 @@ import dataclasses
 from collections.abc import Sequence
 
 
+def _gain(text: str) -> float | tuple[float, ...]:
+  values = tuple(float(value) for value in text.split(","))
+  return values[0] if len(values) == 1 else values
+
+
 def main(argv: Sequence[str] | None = None) -> int:
   from vbrl.deployment.config import load_config
   from vbrl.deployment.loop import home, park, run
@@ -48,7 +53,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     help="bring the arm down to rest and release torque, then exit",
   )
   parser.add_argument(
-    "--action-gain", type=float, help="overrides motion.action_gain from the manifest"
+    "--action-gain",
+    type=_gain,
+    help="overrides motion.action_gain: one value, or six comma-separated",
   )
   parser.add_argument(
     "--action-smoothing",

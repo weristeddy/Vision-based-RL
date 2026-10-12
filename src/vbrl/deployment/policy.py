@@ -245,7 +245,7 @@ def load_policy(config: Any) -> Policy:
     onnx_session,
     goal=config.goal,
     smoothing=config.motion.action_smoothing,
-    gain=config.motion.action_gain,
+    gain=np.asarray(config.motion.action_gain, dtype=np.float64),
   )
 
 

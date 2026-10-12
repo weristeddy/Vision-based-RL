@@ -29,7 +29,6 @@ class TargetRelativeJointPositionAction(BaseAction):
     self._physics_dt = env.physics_dt
     model = env.sim.mj_model
     actuators = [model.actuator(f"{cfg.entity_name}/{n}") for n in self._target_names]
-    # A position actuator's kv/kp turns a feedforward velocity into a target lead.
     self._lead_per_velocity = torch.tensor(
       [-a.biasprm[2] / a.gainprm[0] for a in actuators],
       dtype=torch.float,
@@ -42,7 +41,6 @@ class TargetRelativeJointPositionAction(BaseAction):
     self._target[ids] = self._entity.data.joint_pos[ids][:, self._target_ids]
     self._setpoint[ids] = self._target[ids]
     self._ramp[ids] = 0.0
-    # mjlab seeds the delay buffer with the zeroed target otherwise
     self._entity.set_joint_position_target(
       self._target[ids], joint_ids=self._target_ids, env_ids=ids
     )
@@ -60,8 +58,6 @@ class TargetRelativeJointPositionAction(BaseAction):
     self._target = torch.clamp(base + self._processed_actions, self.low, self.high)
     self._ramp = (self._target - self._setpoint) / self._ramp_substeps
 
-  # The Trossen SDK moves its setpoint linearly over goal_time and, unless
-  # ramp_feedforward is off, also commands the ramp's speed.
   def apply_actions(self) -> None:
     remaining = self._target - self._setpoint
     step = torch.where(
@@ -79,7 +75,6 @@ class TargetRelativeJointPositionActionCfg(BaseActionCfg):
   reference: Literal["target", "measured"] = "target"
   ramp_s: float = 0.0
   ramp_feedforward: bool = True
-  # The reward barely constrains the wrist roll, so a policy drives it bang-bang.
   wrist_roll_scale: float | None = None
 
   def __post_init__(self) -> None:

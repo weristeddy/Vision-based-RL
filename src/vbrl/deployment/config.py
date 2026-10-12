@@ -7,7 +7,7 @@ from pathlib import Path
 GOAL_RANGE = {"x": (0.3, 0.5), "y": (-0.2, 0.2), "z": (0.2, 0.4)}
 # Push-T's goal is a pose on the table, not a point above it: the third number is a
 # heading in radians rather than a height.
-PUSH_T_GOAL_RANGE = {"x": (0.3, 0.5), "y": (-0.2, 0.2), "yaw": (-math.pi, math.pi)}
+PUSH_T_GOAL_RANGE = {"x": (0.2, 0.5), "y": (-0.2, 0.2), "yaw": (-math.pi, math.pi)}
 GOAL_SPACES = {"lift_xyz": GOAL_RANGE, "push_t_xy_yaw": PUSH_T_GOAL_RANGE}
 
 # base_link sits on a 5 mm mount plate, so the table is 5 mm below it, and the
@@ -19,7 +19,7 @@ TARGET_Z_BASE_M = 0.0070
 @dataclass(frozen=True)
 class Motion:
   action_smoothing: float = 0.25
-  action_gain: float = 1.0
+  action_gain: float | tuple[float, ...] = 1.0
   max_joint_step: float | None = 0.035
   max_gripper_step: float = 0.005
   max_arm_action: float = 6.0
@@ -30,8 +30,9 @@ class Motion:
       raise ValueError(
         f"action_smoothing must be in (0, 1]; got {self.action_smoothing}."
       )
-    if not 0.0 < self.action_gain <= 1.0:
-      raise ValueError(f"action_gain must be in (0, 1]; got {self.action_gain}.")
+    gains = self.action_gain if isinstance(self.action_gain, tuple) else (self.action_gain,)
+    if len(gains) not in (1, 6) or not all(0.0 < g <= 1.0 for g in gains):
+      raise ValueError(f"action_gain must be one or six values in (0, 1]; got {gains}.")
     if self.max_joint_step is not None and self.max_joint_step <= 0.0:
       raise ValueError(
         f"max_joint_step must be positive or null; got {self.max_joint_step}."
@@ -126,6 +127,8 @@ def load_config(path: str | Path) -> DeploymentConfig:
         f"valid are {sorted(known)}."
       )
 
+  if isinstance(motion_fields.get("action_gain"), list):
+    motion_fields["action_gain"] = tuple(motion_fields["action_gain"])
   if "goal" in document:
     document["goal"] = tuple(float(value) for value in document["goal"])
   config = DeploymentConfig(**document, motion=Motion(**motion_fields))

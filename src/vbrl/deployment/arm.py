@@ -60,8 +60,6 @@ class TrossenArm:
       getattr(trossen_arm.StandardMotorParameters, config.motor_parameters)
     )
     self._motion = config.motion
-    # 0 applies each command at once. A linear ramp (0.001 < goal time <= 0.2 s)
-    # also drives the joint at the ramp's speed, which the simulator does not model.
     self._goal_time = config.command_goal_time_s
 
     limits = self._driver.get_joint_limits()

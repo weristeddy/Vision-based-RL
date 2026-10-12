@@ -59,9 +59,8 @@ VISUAL_PENALTY_RAMP_STEPS = (64_000, 112_000)
 _RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
 
 
+WORKSPACE_X = (0.2, 0.5)
 WORKSPACE_Y = (-0.2, 0.2)
-OBJECT_X = (0.2, 0.4)
-TARGET_X = (0.3, 0.5)
 
 
 def _command(
@@ -77,13 +76,13 @@ def _command(
     debug_vis=True,
     success_threshold=SUCCESS_THRESHOLD,
     object_pose_range=mdp.PushTCommandCfg.ObjectPoseRangeCfg(
-      x=OBJECT_X,
+      x=WORKSPACE_X,
       y=WORKSPACE_Y,
       z=(REST_HEIGHT, REST_HEIGHT),
       yaw=(-math.pi, math.pi),
     ),
     target_position_range=mdp.PushTCommandCfg.TargetPositionRangeCfg(
-      x=TARGET_X,
+      x=WORKSPACE_X,
       y=WORKSPACE_Y,
       z=(HALF_HEIGHT, HALF_HEIGHT),
     ),
