@@ -9,137 +9,35 @@ lockfile by `jetson/setup.sh`, so a plain `uv run` syncs the environment and
 removes it. The alternative is `source .venv/bin/activate` once, after which
 `vbrl-deploy ...` works on its own.
 
-`--max-steps 400` is 20 s at 20 Hz (the older 50 Hz policies need 1000).
+`--max-steps 400` is 20 s at 20 Hz.
 
-## Which marker has to be on the table
+## Push-T
 
-The Push-T policies were not all trained against the same goal marker, and the
-marker is drawn into the camera observation, so the wrong one is out of
-distribution — fatally so for the pixel-only policies, which have no other goal
-signal.
-
-| marker | drawn as | policies |
-| --- | --- | --- |
-| **Hollow outline** | 15 mm green frame tracing the T footprint | `realtable_slow`, `realtablepixel_slow`, `goaloutline_slow`, `realtable_g4`, `realtable`, `realtablepixel`, `goaloutline15k`, `goaloutline`, `goaloutlinepixel` |
-| **Filled** | solid green T, the same two boxes as the object | `pixelgoal_fixed`, `visualslowstep` |
-| none | — | `lift_cube` |
-
-## Measured arm, 20 Hz, 15,000 iterations
-
-The current configuration. Trained on `wxai_measured.xml` at 20 Hz with target
-actions at 0.035 per step and 10 s episodes, a Gaussian actor with its std
-capped at 1.5. Hollow outline marker for all three.
+Trained with the Trossen SDK's 50 ms linear ramp and its velocity feedforward
+modelled in sim (`ramp_s 0.05`), so the manifests command with
+`command_goal_time_s: 0.05` -- the two must match. Scale 0.05 at 20 Hz,
+near-goal speed penalty -80 ramped, action rate -0.01. The goal marker is the
+hollow outline: a 15 mm green frame tracing the T footprint. A filled marker is
+out of distribution.
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --max-steps 400
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel_slow.yaml --max-steps 400
-uv run --no-sync vbrl-deploy configs/deployment/push_t_goaloutline_slow.yaml --max-steps 400
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --max-steps 400
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_measured_sdk50.yaml --max-steps 400
 ```
 
-| manifest | W&B | scene | goal signal | training success |
-| --- | --- | --- | --- | --- |
-| `push_t_realtable_slow` | `kreek7ud` | RealTable | `target_pose` + marker | 0.84 |
-| `push_t_realtablepixel_slow` | `8mqxbt06` | RealTablePixel | marker only | 0.62 |
-| `push_t_goaloutline_slow` | `g177vptm` | GoalOutline, randomized table textures | `target_pose` + marker | 0.34 |
+| manifest | W&B | reference | sim success | fingertip approaching T | T 1-3 cm from goal |
+| --- | --- | --- | --- | --- | --- |
+| `push_t_realtable_target_sdk50` | `ok5ae9ph` | target | 0.90 | 0.15 m/s | 0.10 m/s |
+| `push_t_realtable_measured_sdk50` | `gh9nf7wc` | measured | 0.89 | 0.25 m/s | 0.13 m/s |
 
-The runs overrode the registered scale and episode length with
-`--env.actions.joint-pos.scale 0.035 --env.episode-length-s 10`, so the ONNX
-files were exported with `--action-scale 0.035`. None of the three has
-succeeded on the real arm yet: on the real camera image the policy picks
-different push directions than in simulation.
+Mean action over 128 episodes at the manifest goal. ONNX exported with `--action-scale 0.05`
+and `--action-reference` set to the run's reference; a measured-reference policy exported
+without it would integrate on the target instead of the measured position.
 
 `--action-gain` scales each action before smoothing and before it is added to
 the target; `--action-smoothing` is the weight of the new action in the moving
 average, so 1.0 is no smoothing. Both override the manifest's `motion:` block.
-
-## Identified arm, target-relative control
-
-Menagerie's identified arm, ManiSkill's target-delta action at 0.03 with the
-target in the observation, and uniform goal yaw from the start. Hollow outline
-marker.
-
-```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_g4.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_g4.yaml --max-steps 1000
-```
-
-| manifest | W&B | goal signal | exposure | sim success |
-| --- | --- | --- | --- | --- |
-| `push_t_realtable_g4` | `u6545l3u` | `target_pose` + marker | 11000 us, 5700 K | 0.83 with the mean action (256 episodes) |
-
-The ONNX runs DINOv2 in float32 where training used bfloat16 autocast, so its
-actions differ from the PyTorch policy by up to 0.24; success is unchanged
-(0.78 against 0.75 on 64 episodes).
-
-Target-relative control keeps pushing against whatever blocks it, and in
-simulation this policy peaked at 70-100 N of table force in some episodes, so
-keep a hand on the stop.
-
-> **The policies below are history, not the current configuration.** They were
-> trained on `-TrossenRealistic` against the Trossen MJCF, a grey-rendering
-> tabletop, a black background and measured-relative actions. Push-T now
-> registers `-TrossenIdentified` with target-relative actions, so the task IDs
-> below no longer exist and nothing here can be reproduced from source. The
-> manifests still run, because the observation and action contract travels
-> inside the ONNX graph.
-
-## Hollow outline marker, 15,000 iterations
-
-The last generation on the Trossen MJCF. Trained at the 0.03 per-step cap with 16 s episodes and
-the linear orientation summand.
-
-```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable.yaml --max-steps 1000
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtablepixel.yaml --max-steps 1000
-uv run --no-sync vbrl-deploy configs/deployment/push_t_goaloutline15k.yaml --max-steps 1000
-```
-
-| manifest | W&B | goal signal | exposure | sim success |
-| --- | --- | --- | --- | --- |
-| `push_t_realtable` | `xbl8pqsz` | `target_pose` + marker | 12000 us | 0.727 |
-| `push_t_realtablepixel` | `0vv02udk` | marker only | 12000 us | 0.500 |
-| `push_t_goaloutline15k` | `ao5bzb64` | `target_pose` + marker | 9000 us | 0.409 |
-
-`realtable` and `goaloutline15k` differ only by the tabletop texture — fixed
-photograph against the randomized bank — so they are a controlled pair.
-
-## Hollow outline marker, 6,000 iterations
-
-```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_goaloutline.yaml --max-steps 1000
-uv run --no-sync vbrl-deploy configs/deployment/push_t_goaloutlinepixel.yaml --max-steps 1000
-```
-
-| manifest | W&B | goal signal | exposure |
-| --- | --- | --- | --- |
-| `push_t_goaloutline` | `8vpxhjf2` | `target_pose` + marker | 7000 us |
-| `push_t_goaloutlinepixel` | `9pqs3f02` | marker only | 7000 us |
-
-Both were trained while the goal-yaw sampler was dropping its assignment, so
-the goal yaw sat at 0 for all of training. They are only in distribution with
-the marker near yaw 0, which is where this manifest's goal is. Rotating the
-marker puts them out of distribution.
-
-## Filled marker, 6,000 iterations
-
-Superseded. Their task IDs are no longer registered, but the observation and
-action contract travels inside the ONNX metadata, so the manifests still run.
-
-```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_pixelgoal_fixed.yaml --max-steps 1000
-uv run --no-sync vbrl-deploy configs/deployment/push_t_visualslowstep.yaml --max-steps 1000
-```
-
-| manifest | W&B | goal signal | per-step cap | exposure |
-| --- | --- | --- | --- | --- |
-| `push_t_pixelgoal_fixed` | `n92lvmra` | marker only | 0.05 | 7000 us |
-| `push_t_visualslowstep` | `9w8z704o` | `target_pose` + marker | 0.03 | 7000 us |
-
-`pixelgoal_fixed` was trained against **one** goal pose and no other — the one
-in its manifest. The marker has to be at exactly that pose; move it back rather
-than editing the file. It is the strongest of these in sim (0.967 success) only
-because it faces one goal instead of the full distribution.
 
 ## Lift cube
 
@@ -157,21 +55,24 @@ This is the one manifest that shapes the action in the manifest itself
 ## Viewing a policy in the browser
 
 `vbrl-play` serves a Viser scene on port 8080 (`--host`, `--port` to change
-it). The entry point is `vbrl-play`, not `vbrl-visualize`. These policies have
-no local `.pt`, only the exported ONNX, so the weights come from W&B and the
-task ID supplies the architecture. The current policies resolve with the
-W&B runs under [Measured arm, 20 Hz](#measured-arm-20-hz-15000-iterations)
-(add `--action-scale 0.035`), and G4 with:
+it). The policies have no local `.pt`, only the exported ONNX, so the weights
+come from W&B and the task ID supplies the architecture:
 
 ```bash
 uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/u6545l3u \
-  --wandb-checkpoint-name model_14999.pt --num-envs 4
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/ok5ae9ph \
+  --wandb-checkpoint-name model_14999.pt --action-scale 0.05 --num-envs 4
 ```
 
-The `-TrossenRealistic` commands further down no longer resolve, because Push-T
-now registers only `-TrossenIdentified` IDs; they are kept as the record of which
-run produced which policy.
+`vbrl-play` has no flag for the ramp or the action reference, so it replays
+these policies with the registered defaults (no ramp, target reference).
+
+Add `--goal 0.38442 0.01567 0.0124` to pin the goal to the rig's marker pose,
+which is what the deployment manifests use; without it the goal randomizes over
+the full circle. Other useful flags: `--agent zero` to see the scene with no
+policy, `--scene {wood,plaster,peacock}` for an OOD tabletop, `--max-steps N`
+to exit cleanly. Keep `--num-envs` small: per-env table textures are uploaded
+as one mesh each.
 
 The Jetson is headless, so the browser is on the laptop and port 8080 has to
 reach it. Over VS Code Remote-SSH that happens by itself: the PORTS panel
@@ -189,39 +90,16 @@ To check the server rather than the forward, from a shell on the Jetson:
 uv run --no-sync python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:8080/').status)"
 ```
 
-200 means `vbrl-play` is fine and the problem is the forward. It binds
-`0.0.0.0` and answers on every interface. Note `--max-steps` makes it exit when
-it is reached, closing the server with it -- leave it off to keep the viewer up.
-
-```bash
-uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenRealistic \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/xbl8pqsz \
-  --wandb-checkpoint-name model_14999.pt --num-envs 4
-
-uv run --no-sync vbrl-play Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenRealistic \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/0vv02udk \
-  --wandb-checkpoint-name model_14999.pt --num-envs 4
-
-uv run --no-sync vbrl-play Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenRealistic \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/ao5bzb64 \
-  --wandb-checkpoint-name model_14999.pt --num-envs 4
-```
-
-Add `--goal 0.38442 0.01567 0.0124` to pin the goal to the rig's marker pose,
-which is what the deployment manifests use; without it the goal randomizes over
-the full circle. Other useful flags: `--agent zero` to see the scene with no
-policy, `--scene {wood,plaster,peacock}` for an OOD tabletop, `--max-steps N`
-to exit cleanly.
-
-Keep `--num-envs` small. Per-env table textures are uploaded as one mesh each,
-so this is for a handful of envs, not a training-sized batch.
+200 means `vbrl-play` is fine and the problem is the forward. Note
+`--max-steps` makes it exit when it is reached, closing the server with it --
+leave it off to keep the viewer up.
 
 ## Before and after a run
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --home
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_slow.yaml --park
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --home
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --park
 ```
 
 `--dry-run` homes the arm, reads the sensors and evaluates the policy without
@@ -234,9 +112,9 @@ turns that off, and it turns itself off with no terminal on stdin.
 
 ## When the goal marker moves
 
-Where `target_pose` is an input, the numbers in `goal:` and the marker on the
-table have to agree. Seat the two tag25h9 markers in the notches, capture one
-external-camera frame, then take the tags off — the policy must never see them.
+The numbers in `goal:` and the marker on the table have to agree. Seat the two
+tag25h9 markers in the notches, capture one external-camera frame, then take
+the tags off — the policy must never see them.
 
 ```bash
 uv run --no-sync python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
@@ -244,19 +122,14 @@ uv run --no-sync python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
 
 ## Exposure
 
-`camera_exposure_us` belongs to the scene the policy was trained in, not to the
-room. The fixed-texture scenes render a narrow brightness band, and a run below
-it fails completely while looking like a policy failure — `realtable` at
-7000 us moved the T by 5.7 mm in 16 s, and at 12000 us the same policy reached
-the goal. Re-probe before a session rather than trusting the number here:
+`camera_exposure_us` and `camera_white_balance_k` belong to the scene the
+policy was trained in, not to the room. The rig-table scene renders a narrow
+brightness band, and a run below it fails completely while looking like a
+policy failure: an earlier policy at 7000 us moved the T by 5.7 mm in 16 s, and
+at 12000 us the same policy reached the goal. Auto white balance renders the
+wood grey and the policies fail on it. Re-probe before a session rather than
+trusting the numbers in the manifests:
 
 ```bash
 uv run --no-sync python -m vbrl.deployment.camera
 ```
-
-The policies trained since 2026-09-23 (the stiff-arm runs and G4) saw the warm
-table, 201/143/92 in sim, and need `camera_white_balance_k: 5700`. Auto white
-balance renders the wood grey and they fail on it. 11000 us at 5700 K gave
-191/139/90 with the room lights on; with the lights off the same exposure is
-far too dark. The older policies below the history note leave white balance
-on auto.
