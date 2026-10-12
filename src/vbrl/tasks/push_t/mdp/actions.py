@@ -16,6 +16,10 @@ class TargetRelativeJointPositionAction(BaseAction):
     super().__init__(cfg=cfg, env=env)
     if cfg.ramp_s < 0.0:
       raise ValueError(f"ramp_s must be >= 0; got {cfg.ramp_s}.")
+    if cfg.wrist_roll_scale is not None:
+      scale = torch.as_tensor(self._scale, dtype=torch.float, device=self.device)
+      self._scale = scale.expand(self.num_envs, self.action_dim).clone()
+      self._scale[:, self._target_names.index("joint_5")] = cfg.wrist_roll_scale
     limits = self._entity.data.soft_joint_pos_limits[:, self._target_ids]
     self.low, self.high = limits[..., 0], limits[..., 1]
     self._target = self._entity.data.joint_pos[:, self._target_ids].clone()
@@ -75,6 +79,8 @@ class TargetRelativeJointPositionActionCfg(BaseActionCfg):
   reference: Literal["target", "measured"] = "target"
   ramp_s: float = 0.0
   ramp_feedforward: bool = True
+  # The reward barely constrains the wrist roll, so a policy drives it bang-bang.
+  wrist_roll_scale: float | None = None
 
   def __post_init__(self) -> None:
     self.transmission_type = TransmissionType.JOINT
