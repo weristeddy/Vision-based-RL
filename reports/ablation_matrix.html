@@ -1,0 +1,321 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sim2Real Ablation Matrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one scorecard; each row is one option, grouped by factor; tone = how good, orange = cost, dashed = estimate. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #16202a;
+  --muted: #5b6977;
+  --line: #d6dde3;
+  --good: #1f5f99;
+  --cost: #b4532a;
+  --same: #e9edf0;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161c; --surface: #172028; --fg: #e3e9ee; --muted: #93a1ad; --line: #2b3944;
+    --good: #6aa8e6; --cost: #e48a5f; --same: #1f2a33; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161c; --surface: #172028; --fg: #e3e9ee; --muted: #93a1ad; --line: #2b3944;
+  --good: #6aa8e6; --cost: #e48a5f; --same: #1f2a33; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 48px; display: grid; gap: 18px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 2rem; line-height: 1.1; margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 4px 0 0; max-width: 72ch; }
+.eyebrow { font-family: var(--display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--good); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.84rem; color: var(--muted); align-items: center; }
+.legend span.g { display: inline-flex; gap: 5px; align-items: center; }
+.sw { display: inline-block; width: 22px; height: 16px; border-radius: 3px; }
+
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; }
+thead th { font-family: var(--display); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 10px 6px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; vertical-align: bottom; }
+thead th:first-child { text-align: left; padding-left: 14px; }
+thead th small { display: block; font: 400 0.72rem var(--body); text-transform: none; letter-spacing: 0; }
+.split { border-left: 1px solid var(--line); }
+tbody th { text-align: left; padding: 6px 14px 6px 26px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 0.93rem; min-width: 250px; }
+tbody td { padding: 3px; border-bottom: 1px solid var(--line); }
+tbody tr:last-child > * { border-bottom: 0; }
+tr.factor th { padding: 14px 14px 6px; font: 700 0.8rem var(--display); text-transform: uppercase; letter-spacing: 0.09em; color: var(--fg); }
+tr.band th { padding: 18px 14px 4px; font: 700 0.95rem var(--display); text-transform: uppercase; letter-spacing: 0.1em; color: var(--good); border-bottom: 2px solid var(--good); }
+tbody tr.band:first-child th { padding-top: 10px; }
+
+.c { height: 32px; min-width: 82px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font: 600 0.86rem var(--display); letter-spacing: 0.04em; border: 1.5px solid transparent; }
+.c.est { border-style: dashed; border-color: currentColor; }
+.c.same { background: var(--same); color: var(--muted); font-weight: 500; }
+.open { font-size: 0.9rem; border-left: 3px solid var(--good); padding: 2px 0 2px 12px; max-width: 90ch; margin: 0; }
+.open b { font-family: var(--display); font-size: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Vision-based RL · WidowX AI · Lift-Cube &amp; Push-T</div>
+    <h1>Sim2Real Ablation Matrix</h1>
+    <p class="lede">Each row is one option. The first four columns say how well it does, the last two what it costs. Factors are sorted by how much their options differ on the real robot, measured ones first; within a factor the best option comes first. If two options show the same level in a column, that choice doesn't matter there. Hover a cell for the reason.</p>
+  </header>
+
+  <div class="legend">
+    <span class="g"><span class="sw" style="background:color-mix(in oklab,var(--good) 70%,var(--surface))"></span>High</span>
+    <span class="g"><span class="sw" style="background:color-mix(in oklab,var(--good) 38%,var(--surface))"></span>Mid</span>
+    <span class="g"><span class="sw" style="background:color-mix(in oklab,var(--good) 12%,var(--surface))"></span>Low</span>
+    <span class="g"><span class="sw" style="background:color-mix(in oklab,var(--cost) 50%,var(--surface))"></span>cost</span>
+    <span class="g"><span class="sw" style="border:1.5px solid var(--muted)"></span>measured</span>
+    <span class="g"><span class="sw" style="border:1.5px dashed var(--fg)"></span>estimated</span>
+  </div>
+
+  <div class="scroll"><table id="m"></table></div>
+
+</div>
+
+<script>
+const COLS = [
+  { k: "real", h: "Sim2Real", s: "transfer" },
+  { k: "sim", h: "Sim success", s: "" },
+  { k: "samp", h: "Sample efficiency", s: "" },
+  { k: "enc", h: "Encoding", s: "efficiency" },
+  { k: "wall", h: "Wall clock", s: "cost", cost: true, split: true },
+  { k: "vram", h: "VRAM", s: "cost", cost: true },
+];
+// cell: [H|M|L|=, m|e, reason]
+const S = ["M", "e", "Both options are equal here"];
+const SC = ["L", "e", "Both options cost the same"];
+const FACTORS = [
+  { f: "Encoder", opts: [
+    { name: "Local pretrained (DINOv2 + AFA)",
+      real: ["H", "e", "Trained on the rig scene: expected to transfer; perfect on unseen Lift-Cube tables"], sim: ["H", "m", "Best on Push-T with uniform goals"], samp: ["H", "m", "Learns the yaw without a curriculum"],
+      enc: ["H", "m", "Localizes the object best"], wall: ["M", "m", "Cached features keep updates cheap; the frozen forward in rollout makes it ≈ 2× NatureCNN, level with CompactViT"], vram: ["M", "m", "Keeps the token map"] },
+    { name: "Scratch (NatureCNN / CompactViT)",
+      real: ["L", "e", "Trained on the rig scene: likely learns that one table's look. With texture randomization it held up best on unseen Lift-Cube tables"], sim: ["M", "m", "Catches up only with a yaw curriculum and tuned PPO"], samp: ["L", "m", "Yaw stays at chance on uniform goals"],
+      enc: ["M", "m", "Fine for position, weak for orientation"], wall: ["L", "m", "NatureCNN is fastest; CompactViT is as slow as DINOv2 because it backpropagates through the ViT"], vram: ["M", "m", "Trains the encoder"] },
+    { name: "Global pretrained (DINOv2 / R3M + linear)",
+      real: ["M", "e", "Trained on the rig scene: pretraining makes it less brittle than scratch, but one global vector shifts with the whole image (worst on unseen Lift-Cube tables when trained with randomization)"], sim: ["L", "m", "Worst on Push-T"], samp: ["L", "m", "Barely learns the yaw"],
+      enc: ["L", "m", "One vector loses where things are"], wall: ["M", "m", "Same backbone as AFA, slightly cheaper head"], vram: ["L", "m", "Caches one vector per frame"] },
+  ]},
+  { f: "Camera exposure and white balance", opts: [
+    { name: "Matched to the training brightness",
+      real: ["H", "m", "The same policy reached the goal"], sim: S, samp: S, enc: ["H", "e", "Features stay in distribution"], wall: ["L", "e", "Re-probe each session"], vram: SC },
+    { name: "Camera defaults",
+      real: ["L", "m", "Moved the T 5.7 mm in 16 s; auto white balance renders the table grey"], sim: S, samp: S, enc: ["L", "e", "Every feature shifts"], wall: ["L", "e", ""], vram: SC },
+  ]},
+  { f: "Dynamics model", opts: [
+    { name: "Measured arm, object mass and friction",
+      real: ["H", "e", "Sim response matches replayed traces"], sim: ["M", "e", "Slower arm is a harder task"], samp: ["M", "e", ""],
+      enc: S, wall: ["L", "e", "Replays, gain readout, weighing"], vram: SC },
+    { name: "Default MJCF values",
+      real: ["L", "e", "Arm about twice as fast; T 3.4× too heavy"], sim: ["H", "e", "Faster arm, easier task"], samp: ["H", "e", ""],
+      enc: S, wall: ["L", "e", ""], vram: SC },
+  ]},
+  { f: "Backbone training", opts: [
+    { name: "Frozen pretrained backbone (≈ 0.1 M trainable in AFA)",
+      real: ["H", "e", "Keeps the invariances learned in pretraining"], sim: ["M", "m", "Strong on Push-T, below a tuned scratch CNN with curriculum"], samp: ["H", "m", "Few parameters to learn"],
+      enc: ["H", "m", ""], wall: ["M", "m", "Lightweight: forward only, features cached for updates"], vram: ["M", "m", "Lightweight: no backbone gradients"] },
+    { name: "Fine-tuned pretrained backbone (≈ 21 M trainable)",
+      real: ["H", "e", "Pretrained start, adapted to the task; keep the backbone learning rate small so it does not drift to sim-only cues"], sim: ["H", "e", "Adapts the features to the task"], samp: ["M", "e", "Many more parameters to move"],
+      enc: ["H", "e", "Best task-specific features"], wall: ["H", "e", "Backprop through the ViT, no feature cache"], vram: ["H", "e", "Activations of the whole ViT"] },
+    { name: "Trained from scratch (≈ 0.1–1 M trainable)",
+      real: ["L", "e", "Learns only what the sim shows it"], sim: ["M", "m", ""], samp: ["L", "m", ""],
+      enc: ["M", "m", ""], wall: ["L", "m", "NatureCNN fastest; CompactViT as slow as DINOv2"], vram: ["M", "m", ""] },
+  ]},
+  { f: "Feature-map resolution", opts: [
+    { name: "16 × 16 or 14 × 14 tokens (DINOv2 patch 14, R3M layer3)",
+      real: ["M", "e", "Finer localization, same appearance sensitivity"], sim: ["H", "m", "R3M layer3 beat layer4 on yaw"], samp: ["H", "m", ""],
+      enc: ["H", "m", "The T spans about 3 feature cells"], wall: ["M", "m", "Slightly slower"], vram: ["H", "m", "Larger cached feature maps"] },
+    { name: "7 × 7 cells (R3M layer4)",
+      real: ["M", "e", ""], sim: ["M", "m", ""], samp: ["L", "m", "Yaw barely learnable"],
+      enc: ["L", "m", "The T spans about 1.5 cells"], wall: ["L", "m", ""], vram: ["M", "m", ""] },
+  ]},
+  { f: "Input image resolution", opts: [
+    { name: "224 × 224 px",
+      real: ["M", "e", ""], sim: ["H", "e", "The T stays several patches wide"], samp: ["H", "e", ""],
+      enc: ["H", "e", ""], wall: ["M", "e", "Rendering and encoder scale with pixels"], vram: ["M", "e", ""] },
+    { name: "128 × 128 px",
+      real: ["M", "e", "Less fine detail to mismatch, but less to see"], sim: ["M", "e", "T is only a few patches wide"], samp: ["M", "e", ""],
+      enc: ["M", "e", ""], wall: ["L", "e", "About 3× fewer pixels"], vram: ["L", "e", ""] },
+  ]},
+  { f: "Latent size (encoder output)", opts: [
+    { name: "256 (current)",
+      real: ["M", "e", ""], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", ""], wall: SC, vram: SC },
+    { name: "Large (1024)",
+      real: ["M", "e", "More room to fit sim-specific detail"], sim: ["H", "e", ""], samp: ["M", "e", "Bigger policy input to learn from"],
+      enc: ["M", "e", ""], wall: SC, vram: SC },
+    { name: "Small (64)",
+      real: ["M", "e", ""], sim: ["M", "e", "May squeeze out the yaw"], samp: ["M", "e", ""],
+      enc: ["M", "e", ""], wall: SC, vram: SC },
+  ]},
+  { f: "Latency in sim", opts: [
+    { name: "Delay randomized around the measured latency",
+      real: ["H", "e", "Covers camera, encoder and command delay with margin"], sim: ["M", "e", "Slightly harder task"], samp: ["M", "e", ""],
+      enc: S, wall: ["L", "e", "One timing log"], vram: SC },
+    { name: "Fixed one-step delay",
+      real: ["M", "e", "50 ms at 20 Hz; the real total is unmeasured"], sim: ["H", "m", ""], samp: ["H", "e", ""],
+      enc: S, wall: SC, vram: SC },
+    { name: "No delay",
+      real: ["L", "e", "Acts on stale images on the robot"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: S, wall: SC, vram: SC },
+  ]},
+  { f: "Dynamics randomization", opts: [
+    { name: "Measured model + randomized gains, damping, mass, friction",
+      real: ["H", "e", "Fitted values are never exact; covers the error"], sim: ["M", "e", "Policy must work across arms"], samp: ["L", "e", "Slower to learn"],
+      enc: S, wall: SC, vram: SC },
+    { name: "Measured model, only friction randomized",
+      real: ["M", "e", "Overfits one dynamics model"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: S, wall: SC, vram: SC },
+  ]},
+  { f: "Control rate", opts: [
+    { name: "20 Hz",
+      real: ["M", "e", "Matches the arm's response time; wrist moves in bursts"], sim: ["H", "m", "Best on the measured arm"], samp: ["H", "e", "Fewer decisions per episode"],
+      enc: S, wall: ["L", "m", "≈ 7% slower per iteration than 50 Hz for visual runs (rendering and the encoder dominate); 2.5× fewer frames per simulated second"], vram: SC },
+    { name: "50 Hz",
+      real: ["L", "e", "Small steps fall inside the shoulder's lag and friction deadband"], sim: ["M", "m", "Lost much of its success on the measured arm"], samp: ["M", "e", ""],
+      enc: S, wall: ["L", "m", "Slightly faster per iteration, but renders 2.5× more frames per simulated second"], vram: SC },
+  ]},
+  { f: "Action type", opts: [
+    { name: "Target-relative delta (target observed)",
+      real: ["H", "e", "Independent of the joint gains; can wind up against an obstacle"], sim: ["H", "m", "Best on every arm model"], samp: ["H", "m", "Fastest learning"],
+      enc: S, wall: SC, vram: SC },
+    { name: "Measured-relative delta",
+      real: ["M", "e", "Speed depends on the gains; partly transferred"], sim: ["M", "m", "Good on stiff arm models, weak on slow gains"], samp: ["M", "m", ""],
+      enc: S, wall: SC, vram: SC },
+    { name: "Absolute joint targets",
+      real: ["M", "e", "No integration, but tracks the sim's gains exactly"], sim: ["L", "m", "Never learned on Push-T"], samp: ["L", "m", ""],
+      enc: S, wall: SC, vram: SC },
+  ]},
+  { f: "Training scene", opts: [
+    { name: "Texture randomization (1,203 textures)",
+      real: ["H", "e", "Expected to tolerate the real table and lighting drift; on Push-T it failed like the rig scene"], sim: ["M", "m", "Lower success, still climbing at the end"], samp: ["L", "m", "Slowest to learn"],
+      enc: ["L", "e", "Features must also absorb every table appearance"], wall: ["L", "m", ""], vram: ["L", "m", "Texture bank adds a little"] },
+    { name: "Rig scene (one photo of the real table)",
+      real: ["M", "e", "Reached the goal at the right exposure, but brittle to brightness and table drift"], sim: ["H", "m", "Much higher success in its own scene"], samp: ["H", "m", "Learns fastest"],
+      enc: ["H", "e", "Only has to encode one table"], wall: ["L", "m", ""], vram: ["L", "m", ""] },
+  ]},
+  { f: "Goal signal", opts: [
+    { name: "Goal pose as input + marker",
+      real: ["M", "e", "Failed less badly than pixel-only"], sim: ["H", "m", "Higher in two of three pairs"], samp: ["H", "m", ""],
+      enc: ["H", "e", "Encoder only has to find the T"], wall: ["L", "e", ""], vram: ["L", "e", ""] },
+    { name: "Marker in the image only",
+      real: ["L", "e", "Failed harder on the rig"], sim: ["M", "m", ""], samp: ["M", "m", ""],
+      enc: ["M", "e", "Encoder must find the T and the goal"], wall: ["L", "e", ""], vram: ["L", "e", ""] },
+  ]},
+  { f: "Object and goal colours", opts: [
+    { name: "Narrow random range around the rig's colours",
+      real: ["H", "e", "Centred on the real colours, with margin for camera and lighting shifts"], sim: ["H", "e", "T always stands out from the table"], samp: ["H", "e", ""],
+      enc: ["H", "e", "Little appearance to absorb"], wall: ["L", "e", "Pixel matching, once"], vram: SC },
+    { name: "Random colours (full RGB)",
+      real: ["H", "e", "Cannot rely on any colour, so the real one is never a surprise"], sim: ["M", "e", "About a quarter of resets have a T close to the table's brightness"], samp: ["L", "e", "Must learn to find the T by shape"],
+      enc: ["L", "e", "Features must ignore colour entirely"], wall: SC, vram: SC },
+    { name: "Exactly fixed colours",
+      real: ["L", "e", "Any colour shift from the camera or the lights is out of distribution"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", "One appearance to encode"], wall: ["L", "e", "Pixel matching, once"], vram: SC },
+  ]},
+  { f: "Lighting randomization", opts: [
+    { name: "Matched to the rig with margin (current)",
+      real: ["H", "e", "Covers the rig's measured brightness drift over a day"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", "Only a realistic range to absorb"], wall: ["L", "e", "Measure the rig once"], vram: SC },
+    { name: "Wide random lighting (intensity, colour, direction)",
+      real: ["H", "e", "Also holds in a different room or light"], sim: ["M", "e", "Some frames very dark or tinted"], samp: ["M", "e", ""],
+      enc: ["M", "e", "Features must ignore large lighting changes"], wall: SC, vram: SC },
+    { name: "Fixed lighting",
+      real: ["L", "e", "Any change in room light or exposure is out of distribution"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", "One appearance to encode"], wall: SC, vram: SC },
+  ]},
+  { f: "Camera pose calibration", opts: [
+    { name: "Calibrated, with small per-step pose and FOV jitter (current)",
+      real: ["H", "e", "Matches the rig and tolerates a bumped camera"], sim: ["M", "e", "Slightly harder than a fixed view"], samp: ["M", "e", ""],
+      enc: ["M", "e", "Must tolerate small viewpoint shifts"], wall: ["L", "e", "One ChArUco session"], vram: SC },
+    { name: "Calibrated, fixed",
+      real: ["M", "e", "Exact match, but no margin if the camera moves"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", ""], wall: ["L", "e", "One ChArUco session"], vram: SC },
+    { name: "Uncalibrated (hand-placed, nominal FOV)",
+      real: ["L", "m", "A wrong FOV rendered objects 1.7× too small"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", ""], wall: SC, vram: SC },
+  ]},
+  { f: "Proprioception noise", opts: [
+    { name: "Noise on joint positions and velocities in training",
+      real: ["M", "e", "Real encoder velocities are noisy"], sim: ["M", "e", "Small cost"], samp: ["M", "e", ""],
+      enc: S, wall: SC, vram: SC },
+    { name: "Exact proprioception",
+      real: ["L", "e", "Policy may rely on velocities cleaner than the real ones"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: S, wall: SC, vram: SC },
+  ]},
+  { f: "Goal marker shape", opts: [
+    { name: "Hollow outline",
+      real: ["H", "e", "Cannot be mistaken for the T, even where they overlap"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", "Object and goal are visually distinct"], wall: SC, vram: SC },
+    { name: "Filled T",
+      real: ["L", "e", "Looks like a second object; confusing once the T sits on it"], sim: ["M", "e", ""], samp: ["M", "e", ""],
+      enc: ["L", "e", "Encoder must tell two identical shapes apart"], wall: SC, vram: SC },
+  ]},
+  { f: "Smoothness penalties", opts: [
+    { name: "Action-rate and near-goal speed penalty",
+      real: ["H", "e", "Smooth, slow approach near the goal; no chatter"], sim: ["M", "m", "Costs some success"], samp: ["L", "m", "Slows learning, most when on from the start"],
+      enc: S, wall: SC, vram: SC },
+    { name: "Weak or no smoothness penalty",
+      real: ["L", "e", "Chattered on hardware"], sim: ["H", "m", ""], samp: ["H", "m", ""],
+      enc: S, wall: SC, vram: SC },
+  ]},
+  { f: "PPO settings", opts: [
+    { name: "Tuned (KL 0.05, entropy 0.001, std floor)",
+      real: ["M", "e", "Only a policy that works in sim can transfer"], sim: ["H", "m", "Large gain, most for scratch encoders"], samp: ["H", "m", ""],
+      enc: ["M", "e", "Trainable encoders learn better features"], wall: SC, vram: SC },
+    { name: "Loose (KL 0.2, no entropy, no floor)",
+      real: ["L", "e", "More runs collapse or stay weak"], sim: ["M", "m", ""], samp: ["M", "m", ""],
+      enc: ["L", "e", ""], wall: SC, vram: SC },
+  ]},
+  { f: "Contact penalties", opts: [
+    { name: "Small penalty on pressing the T into the table",
+      real: ["M", "e", "Fewer top-down drags, closer to a real push"], sim: ["M", "m", "Fine when small; larger weights cost a lot"], samp: ["M", "m", ""], enc: S, wall: SC, vram: SC },
+    { name: "No contact penalties",
+      real: ["L", "e", "Drags the T by pressing on its top, which depends on friction the sim may not match"], sim: ["H", "m", ""], samp: ["H", "m", ""], enc: S, wall: SC, vram: SC },
+    { name: "Penalty or termination on gripper–T force",
+      real: ["L", "e", "A policy that avoids the T cannot push it"], sim: ["L", "m", "The policy learns not to touch"], samp: ["L", "m", ""], enc: S, wall: SC, vram: SC },
+  ]},
+];
+const RANK = { H: 3, M: 2, L: 1, "=": 0 };
+const WORD = { H: "High", M: "Mid", L: "Low" };
+const PCT = { H: 70, M: 38, L: 12 };
+const INFL = d => d >= 2 ? "High" : d === 1 ? "Mid" : "Low";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function cell(col, [lv, ev, why]) {
+  if (lv === "=") return `<div class="c same" title="No difference between the options">Same</div>`;
+  const hue = col.cost ? "--cost" : "--good";
+  const pct = col.cost ? Math.round(PCT[lv] * 0.75) : PCT[lv];
+  const ink = lv === "H" && !col.cost ? "color:var(--surface);" : "";
+  const label = (why ? why + " " : "") + (ev === "e" ? "(estimate)" : "(measured)");
+  return `<div class="c${ev === "e" ? " est" : ""}" style="${ink}background:color-mix(in oklab,var(${hue}) ${pct}%,var(--surface))" title="${esc(label)}">${WORD[lv]}</div>`;
+}
+const spread = (opts, k) => { const v = opts.map(o => RANK[o[k][0]]).filter(x => x > 0); return v.length ? Math.max(...v) - Math.min(...v) : 0; };
+const total = o => COLS.reduce((s, c) => s + (c.cost ? 0 : RANK[o[c.k][0]]), 0);
+
+(function render() {
+  const span = COLS.length + 1;
+  const measured = F => F.opts.some(o => o.real[1] === "m") ? 1 : 0;
+  const fs = FACTORS.map((F, i) => ({ ...F, i, real: spread(F.opts, "real"), meas: measured(F), simS: spread(F.opts, "sim") + spread(F.opts, "samp") }))
+    .sort((a, b) => b.real - a.real || b.meas - a.meas || b.simS - a.simS || a.i - b.i);
+  let h = "<thead><tr><th>Option</th>" + COLS.map(c => `<th class="${c.split ? "split" : ""}">${c.h}${c.s ? `<small>${c.s}</small>` : ""}</th>`).join("") + "</tr></thead><tbody>";
+  let band = null;
+  for (const F of fs) {
+    if (INFL(F.real) !== band) {
+      band = INFL(F.real);
+      h += `<tr class="band"><th colspan="${span}">${band} sim2real influence</th></tr>`;
+    }
+    h += `<tr class="factor"><th colspan="${span}">${F.f}</th></tr>`;
+    const opts = [...F.opts].sort((a, b) => RANK[b.real[0]] - RANK[a.real[0]] || total(b) - total(a));
+    for (const o of opts) h += `<tr><th>${o.name}</th>` + COLS.map(c => `<td class="${c.split ? "split" : ""}">${cell(c, o[c.k])}</td>`).join("") + "</tr>";
+  }
+  document.getElementById("m").innerHTML = h + "</tbody>";
+})();
+</script>
