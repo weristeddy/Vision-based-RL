@@ -39,7 +39,7 @@ EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
 # Raising it is measured and reverted: -0.1 takes success to 0.008, and -0.05
 # moved the lowest pad only 27.6 -> 26.2 mm for 8-19% of overlap.
 EE_HEIGHT_WEIGHT = -0.02
-TABLE_TOUCH_WEIGHT = -2.0 / 3.0
+TABLE_TOUCH_WEIGHT = -1.0
 # The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
 # distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
 OBJECT_WEIGHT_N = 0.497
@@ -51,6 +51,8 @@ OBJECT_PRESS_WEIGHT = -0.01
 ACTION_RATE_WEIGHT = -0.002
 JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
+GOAL_OVERLAP_WEIGHT = 0.65
+NEAR_GOAL_SPEED_WEIGHT = -220.0
 NEAR_GOAL_SPEED_LENGTH_M = 0.03
 PENALTY_RAMP_STEPS = (16_000, 64_000)
 # Iterations 4,000 to 7,000 at num_steps_per_env=16, after the slowest visual
@@ -166,6 +168,11 @@ def build_env_cfg(
       weight=1.0,
       params={**common, "asset_cfg": robot_ee},
     ),
+    "goal_overlap": RewardTermCfg(
+      func=mdp.goal_overlap,
+      weight=GOAL_OVERLAP_WEIGHT,
+      params={"command_name": _COMMAND},
+    ),
     "action_rate_l2": RewardTermCfg(
       func=mdp.action_rate_l2,
       weight=ACTION_RATE_WEIGHT,
@@ -187,7 +194,7 @@ def build_env_cfg(
     ),
     "near_goal_ee_speed": RewardTermCfg(
       func=mdp.near_goal_ee_speed,
-      weight=0.0,
+      weight=NEAR_GOAL_SPEED_WEIGHT,
       params={
         **common,
         "asset_cfg": robot_ee,
