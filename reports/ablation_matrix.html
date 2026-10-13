@@ -32,6 +32,17 @@ body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
 .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 48px; display: grid; gap: 18px; }
 h1 { font-family: var(--display); font-weight: 700; font-size: 2rem; line-height: 1.1; margin: 0; text-wrap: balance; }
 .lede { color: var(--muted); margin: 4px 0 0; max-width: 72ch; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 1.3rem; margin: 10px 0 10px; text-wrap: balance; }
+.chip { display: inline-block; font: 600 0.74rem var(--display); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 9px; border-radius: 999px; border: 1.5px solid currentColor; white-space: nowrap; }
+.chip.p1 { background: var(--good); border-color: var(--good); color: var(--surface); }
+.chip.p2 { color: var(--good); }
+.chip.p3 { color: var(--muted); border-color: var(--line); }
+.chip.k-open { color: var(--cost); }
+.chip.k-part { color: var(--muted); }
+.chip.k-done { color: var(--good); border-style: dashed; }
+#p tbody th { padding-left: 14px; }
+#p td.why { font-size: 0.84rem; color: var(--muted); padding: 4px 12px; min-width: 260px; }
+#p td.mid { text-align: center; padding: 4px 6px; }
 .eyebrow { font-family: var(--display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--good); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.84rem; color: var(--muted); align-items: center; }
@@ -63,8 +74,18 @@ footer { color: var(--muted); font-size: 0.8rem; }
   <header>
     <div class="eyebrow">Vision-based RL · WidowX AI · Lift-Cube &amp; Push-T</div>
     <h1>Sim2Real Ablation Matrix</h1>
-    <p class="lede">Each row is one option. The first four columns say how well it does, the last two what it costs. Factors are sorted by how much their options differ on the real robot, measured ones first; within a factor the best option comes first. If two options show the same level in a column, that choice doesn't matter there. Hover a cell for the reason.</p>
+    <p class="lede">Which ablations to run first: how much each factor moves the results, whether the answer is already known, and what a test costs. The detailed ratings per option follow below.</p>
   </header>
+
+  <section>
+    <h2>Ablation priorities</h2>
+    <div class="scroll"><table id="p"></table></div>
+  </section>
+
+  <section>
+    <h2>Options in detail</h2>
+    <p class="lede">Each row is one option. The first four columns say how well it does, the last two what it costs. Factors follow the priority order above; within a factor the best option comes first. Two options with the same level in a column means the choice doesn't matter there. Hover a cell for the reason.</p>
+  </section>
 
   <div class="legend">
     <span class="g"><span class="sw" style="background:color-mix(in oklab,var(--good) 70%,var(--surface))"></span>High</span>
@@ -128,6 +149,22 @@ const FACTORS = [
       real: ["L", "e", "Learns only what the sim shows it"], sim: ["M", "m", ""], samp: ["L", "m", ""],
       enc: ["M", "m", ""], wall: ["L", "m", "NatureCNN fastest; CompactViT as slow as DINOv2"], vram: ["M", "m", ""] },
   ]},
+  { f: "Backbone size", opts: [
+    { name: "DINOv2 ViT-B/14 (86 M)",
+      real: ["H", "e", "Bigger pretrained models usually give more robust features"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+      enc: ["H", "e", "Richer local features"], wall: ["H", "e", "About 4 times the encoder compute"], vram: ["H", "e", "Bigger model and bigger cached features"] },
+    { name: "DINOv2 ViT-S/14 (21 M, current)",
+      real: ["M", "e", "Already robust on unseen tables, a bigger model may add a bit"], sim: ["H", "m", "Best encoder on Push-T so far"], samp: ["H", "m", ""],
+      enc: ["H", "m", ""], wall: ["M", "m", ""], vram: ["M", "m", ""] },
+  ]},
+  { f: "Feature cache precision", opts: [
+    { name: "bf16 cache (current)",
+      real: ["M", "m", "The fp32 policy on the robot did almost the same as the bf16-trained one"], sim: ["M", "m", ""], samp: ["M", "e", ""],
+      enc: ["M", "e", ""], wall: ["L", "e", "Half the memory traffic"], vram: ["L", "e", "Half the cache memory"] },
+    { name: "fp32 cache",
+      real: ["M", "e", ""], sim: ["M", "e", ""], samp: ["M", "e", ""],
+      enc: ["M", "e", ""], wall: ["M", "e", ""], vram: ["M", "e", "Twice the cache memory"] },
+  ]},
   { f: "Feature-map resolution", opts: [
     { name: "16 × 16 or 14 × 14 tokens (DINOv2 patch 14, R3M layer3)",
       real: ["M", "e", "Finer localization, same appearance sensitivity"], sim: ["H", "m", "R3M layer3 beat layer4 on yaw"], samp: ["H", "m", ""],
@@ -155,15 +192,12 @@ const FACTORS = [
       real: ["M", "e", ""], sim: ["M", "e", "May squeeze out the yaw"], samp: ["M", "e", ""],
       enc: ["M", "e", ""], wall: SC, vram: SC },
   ]},
-  { f: "Latency in sim", opts: [
-    { name: "Delay randomized around the measured latency",
-      real: ["H", "e", "Covers camera, encoder and command delay with margin"], sim: ["M", "e", "Slightly harder task"], samp: ["M", "e", ""],
-      enc: S, wall: ["L", "e", "One timing log"], vram: SC },
-    { name: "Fixed one-step delay",
-      real: ["M", "e", "50 ms at 20 Hz; the real total is unmeasured"], sim: ["H", "m", ""], samp: ["H", "e", ""],
+  { f: "Control delay in sim", opts: [
+    { name: "Randomized around the measured 25–55 ms (current)",
+      real: ["H", "e", "Matches the delay measured on the robot"], sim: ["M", "e", "Slightly harder to learn"], samp: ["M", "e", ""],
       enc: S, wall: SC, vram: SC },
-    { name: "No delay",
-      real: ["L", "e", "Acts on stale images on the robot"], sim: ["H", "e", ""], samp: ["H", "e", ""],
+    { name: "Almost no delay (0–5 ms, before)",
+      real: ["M", "e", "The real robot reacts about 40 ms later than in training"], sim: ["H", "e", ""], samp: ["H", "e", ""],
       enc: S, wall: SC, vram: SC },
   ]},
   { f: "Dynamics randomization", opts: [
@@ -176,11 +210,11 @@ const FACTORS = [
   ]},
   { f: "Control rate", opts: [
     { name: "20 Hz",
-      real: ["M", "e", "Matches the arm's response time; wrist moves in bursts"], sim: ["H", "m", "Best on the measured arm"], samp: ["H", "e", "Fewer decisions per episode"],
-      enc: S, wall: ["L", "m", "≈ 7% slower per iteration than 50 Hz for visual runs (rendering and the encoder dominate); 2.5× fewer frames per simulated second"], vram: SC },
+      real: ["M", "e", "No robot comparison. The arm's lag and friction are modelled in sim, so they show up in sim success rather than in transfer"], sim: ["H", "m", "Better on the measured arm, but it also sees more and shorter episodes"], samp: ["H", "e", "More episodes per iteration"],
+      enc: S, wall: ["L", "m", "About 7% slower per iteration than 50 Hz for visual runs; 2.5 times fewer frames per simulated second"], vram: SC },
     { name: "50 Hz",
-      real: ["L", "e", "Small steps fall inside the shoulder's lag and friction deadband"], sim: ["M", "m", "Lost much of its success on the measured arm"], samp: ["M", "e", ""],
-      enc: S, wall: ["L", "m", "Slightly faster per iteration, but renders 2.5× more frames per simulated second"], vram: SC },
+      real: ["M", "e", "No robot comparison"], sim: ["M", "m", "Lower success on the measured arm"], samp: ["M", "e", ""],
+      enc: S, wall: ["L", "m", "Slightly faster per iteration, but renders 2.5 times more frames per simulated second"], vram: SC },
   ]},
   { f: "Action type", opts: [
     { name: "Target-relative delta (target observed)",
@@ -193,11 +227,11 @@ const FACTORS = [
       real: ["M", "e", "No integration, but tracks the sim's gains exactly"], sim: ["L", "m", "Never learned on Push-T"], samp: ["L", "m", ""],
       enc: S, wall: SC, vram: SC },
   ]},
-  { f: "Training scene", opts: [
-    { name: "Texture randomization (1,203 textures)",
+  { f: "Table texture randomization", opts: [
+    { name: "Randomized table textures (1,203 photos)",
       real: ["H", "e", "Expected to tolerate the real table and lighting drift; on Push-T it failed like the rig scene"], sim: ["M", "m", "Lower success, still climbing at the end"], samp: ["L", "m", "Slowest to learn"],
       enc: ["L", "e", "Features must also absorb every table appearance"], wall: ["L", "m", ""], vram: ["L", "m", "Texture bank adds a little"] },
-    { name: "Rig scene (one photo of the real table)",
+    { name: "One fixed photo of the real table (rig scene)",
       real: ["M", "e", "Reached the goal at the right exposure, but brittle to brightness and table drift"], sim: ["H", "m", "Much higher success in its own scene"], samp: ["H", "m", "Learns fastest"],
       enc: ["H", "e", "Only has to encode one table"], wall: ["L", "m", ""], vram: ["L", "m", ""] },
   ]},
@@ -300,17 +334,57 @@ function cell(col, [lv, ev, why]) {
 const spread = (opts, k) => { const v = opts.map(o => RANK[o[k][0]]).filter(x => x > 0); return v.length ? Math.max(...v) - Math.min(...v) : 0; };
 const total = o => COLS.reduce((s, c) => s + (c.cost ? 0 : RANK[o[c.k][0]]), 0);
 
+// influence on results (sim2real, sim) H|M|L; known: done | part | open; cost to ablate; priority 1-3
+const META = {
+  "Encoder": { ir: "H", is: "H", known: "part", cost: "H", p: 1, why: "Main question of the thesis. So far only compared in sim, not on the real robot." },
+  "Table texture randomization": { ir: "H", is: "H", known: "part", cost: "M", p: 1, why: "Probably depends on the encoder. Only tested with DINOv2-AFA so far." },
+  "Backbone training": { ir: "H", is: "H", known: "open", cost: "M", p: 1, why: "Fine-tuning should be the upper bound, but it was never trained." },
+  "Dynamics randomization": { ir: "H", is: "M", known: "open", cost: "L", p: 3, why: "Matters for transfer, but the same for every encoder. General setup, not part of the encoder study." },
+  "Lighting randomization": { ir: "H", is: "M", known: "part", cost: "L", p: 2, why: "Wrong brightness already broke one policy on the robot. The range width is not tested yet." },
+  "Smoothness penalties": { ir: "H", is: "M", known: "part", cost: "L", p: 3, why: "Needed for smooth motion on the robot. Same for every encoder, so it is part of the setup." },
+  "Control rate": { ir: "L", is: "H", known: "part", cost: "L", p: 3, why: "20 Hz did better in sim, but it also sees more and shorter episodes. Same for every encoder, so part of the setup." },
+  "Object and goal colours": { ir: "M", is: "M", known: "open", cost: "L", p: 2, why: "Probably interacts with the training scene, so it can run together with it." },
+  "Control delay in sim": { ir: "M", is: "L", known: "done", cost: "L", p: 3, why: "Measured on the robot at 25 to 55 ms and randomized in training now. No ablation needed." },
+  "Camera exposure and white balance": { ir: "H", is: "L", known: "done", cost: "L", p: 3, why: "Has to be set right before every session. Not something to ablate." },
+  "Camera pose calibration": { ir: "H", is: "L", known: "done", cost: "L", p: 3, why: "Calibrated once with the ChArUco board. The small jitter stays in training." },
+  "Dynamics model": { ir: "H", is: "M", known: "done", cost: "M", p: 3, why: "The measured arm already matches the real joint traces." },
+  "Action type": { ir: "M", is: "H", known: "done", cost: "M", p: 3, why: "Target-relative with the target in the observation worked best in sim." },
+  "PPO settings": { ir: "M", is: "H", known: "done", cost: "L", p: 3, why: "Good values are known. They should stay fixed for all encoder runs." },
+  "Contact penalties": { ir: "M", is: "H", known: "done", cost: "L", p: 3, why: "Penalizing contact with the T always made the policy stop touching it." },
+  "Goal signal": { ir: "M", is: "M", known: "done", cost: "L", p: 3, why: "Giving the goal pose as input worked better in sim, so it stays." },
+  "Backbone size": { ir: "M", is: "M", known: "open", cost: "M", p: 2, why: "Shows if a bigger pretrained model transfers better or only costs more." },
+  "Feature cache precision": { ir: "L", is: "L", known: "done", cost: "L", p: 3, why: "fp32 on the robot gave almost the same success as bf16 training." },
+  "Feature-map resolution": { ir: "M", is: "M", known: "part", cost: "L", p: 3, why: "R3M layer3 vs layer4 already shows that finer features help." },
+  "Goal marker shape": { ir: "M", is: "M", known: "part", cost: "L", p: 3, why: "The outline is used now. No clean comparison exists and there is not much to gain." },
+  "Proprioception noise": { ir: "M", is: "L", known: "open", cost: "L", p: 3, why: "Easy to add, but the effect is probably small." },
+  "Input image resolution": { ir: "L", is: "M", known: "open", cost: "M", p: 3, why: "Mostly a question of compute." },
+  "Latent size (encoder output)": { ir: "L", is: "L", known: "open", cost: "L", p: 3, why: "Probably does not matter much." },
+};
+const PRIO = { 1: "Must ablate", 2: "Should ablate", 3: "Optional or settled" };
+const KNOWN = { done: ["k-done", "Settled"], part: ["k-part", "Partly"], open: ["k-open", "Open"] };
+const ORDER = f => { const m = META[f]; return m.p * 100 - RANK[m.ir] * 10 - RANK[m.is]; };
+
+(function renderPriorities() {
+  const fs = FACTORS.map(F => F.f).sort((a, b) => ORDER(a) - ORDER(b));
+  const lv = (x, cost) => cell({ cost }, [x, "e", ""]).replace(/ est/, "").replace(/ title="[^"]*"/, "");
+  let h = `<thead><tr><th>Factor</th><th>Priority</th><th>Influence<small>on sim2real</small></th><th>Influence<small>on sim results</small></th><th>Already known?</th><th class="split">Cost<small>to ablate</small></th><th class="split" style="text-align:left">Why</th></tr></thead><tbody>`;
+  for (const f of fs) {
+    const m = META[f];
+    h += `<tr><th>${f}</th><td class="mid"><span class="chip p${m.p}">${m.p} · ${PRIO[m.p]}</span></td><td>${lv(m.ir)}</td><td>${lv(m.is)}</td><td class="mid"><span class="chip ${KNOWN[m.known][0]}">${KNOWN[m.known][1]}</span></td><td class="split">${lv(m.cost, true)}</td><td class="why split">${esc(m.why)}</td></tr>`;
+  }
+  document.getElementById("p").innerHTML = h + "</tbody>";
+})();
+
 (function render() {
   const span = COLS.length + 1;
-  const measured = F => F.opts.some(o => o.real[1] === "m") ? 1 : 0;
-  const fs = FACTORS.map((F, i) => ({ ...F, i, real: spread(F.opts, "real"), meas: measured(F), simS: spread(F.opts, "sim") + spread(F.opts, "samp") }))
-    .sort((a, b) => b.real - a.real || b.meas - a.meas || b.simS - a.simS || a.i - b.i);
+  const fs = [...FACTORS].sort((a, b) => ORDER(a.f) - ORDER(b.f));
   let h = "<thead><tr><th>Option</th>" + COLS.map(c => `<th class="${c.split ? "split" : ""}">${c.h}${c.s ? `<small>${c.s}</small>` : ""}</th>`).join("") + "</tr></thead><tbody>";
   let band = null;
   for (const F of fs) {
-    if (INFL(F.real) !== band) {
-      band = INFL(F.real);
-      h += `<tr class="band"><th colspan="${span}">${band} sim2real influence</th></tr>`;
+    const p = META[F.f].p;
+    if (p !== band) {
+      band = p;
+      h += `<tr class="band"><th colspan="${span}">Priority ${p} · ${PRIO[p]}</th></tr>`;
     }
     h += `<tr class="factor"><th colspan="${span}">${F.f}</th></tr>`;
     const opts = [...F.opts].sort((a, b) => RANK[b.real[0]] - RANK[a.real[0]] || total(b) - total(a));

@@ -117,6 +117,8 @@ def run(
       "target",
       "sent",
       "time",
+      "camera_age_ms",
+      "compute_ms",
     )
   }
   frames: list = []
@@ -137,6 +139,8 @@ def run(
 
       joint_pos, joint_vel = arm.read()
       frame = _image(camera)
+      camera_age = camera.age_ms() if camera is not None else np.nan
+      picked = time.perf_counter()
       action = policy.act(
         joint_pos=joint_pos, joint_vel=joint_vel, image=frame
       )
@@ -163,8 +167,11 @@ def run(
 
       target = policy.joint_targets(action)
       sent = arm.command(target) if not dry_run else target
+      compute = (time.perf_counter() - picked) * 1000.0
 
       if log is not None:
+        trace["camera_age_ms"].append(camera_age)
+        trace["compute_ms"].append(compute)
         trace["action"].append(np.asarray(action, dtype=np.float32))
         trace["network"].append(np.asarray(network, dtype=np.float32))
         trace["joint_pos"].append(np.asarray(joint_pos, dtype=np.float32))
@@ -209,6 +216,15 @@ def run(
         **{k: np.asarray(v) for k, v in trace.items()},
       )
       print(f"Wrote {destination} ({len(trace['action'])} steps, {len(frames)} frames)")
+      age = np.asarray(trace["camera_age_ms"])
+      compute = np.asarray(trace["compute_ms"])
+      print(
+        f"Latency   camera age p50 {np.nanmedian(age):.1f}"
+        f" / p95 {np.nanpercentile(age, 95):.1f} ms,"
+        f" compute p50 {np.median(compute):.1f}"
+        f" / p95 {np.percentile(compute, 95):.1f} ms"
+        + (f" ({camera.timestamp_domain})" if camera is not None else "")
+      )
     elapsed = time.perf_counter() - started_at
     print(f"\n{step} steps in {elapsed:.1f} s ({step / max(elapsed, 1e-9):.1f} Hz)")
     _report_clipping(networks, policy.metadata.clip_actions, policy.has_gripper)

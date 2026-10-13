@@ -105,23 +105,25 @@ def test_action_scales_preserve_the_trained_policy_contract() -> None:
 
 
 @pytest.mark.parametrize(
-  ("robot_name", "action_delay", "expected_max_lag"),
+  ("robot_name", "action_delay", "expected"),
   [
-    ("trossen", False, 0),
-    ("trossen", True, 1),
-    ("trossen_realistic", False, 0),
-    ("trossen_realistic", True, 1),
+    ("trossen", False, (0, 0, 0)),
+    ("trossen", True, (0, 1, 0)),
+    ("trossen_realistic", False, (0, 0, 0)),
+    ("trossen_realistic", True, (0, 1, 0)),
+    ("trossen_measured", False, (0, 0, 0)),
+    ("trossen_measured", True, (5, 11, 10)),
   ],
 )
 def test_actuator_delay_preserves_the_robot_and_modality_contract(
   robot_name: str,
   action_delay: bool,
-  expected_max_lag: int,
+  expected: tuple[int, int, int],
 ) -> None:
   from vbrl.asset_zoo.robots import get_robot
 
   cfg = get_robot(robot_name).make_entity_cfg(action_delay=action_delay)
   assert {
-    (actuator.delay_min_lag, actuator.delay_max_lag)
+    (actuator.delay_min_lag, actuator.delay_max_lag, actuator.delay_update_period)
     for actuator in cfg.articulation.actuators
-  } == {(0, expected_max_lag)}
+  } == {expected}

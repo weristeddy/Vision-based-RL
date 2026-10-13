@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 import numpy as np
@@ -44,7 +45,10 @@ class RealSenseCamera:
       sensor.set_option(rs.option.white_balance, float(config.camera_white_balance_k))
 
     self._lock = threading.Lock()
-    self._frame = self._crop(self._await_frame())
+    first = self._await_frame()
+    self._frame = self._crop(first)
+    self._stamp_ms = first.get_timestamp()
+    self.timestamp_domain = str(first.get_frame_timestamp_domain())
     self._stop = threading.Event()
     self._thread = threading.Thread(target=self._capture, daemon=True)
     self._thread.start()
@@ -52,6 +56,11 @@ class RealSenseCamera:
   def frame(self) -> Any:
     with self._lock:
       return self._frame
+
+  # Global-time stamps are on the host clock, so this is capture-to-now.
+  def age_ms(self) -> float:
+    with self._lock:
+      return time.time() * 1000.0 - self._stamp_ms
 
   def saturated_fraction(self) -> float:
     with self._lock:
@@ -79,6 +88,7 @@ class RealSenseCamera:
       cropped = self._crop(colour)
       with self._lock:
         self._frame = cropped
+        self._stamp_ms = colour.get_timestamp()
 
 
 __all__ = ["SIZE", "RealSenseCamera"]

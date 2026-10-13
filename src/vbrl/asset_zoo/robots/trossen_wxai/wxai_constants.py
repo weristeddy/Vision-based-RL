@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -59,21 +60,30 @@ def _no_collisions() -> tuple[Any, ...]:
   return ()
 
 
-def _articulation(enable_delay: bool):
+# Measured on the rig at 20 Hz: half the exposure + frame age ~24 ms, preprocessing
+# and ONNX ~12 ms, servo 5-8 ms, so 25-55 ms end to end, in 5 ms physics steps.
+MEASURED_DELAY_LAG = (5, 11)
+MEASURED_DELAY_UPDATE_PERIOD = 10
+
+
+def _articulation(
+  enable_delay: bool,
+  lag: tuple[int, int] = (0, 1),
+  update_period: int = 0,
+):
   from mjlab.actuator import XmlActuatorCfg
   from mjlab.entity import EntityArticulationInfoCfg
 
-  delay_max_lag = 1 if enable_delay else 0
+  min_lag, max_lag = lag if enable_delay else (0, 0)
+  delay = {
+    "delay_min_lag": min_lag,
+    "delay_max_lag": max_lag,
+    "delay_update_period": update_period if enable_delay else 0,
+  }
   return EntityArticulationInfoCfg(
     actuators=(
-      XmlActuatorCfg(
-        target_names_expr=(r"joint_[0-5]",),
-        delay_max_lag=delay_max_lag,
-      ),
-      XmlActuatorCfg(
-        target_names_expr=("left_carriage_joint",),
-        delay_max_lag=delay_max_lag,
-      ),
+      XmlActuatorCfg(target_names_expr=(r"joint_[0-5]",), **delay),
+      XmlActuatorCfg(target_names_expr=("left_carriage_joint",), **delay),
     ),
     soft_joint_pos_limit_factor=0.9,
   )
@@ -83,12 +93,13 @@ def _definition(
   name: str,
   xml_path: Path,
   fingertip_geom_pattern: str = FINGER_PAD_PATTERN,
+  articulation_factory: Any = _articulation,
 ) -> RobotDefinition:
   return RobotDefinition(
     name=name,
     xml_path=xml_path,
     home_position=(0.0, 0.0, MOUNT_PLATE_THICKNESS_M),
-    articulation_factory=_articulation,
+    articulation_factory=articulation_factory,
     collision_factory=_no_collisions,
     home_joint_pos=dict(_HOME_JOINT_POS),
     action_scale=dict(_ACTION_SCALE),
@@ -118,7 +129,16 @@ def make_wxai_realistic() -> RobotDefinition:
 
 
 def make_wxai_measured() -> RobotDefinition:
-  return _definition("trossen_measured", WXAI_MEASURED_XML, GRIPPER_PAD_PATTERN)
+  return _definition(
+    "trossen_measured",
+    WXAI_MEASURED_XML,
+    GRIPPER_PAD_PATTERN,
+    partial(
+      _articulation,
+      lag=MEASURED_DELAY_LAG,
+      update_period=MEASURED_DELAY_UPDATE_PERIOD,
+    ),
+  )
 
 
 __all__ = [
