@@ -89,6 +89,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
 def trossen_realistic_push_t_rgb_ppo_runner_cfg(
   task_id: str,
   vision: VisionConfig,
+  camera_view: str = "external",
 ) -> RslRlOnPolicyRunnerCfg:
   vision_data = vision.asdict()
   return RslRlOnPolicyRunnerCfg(
@@ -116,7 +117,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "success_90",
       "sim2real_dr",
       "real_texture",
-      "external_cam",
+      f"{camera_view}_cam",
       "visual_goal",
     ),
     clip_actions=1.0,

@@ -26,7 +26,10 @@ from vbrl.tasks.utils import add_rgb_camera
 _OBJECT_NAME = "object"
 # The 45-degree tilted pose, measured against the ChArUco board: it keeps 79% of the
 # object's silhouette visible while the gripper is on it, against 37% for the near-.
-_CAMERA: CameraView = "external"
+_EXTERNAL: CameraView = "external"
+# The shared 2.5 cm puts the lens inside the D405 housing or the gripper in 34% of
+# envs, for the whole run; the wrist mount is rigid.
+_WRIST_POSITION_DR_M = 0.005
 
 
 def trossen_realistic_push_t_state_env_cfg(
@@ -59,6 +62,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   scene: str = "real_texture",
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
+  camera_view: CameraView = _EXTERNAL,
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
   cfg = build_env_cfg(
@@ -74,7 +78,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   add_rgb_camera(
     cfg,
     robot=robot,
-    camera_view=_CAMERA,
+    camera_view=camera_view,
     camera_geometry="visual",
     width=224,
     height=224,
@@ -83,10 +87,14 @@ def trossen_realistic_push_t_rgb_env_cfg(
     cfg,
     scene=scene,
     robot=robot,
-    camera_view=_CAMERA,
+    camera_view=camera_view,
     object_xml=PUSH_T_XML,
     object_name=_OBJECT_NAME,
   )
+  if camera_view == "wrist":
+    cfg.events["camera_position"].params["ranges"] = {
+      axis: (-_WRIST_POSITION_DR_M, _WRIST_POSITION_DR_M) for axis in range(3)
+    }
   cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(spec_fn=goal_marker_spec)
   cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(
     GOAL_REAL_RGBA_RANGE if real_goal_colour else ((0.0, 1.0),) * 3

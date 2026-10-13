@@ -52,15 +52,16 @@ EXPECTED_TASK_IDS = frozenset(
     # The same pair on the rig scene: one fixed table texture, no texture DR.
     "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-RealTableWrist-DinoV2ViTS14-Afa6-TrossenIdentified",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_41_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_42_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 41
+  assert len(EXPECTED_TASK_IDS) == 42
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -97,7 +98,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     assert external <= {"external_cam"}, f"{task_id} has {external}"
     seen_external += bool(external)
 
-  # Lift-Cube is a wrist-camera task, so its 36 visual IDs declare `cam` alone.
+  # Lift-Cube and Push-T RealTableWrist are wrist-camera tasks: they declare `cam` alone.
   assert seen_external == 4
 
 
