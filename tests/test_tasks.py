@@ -257,10 +257,9 @@ def test_push_t_reward_is_maniskill_dense_with_a_linear_orientation_summand() ->
   )
 
   command.get_at_goal = lambda: torch.ones(2, dtype=torch.bool)
-  assert torch.allclose(
+  assert torch.equal(
     maniskill_dense_reward(env, "push_t_goal", "object", asset_cfg),
-    shaped / 3.0,
-    atol=1.0e-6,
+    torch.ones(2),
   )
 
 
@@ -372,14 +371,14 @@ def test_push_t_table_touch_is_binary_over_the_whole_robot() -> None:
 
 
 
-def test_push_t_at_goal_static_rewards_a_still_arm_by_overlap() -> None:
+def test_push_t_at_goal_static_rewards_a_still_arm_only_at_the_goal() -> None:
   from mjlab.managers import SceneEntityCfg
 
   from vbrl.tasks.push_t.mdp import at_goal_static
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
 
   command = object.__new__(PushTCommand)
-  command.get_overlap = lambda: torch.tensor([1.0, 1.0, 0.5])
+  command.get_at_goal = lambda: torch.tensor([True, True, False])
   robot = SimpleNamespace(
     data=SimpleNamespace(joint_vel=torch.tensor([[0.0, 0.0], [0.3, 0.4], [0.0, 0.0]]))
   )
@@ -389,7 +388,7 @@ def test_push_t_at_goal_static_rewards_a_still_arm_by_overlap() -> None:
   )
   cfg = SceneEntityCfg("robot")
   cfg.joint_ids = slice(None)
-  expected = torch.tensor([1.0, 1.0 - math.tanh(2.5), 0.5])
+  expected = torch.tensor([1.0, 1.0 - math.tanh(2.5), 0.0])
   assert torch.allclose(at_goal_static(env, "push_t_goal", cfg), expected)
 
 
@@ -747,7 +746,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
 
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
-    "goal_overlap",
     "action_rate_l2",
     "joint_vel_l2",
     "at_goal_static",
@@ -756,8 +754,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "object_table_press",
     "ee_height_ceiling",
   )
-  assert cfg.rewards["goal_overlap"].weight == pytest.approx(0.65)
-  assert cfg.rewards["near_goal_ee_speed"].weight == pytest.approx(-220.0)
+  assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
   assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
   assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
@@ -780,7 +777,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "vertical_contact_force" not in cfg.rewards
   assert "object_contact_force" not in cfg.rewards
   assert cfg.rewards["table_touch"].weight == TABLE_TOUCH_WEIGHT
-  assert pytest.approx(-1.0) == TABLE_TOUCH_WEIGHT
+  assert pytest.approx(-2 / 3) == TABLE_TOUCH_WEIGHT
   press = cfg.rewards["object_table_press"].params
   assert press["sensor_name"] == "object_table_contact"
   assert OBJECT_WEIGHT_N == pytest.approx(0.497)

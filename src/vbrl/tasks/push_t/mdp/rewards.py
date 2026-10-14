@@ -63,11 +63,8 @@ def maniskill_dense_reward(
     + torch.sqrt((1.0 - torch.tanh(_DISTANCE_SCALE * tcp_distance)).clamp_min(0.0))
     / 20.0
   )
+  reward = torch.where(command.get_at_goal(), _MAX_REWARD, reward)
   return reward / _MAX_REWARD
-
-
-def goal_overlap(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-  return push_t_command(env, command_name).get_overlap()
 
 
 def top_contact_share(
@@ -101,7 +98,7 @@ def at_goal_static(
   command = push_t_command(env, command_name)
   vel = env.scene[asset_cfg.name].data.joint_vel[:, asset_cfg.joint_ids]
   static = 1.0 - torch.tanh(5.0 * torch.linalg.vector_norm(vel, dim=-1))
-  return static * command.get_overlap()
+  return static * command.get_at_goal().to(static.dtype)
 
 
 # Gated on position error alone, so a T in place with its yaw off still gets
@@ -183,7 +180,6 @@ __all__ = [
   "at_goal_static",
   "at_goal_share",
   "fingertip_height_excess",
-  "goal_overlap",
   "maniskill_dense_reward",
   "max_contact_force",
   "max_contact_force_on_face",
