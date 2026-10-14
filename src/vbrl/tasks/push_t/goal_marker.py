@@ -11,14 +11,12 @@ GOAL_ENTITY_NAME = "goal_marker"
 GOAL_COLOUR_EVENT = "goal_color"
 GOAL_MATERIAL_NAME = "push_t_goal_green"
 GOAL_RGBA = (0.16, 0.62, 0.29, 1.0)
-# Measured off the rig's printed marker in
-# artifacts/deployment/t_apriltag_1280x720_Color.png, 4948 px: mean
-# 0.021/0.331/0.227, per-channel p10-p90 0.000-0.059, 0.314-0.349, 0.208-0.247.
-# Widened about threefold on each spread for lighting headroom, then scaled by
-# 0.68 because these are albedos and the scene lighting amplifies them: at the
-# unscaled values the render observed 0.092/0.496/0.337 against the marker's
-# 0.021/0.331/0.227. The same correction the table's rgba carries.
-GOAL_REAL_RGBA_RANGE = ((0.0, 0.061), (0.190, 0.265), (0.115, 0.190))
+# Albedo, not observed colour: the 5-95 % range that made the rendered marker match
+# the rig's (47/61/20 at deployment exposure, 48 frames over 8 runs) under 256
+# training light draws on 2026-10-14. The previous range came from a photo at other
+# camera settings and rendered teal, never this olive. No margin: G > 0.11 and
+# B > 0.03 keep it disjoint from REAL_TABLE_OBJECT_COLOUR_RANGE.
+GOAL_REAL_RGBA_RANGE = ((0.085, 0.16), (0.115, 0.21), (0.035, 0.07))
 GOAL_OUTLINE_THICKNESS = 0.015
 # Thin enough to read as drawn on the surface rather than as a second block, and
 # sunk so its top face sits just above the table at z=0.
