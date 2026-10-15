@@ -21,10 +21,16 @@ hollow outline: a 15 mm green frame tracing the T footprint. A filled marker is
 out of distribution.
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_wrist002_sdk50.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_wrist002_sdk50.yaml --max-steps 400
 uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --max-steps 400
 uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_measured_sdk50.yaml --max-steps 400
 ```
+
+`push_t_realtable_wrist002_sdk50` (W&B `o2uvn93k`, sim success 0.87) is the target
+policy retrained with `--env.actions.joint-pos.wrist-roll-scale 0.02` and exported
+with `--wrist-roll-scale 0.02`. It removed the gripper's wrist-roll jitter (0.78 to
+0.27 rad/s) and is the best on the rig so far, 1 of 5 runs at the goal.
 
 | manifest | W&B | reference | sim success | fingertip approaching T | T 1-3 cm from goal |
 | --- | --- | --- | --- | --- | --- |
