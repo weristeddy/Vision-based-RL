@@ -275,6 +275,11 @@ def build_env_cfg(
       params={"object_name": object_name},
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
+    start_curriculum_time_out=TerminationTermCfg(
+      func=mdp.start_curriculum_time_out,
+      params={"command_name": _COMMAND},
+      time_out=True,
+    ),
   )
   cfg.curriculum = {}
   if penalty_ramp is not None:
