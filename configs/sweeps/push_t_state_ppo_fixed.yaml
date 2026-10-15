@@ -1,0 +1,32 @@
+project: mjlab
+program: vbrl.scripts.train
+name: push_t_state_ppo_fixed
+method: grid
+metric: {name: Metrics/push_t_goal/episode_success, goal: maximize}
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - Mjlab-PushT-State-TrossenIdentified
+  - --env.scene.num-envs
+  - "1024"
+  - --gpu-ids
+  - all
+  - --env.episode-length-s
+  - "10"
+  - --env.actions.joint-pos.scale
+  - "0.05"
+  - --env.actions.joint-pos.ramp-s
+  - "0.05"
+  - --env.actions.joint-pos.wrist-roll-scale
+  - "0.02"
+  - --env.rewards.near-goal-ee-speed.weight=-80.0
+  - --env.rewards.action-rate-l2.weight=-0.01
+  - --env.rewards.table-touch.weight=-1.0
+  - ${args_no_boolean_flags}
+
+parameters:
+  agent.algorithm.learning-rate: {values: [0.0001, 0.0002, 0.0003]}
+  agent.algorithm.num-learning-epochs: {values: [4, 8]}
+  agent.seed: {values: [1, 2, 3]}

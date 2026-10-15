@@ -16,8 +16,9 @@ if TYPE_CHECKING:
 # ManiSkill3's vision-based sim-to-real setup.
 ROBOT_JOINT_POSITION_STD_RAD = 0.02
 # Object/table sliding coefficient, not measured on this rig. At 0.55 the real T
-# kept sliding after the fingertip left it, which it never did in simulation.
-OBJECT_TABLE_FRICTION_MEAN = 0.35
+# kept sliding after the fingertip left it, which it never did in simulation; 0.35
+# still read as too sticky, so the policy sees a slippery T and learns gentle pushes.
+OBJECT_TABLE_FRICTION_MEAN = 0.25
 OBJECT_TABLE_FRICTION_STD = 0.10
 
 OBJECT_COLLISION_GEOMS = r"push_t_(crossbar|stem)_collision"
