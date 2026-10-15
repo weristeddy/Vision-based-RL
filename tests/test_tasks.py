@@ -48,9 +48,11 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 42
+  assert len(task_ids) == 44
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
+    if "Distill" in task_id:
+      continue
     visual = agent.actor.cnn_cfg is not None
     assert tuple(agent.obs_groups) == ("actor", "critic")
     assert agent.obs_groups["actor"] == (
@@ -61,6 +63,32 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
     assert agent.actor.class_name == expected_actor, task_id
     assert agent.critic.class_name == "MLPModel"
     assert agent.critic.cnn_cfg is None
+
+
+def test_distillation_tasks_pair_a_vision_student_with_the_state_actor() -> None:
+  from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
+
+  from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import STATE_TASK_ID
+  from vbrl.training.runner import VbrlDistillationRunner
+
+  state_agent = load_rl_cfg(STATE_TASK_ID)
+  state_env = load_env_cfg(STATE_TASK_ID)
+  for task_id in (
+    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+  ):
+    agent = load_rl_cfg(task_id)
+    env = load_env_cfg(task_id)
+    assert load_runner_cls(task_id) is VbrlDistillationRunner
+    assert agent.obs_groups == {"student": ("actor", "camera"), "teacher": ("teacher",)}
+    assert agent.student.class_name == "vbrl.vision.model:VisionModel"
+    assert agent.student.distribution_cfg["init_std"] == 0.1
+    assert agent.teacher == state_agent.actor
+    teacher = env.observations["teacher"]
+    assert list(teacher.terms) == list(state_env.observations["actor"].terms)
+    assert teacher.terms["target_pose"].params["calibration_bias"] is False
+    assert "obj_pose" not in env.observations["actor"].terms
+    assert "teacher" not in load_env_cfg(task_id.replace("Distill", "")).observations
 
 
 def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:

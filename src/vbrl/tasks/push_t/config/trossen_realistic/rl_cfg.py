@@ -3,11 +3,13 @@ from __future__ import annotations
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg
 
 from vbrl.tasks.utils import wandb_task_tag
+from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillationCfg
 from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
 _RGB_MAX_ITERATIONS = 15000
+_DISTILLATION_MAX_ITERATIONS = 5000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
   "activation": "relu",
@@ -140,8 +142,46 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
   )
 
 
+def trossen_realistic_push_t_rgb_distillation_runner_cfg(
+  task_id: str,
+  vision: VisionConfig,
+  camera_view: str = "external",
+) -> DistillationRunnerCfg:
+  return DistillationRunnerCfg(
+    seed=0,
+    num_steps_per_env=16,
+    max_iterations=_DISTILLATION_MAX_ITERATIONS,
+    obs_groups={"student": ("actor", "camera"), "teacher": ("teacher",)},
+    save_interval=_DISTILLATION_MAX_ITERATIONS + 1,
+    experiment_name="push_t_rgb_distillation",
+    run_name=wandb_task_tag(task_id),
+    logger="wandb",
+    wandb_project="mjlab",
+    wandb_tags=(
+      wandb_task_tag(task_id),
+      "push_t",
+      "rgb",
+      "distillation",
+      vision.encoder,
+      vision.adapter,
+      f"{camera_view}_cam",
+    ),
+    clip_actions=1.0,
+    upload_model=True,
+    student=RslRlModelCfg(
+      **_NETWORK,
+      cnn_cfg={"vision": vision.asdict(), "latent_batchnorm": False},
+      distribution_cfg={**_GAUSSIAN, "init_std": 0.1},
+      class_name="vbrl.vision.model:VisionModel",
+    ),
+    teacher=RslRlModelCfg(**_NETWORK, distribution_cfg=_GAUSSIAN, class_name="MLPModel"),
+    algorithm=VisualDistillationCfg(),
+  )
+
+
 __all__ = [
   "STATE_TASK_ID",
+  "trossen_realistic_push_t_rgb_distillation_runner_cfg",
   "trossen_realistic_push_t_rgb_ppo_runner_cfg",
   "trossen_realistic_push_t_state_ppo_runner_cfg",
 ]

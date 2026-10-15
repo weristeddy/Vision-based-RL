@@ -149,7 +149,7 @@ def load_trained_policy(
   runner = runner_cls(wrapped, asdict(agent_cfg), log_dir=None, device=device)
   runner.load(
     str(checkpoint_path),
-    load_cfg={"actor": True},
+    load_cfg={"student": True} if hasattr(runner.alg, "student") else {"actor": True},
     strict=True,
     map_location=device,
   )

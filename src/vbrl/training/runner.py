@@ -4,6 +4,7 @@ from typing import Any
 
 from mjlab.rl.runner import MjlabOnPolicyRunner
 from rsl_rl.modules import EmpiricalNormalization
+from rsl_rl.runners import DistillationRunner
 
 
 class GoalYawNormalization(EmpiricalNormalization):
@@ -66,13 +67,17 @@ def policy_metadata(
 class VbrlOnPolicyRunner(MjlabOnPolicyRunner):
   def __init__(self, env, train_cfg, log_dir=None, device="cpu") -> None:
     super().__init__(env, train_cfg, log_dir, device)
-    if "camera" not in train_cfg["obs_groups"]["actor"]:
+    if not any("camera" in groups for groups in train_cfg["obs_groups"].values()):
       return
     observations = env.unwrapped.observation_manager
-    for group, model in (
-      ("actor", self.alg._raw_actor),
-      ("critic", self.alg._raw_critic),
+    for group, name in (
+      ("actor", "_raw_actor"),
+      ("critic", "_raw_critic"),
+      ("actor", "_raw_student"),
     ):
+      model = getattr(self.alg, name, None)
+      if model is None:
+        continue
       names = observations.active_terms[group]
       if "target_pose" in names and model.obs_normalization:
         dims = observations.group_obs_term_dim[group]
@@ -105,4 +110,17 @@ class VbrlOnPolicyRunner(MjlabOnPolicyRunner):
       print(f"[WARN] ONNX export failed (training continues): {error}")
 
 
-__all__ = ["VbrlOnPolicyRunner", "policy_metadata"]
+class VbrlDistillationRunner(VbrlOnPolicyRunner, DistillationRunner):
+  def __init__(self, env, train_cfg, log_dir=None, device="cpu") -> None:
+    for key in ("student", "teacher"):
+      model = train_cfg[key]
+      for option in ("cnn_cfg", "distribution_cfg"):
+        if model[option] is None:
+          model.pop(option)
+      if model["rnn_type"] is None:
+        for option in ("rnn_type", "rnn_hidden_dim", "rnn_num_layers"):
+          model.pop(option)
+    super().__init__(env, train_cfg, log_dir, device)
+
+
+__all__ = ["VbrlDistillationRunner", "VbrlOnPolicyRunner", "policy_metadata"]

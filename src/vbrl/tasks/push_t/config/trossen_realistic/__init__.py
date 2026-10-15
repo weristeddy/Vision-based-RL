@@ -3,7 +3,7 @@ import functools
 from mjlab.tasks.registry import register_mjlab_task
 
 from vbrl.asset_zoo.robots.definition import CameraView
-from vbrl.training.runner import VbrlOnPolicyRunner
+from vbrl.training.runner import VbrlDistillationRunner, VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
 
 from .env_cfgs import (
@@ -12,6 +12,7 @@ from .env_cfgs import (
 )
 from .rl_cfg import (
   STATE_TASK_ID,
+  trossen_realistic_push_t_rgb_distillation_runner_cfg,
   trossen_realistic_push_t_rgb_ppo_runner_cfg,
   trossen_realistic_push_t_state_ppo_runner_cfg,
 )
@@ -26,6 +27,7 @@ def _register(
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
   camera_view: CameraView = "external",
+  distill: bool = False,
 ) -> None:
   env = functools.partial(
     trossen_realistic_push_t_rgb_env_cfg,
@@ -34,15 +36,19 @@ def _register(
     real_goal_colour=real_goal_colour,
     goal_observation_noise=goal_observation_noise,
     camera_view=camera_view,
+    teacher_observations=distill,
+  )
+  rl_cfg = (
+    trossen_realistic_push_t_rgb_distillation_runner_cfg
+    if distill
+    else trossen_realistic_push_t_rgb_ppo_runner_cfg
   )
   register_mjlab_task(
     task_id,
     env(),
     env(play=True),
-    trossen_realistic_push_t_rgb_ppo_runner_cfg(
-      task_id, ARCHITECTURES[architecture], camera_view
-    ),
-    VbrlOnPolicyRunner,
+    rl_cfg(task_id, ARCHITECTURES[architecture], camera_view),
+    VbrlDistillationRunner if distill else VbrlOnPolicyRunner,
   )
 
 
@@ -91,5 +97,20 @@ _register(
   "DinoV2ViTS14-Afa6",
   goal_observation_noise=_CALIBRATION_NOISE,
   camera_view="wrist",
+  **_REAL_TABLE,
+)
+_register(
+  "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "DinoV2ViTS14-Afa6",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+  **_REAL_TABLE,
+)
+_register(
+  "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "DinoV2ViTS14-Afa6",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  camera_view="wrist",
+  distill=True,
   **_REAL_TABLE,
 )

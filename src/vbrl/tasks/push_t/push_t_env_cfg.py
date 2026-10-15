@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -102,6 +103,7 @@ def build_env_cfg(
   goal_in_observation: bool = True,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
   penalty_ramp: tuple[int, int] | None = None,
+  teacher_observations: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   cfg = make_tabletop_env_cfg(
     robot, action_delay=True, fixed_closed_gripper=True
@@ -144,6 +146,10 @@ def build_env_cfg(
   }
   cfg.observations["actor"].nan_policy = "sanitize"
   cfg.observations["critic"].nan_policy = "sanitize"
+  if teacher_observations:
+    teacher = copy.deepcopy(cfg.observations["actor"])
+    teacher.terms["target_pose"].params["calibration_bias"] = False
+    cfg.observations["teacher"] = teacher
 
   cfg.actions = {
     "joint_pos": mdp.TargetRelativeJointPositionActionCfg(

@@ -63,6 +63,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
   real_goal_colour: bool = False,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
   camera_view: CameraView = _EXTERNAL,
+  teacher_observations: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
   cfg = build_env_cfg(
@@ -74,6 +75,7 @@ def trossen_realistic_push_t_rgb_env_cfg(
     goal_in_observation=goal_in_observation,
     goal_observation_noise=goal_observation_noise,
     penalty_ramp=VISUAL_PENALTY_RAMP_STEPS,
+    teacher_observations=teacher_observations,
   )
   add_rgb_camera(
     cfg,

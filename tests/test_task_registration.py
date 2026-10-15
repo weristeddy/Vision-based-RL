@@ -53,15 +53,17 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-RealTableWrist-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_42_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_44_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 42
+  assert len(EXPECTED_TASK_IDS) == 44
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -99,7 +101,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     seen_external += bool(external)
 
   # Lift-Cube and Push-T RealTableWrist are wrist-camera tasks: they declare `cam` alone.
-  assert seen_external == 4
+  assert seen_external == 5
 
 
 def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:
