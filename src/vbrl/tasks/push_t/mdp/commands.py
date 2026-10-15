@@ -152,11 +152,6 @@ class PushTCommand(LiftingCommand):
       (n,),
       device=self.device,
     )
-    if self.cfg.start_curriculum_steps:
-      alpha = start_interpolation(self.cfg, self._env.common_step_counter)
-      t = alpha * torch.rand(n, 1, device=self.device)
-      object_pos[:, :2] = target_pos[:, :2] + t * (object_pos[:, :2] - target_pos[:, :2])
-      object_yaw = target_yaw + t[:, 0] * wrap_to_pi(object_yaw - target_yaw)
     self.target_yaw[env_ids] = target_yaw
     zeros = torch.zeros(n, device=self.device)
     pose = torch.cat(
@@ -230,18 +225,9 @@ class PushTCommandCfg(LiftingCommandCfg):
   mask_half_width: float = MASK_HALF_WIDTH
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
-  start_curriculum_steps: int = 0
-  start_interpolation_min: float = 0.05
-  min_episode_s: float = 2.0
 
   def build(self, env: ManagerBasedRlEnv) -> PushTCommand:
     return PushTCommand(self, env)
-
-
-def start_interpolation(cfg: PushTCommandCfg, step: int) -> float:
-  progress = min(1.0, step / cfg.start_curriculum_steps)
-  low = cfg.start_interpolation_min
-  return low + (1.0 - low) * progress
 
 
 def push_t_command(env, name: str) -> PushTCommand:
@@ -251,4 +237,4 @@ def push_t_command(env, name: str) -> PushTCommand:
   return command
 
 
-__all__ = ["PushTCommand", "PushTCommandCfg", "push_t_command", "start_interpolation"]
+__all__ = ["PushTCommand", "PushTCommandCfg", "push_t_command"]

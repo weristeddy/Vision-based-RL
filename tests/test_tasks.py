@@ -162,54 +162,6 @@ def test_push_t_success_threshold_latches_metrics() -> None:
   assert torch.equal(command.metrics["episode_success"], torch.ones(2))
 
 
-def test_push_t_start_curriculum_interpolates_starts_towards_the_goal() -> None:
-  from vbrl.tasks.push_t.mdp.commands import (
-    PushTCommand,
-    PushTCommandCfg,
-    start_interpolation,
-  )
-
-  cfg = PushTCommandCfg(entity_name="object", resampling_time_range=(5.0, 5.0))
-  cfg.target_position_range = PushTCommandCfg.TargetPositionRangeCfg(
-    x=(0.2, 0.5), y=(-0.2, 0.2), z=(0.012, 0.012)
-  )
-  cfg.object_pose_range = PushTCommandCfg.ObjectPoseRangeCfg(
-    x=(0.2, 0.5), y=(-0.2, 0.2), z=(0.013, 0.013), yaw=(-math.pi, math.pi)
-  )
-  cfg.start_curriculum_steps = 2000
-  assert start_interpolation(cfg, 0) == pytest.approx(0.05)
-  assert start_interpolation(cfg, 1000) == pytest.approx(0.525)
-  assert start_interpolation(cfg, 9000) == pytest.approx(1.0)
-
-  worlds = 512
-  written: dict[str, torch.Tensor] = {}
-  fake_command = SimpleNamespace(
-    _goal_marker=None,
-    cfg=cfg,
-    device="cpu",
-    episode_success=torch.ones(worlds),
-    target_pos=torch.zeros(worlds, 3),
-    target_yaw=torch.zeros(worlds),
-    _overlap_cache_step=8,
-    _env=SimpleNamespace(
-      scene=SimpleNamespace(env_origins=torch.zeros(worlds, 3)),
-      common_step_counter=0,
-    ),
-    object=SimpleNamespace(
-      write_root_link_pose_to_sim=lambda pose, env_ids: written.update(pose=pose.clone()),
-      write_root_link_velocity_to_sim=lambda velocity, env_ids: None,
-    ),
-  )
-  PushTCommand._resample_command(fake_command, torch.arange(worlds))
-
-  offset = written["pose"][:, :2] - fake_command.target_pos[:, :2]
-  assert float(torch.linalg.vector_norm(offset, dim=-1).max()) <= 0.05 * 0.5 + 1e-6
-  w, z = written["pose"][:, 3], written["pose"][:, 6]
-  yaw = 2.0 * torch.atan2(z, w)
-  yaw_error = torch.remainder(yaw - fake_command.target_yaw + math.pi, 2 * math.pi) - math.pi
-  assert float(yaw_error.abs().max()) <= 0.05 * math.pi + 1e-5
-
-
 def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None:
   from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
   from vbrl.tasks.push_t.mdp.commands import PushTCommand, PushTCommandCfg
@@ -875,11 +827,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "object_off_table",
     "invalid_object_state",
     "nan_detection",
-    "start_curriculum_time_out",
   )
   assert cfg.terminations["time_out"].time_out is True
-  assert cfg.terminations["start_curriculum_time_out"].time_out is True
-  assert cfg.commands["push_t_goal"].start_curriculum_steps == 0
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
   assert tuple(actor.terms) == PUSH_T_STATE_TERMS

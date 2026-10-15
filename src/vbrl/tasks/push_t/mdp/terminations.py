@@ -7,8 +7,6 @@ from mjlab.entity import Entity
 
 from vbrl.scenes.presets import TABLE_CENTER, TABLE_HALF_EXTENTS
 
-from .commands import push_t_command, start_interpolation
-
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
@@ -54,17 +52,7 @@ def invalid_object_state(
 
 
 
-def start_curriculum_time_out(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-  cfg = push_t_command(env, command_name).cfg
-  if not cfg.start_curriculum_steps:
-    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-  alpha = start_interpolation(cfg, env.common_step_counter)
-  limit = max(cfg.min_episode_s, alpha * env.max_episode_length_s) / env.step_dt
-  return env.episode_length_buf >= limit
-
-
 __all__ = [
   "invalid_object_state",
   "object_off_table",
-  "start_curriculum_time_out",
 ]
