@@ -28,7 +28,7 @@ _GAUSSIAN = {
 
 def _algorithm(**vision_batching) -> VisualPpoCfg:
   return VisualPpoCfg(
-    num_learning_epochs=8,
+    num_learning_epochs=4,
     num_mini_batches=16,
     learning_rate=0.0002,
     schedule="fixed",
