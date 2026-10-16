@@ -56,12 +56,6 @@ class PushTCommand(LiftingCommand):
     self.metrics["overlap"] = torch.zeros(
       self.num_envs, device=self.device
     )
-    if cfg.start_difficulty_bins:
-      self._start_bin = torch.full((self.num_envs,), -1, device=self.device)
-      self._bin_success = torch.full(
-        (cfg.start_difficulty_bins,), 0.5, device=self.device
-      )
-      self.metrics["start_t"] = torch.zeros(self.num_envs, device=self.device)
 
   @property
   def command(self) -> torch.Tensor:
@@ -117,8 +111,6 @@ class PushTCommand(LiftingCommand):
 
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     n = len(env_ids)
-    if self.cfg.start_difficulty_bins:
-      self._update_bin_success(env_ids)
     self.episode_success[env_ids] = 0.0
     self._overlap_cache_step = None
     object_range = self.cfg.object_pose_range
@@ -160,12 +152,6 @@ class PushTCommand(LiftingCommand):
       (n,),
       device=self.device,
     )
-    if self.cfg.start_difficulty_bins:
-      t = self._sample_start_t(env_ids)
-      object_pos[:, :2] = target_pos[:, :2] + t[:, None] * (
-        object_pos[:, :2] - target_pos[:, :2]
-      )
-      object_yaw = target_yaw + t * wrap_to_pi(object_yaw - target_yaw)
     self.target_yaw[env_ids] = target_yaw
     zeros = torch.zeros(n, device=self.device)
     pose = torch.cat(
@@ -190,27 +176,6 @@ class PushTCommand(LiftingCommand):
         dim=-1,
       )
       self._goal_marker.write_mocap_pose_to_sim(marker_pose, env_ids=env_ids)
-
-  def _update_bin_success(self, env_ids: torch.Tensor) -> None:
-    bins = self._start_bin[env_ids]
-    done = bins >= 0
-    count = torch.bincount(bins[done], minlength=self._bin_success.numel())
-    hits = torch.bincount(
-      bins[done], weights=self.episode_success[env_ids][done].float(),
-      minlength=self._bin_success.numel(),
-    )
-    keep = (1.0 - self.cfg.start_success_rate) ** count
-    mean = hits / count.clamp_min(1)
-    self._bin_success = keep * self._bin_success + (1.0 - keep) * mean
-
-  def _sample_start_t(self, env_ids: torch.Tensor) -> torch.Tensor:
-    p = self._bin_success
-    weights = self.cfg.start_sampling_floor + torch.sqrt(p * (1.0 - p))
-    bins = torch.multinomial(weights, len(env_ids), replacement=True)
-    self._start_bin[env_ids] = bins
-    t = (bins + torch.rand(len(env_ids), device=self.device)) / p.numel()
-    self.metrics["start_t"][env_ids] = t
-    return t
 
   def _update_command(self, env_ids: torch.Tensor | None) -> None:
     del env_ids
@@ -260,9 +225,6 @@ class PushTCommandCfg(LiftingCommandCfg):
   mask_half_width: float = MASK_HALF_WIDTH
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
-  start_difficulty_bins: int = 0
-  start_sampling_floor: float = 0.05
-  start_success_rate: float = 0.01
 
   def build(self, env: ManagerBasedRlEnv) -> PushTCommand:
     return PushTCommand(self, env)

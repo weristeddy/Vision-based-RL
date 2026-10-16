@@ -163,53 +163,6 @@ def test_push_t_success_threshold_latches_metrics() -> None:
   assert torch.equal(command.metrics["episode_success"], torch.ones(2))
 
 
-def test_push_t_start_sampling_favours_bins_of_intermediate_success() -> None:
-  from vbrl.tasks.push_t.mdp.commands import PushTCommand, PushTCommandCfg
-
-  cfg = PushTCommandCfg(entity_name="object", resampling_time_range=(5.0, 5.0))
-  cfg.target_position_range = PushTCommandCfg.TargetPositionRangeCfg(
-    x=(0.2, 0.5), y=(-0.2, 0.2), z=(0.012, 0.012)
-  )
-  cfg.object_pose_range = PushTCommandCfg.ObjectPoseRangeCfg(
-    x=(0.2, 0.5), y=(-0.2, 0.2), z=(0.013, 0.013), yaw=(-math.pi, math.pi)
-  )
-  cfg.start_difficulty_bins = 4
-  cfg.start_sampling_floor = 0.0
-  worlds = 512
-  written: dict[str, torch.Tensor] = {}
-  command = SimpleNamespace(
-    _goal_marker=None,
-    cfg=cfg,
-    device="cpu",
-    episode_success=torch.zeros(worlds),
-    target_pos=torch.zeros(worlds, 3),
-    target_yaw=torch.zeros(worlds),
-    metrics={"start_t": torch.zeros(worlds)},
-    _overlap_cache_step=None,
-    _start_bin=torch.full((worlds,), -1),
-    _bin_success=torch.tensor([1.0, 0.5, 0.0, 1.0]),
-    _env=SimpleNamespace(scene=SimpleNamespace(env_origins=torch.zeros(worlds, 3))),
-    object=SimpleNamespace(
-      write_root_link_pose_to_sim=lambda pose, env_ids: written.update(pose=pose.clone()),
-      write_root_link_velocity_to_sim=lambda velocity, env_ids: None,
-    ),
-  )
-  command._update_bin_success = lambda ids: PushTCommand._update_bin_success(command, ids)
-  command._sample_start_t = lambda ids: PushTCommand._sample_start_t(command, ids)
-  PushTCommand._resample_command(command, torch.arange(worlds))
-
-  t = command.metrics["start_t"]
-  assert torch.all((t >= 0.25) & (t < 0.5))
-  assert torch.all(command._start_bin == 1)
-  distance = torch.linalg.vector_norm(written["pose"][:, :2] - command.target_pos[:, :2], dim=-1)
-  assert float(distance.max()) <= 0.5 * 0.5 + 1e-6
-
-  command.episode_success = torch.ones(worlds)
-  PushTCommand._update_bin_success(command, torch.arange(worlds))
-  assert command._bin_success[1] > 0.99
-  assert torch.equal(command._bin_success[[0, 2, 3]], torch.tensor([1.0, 0.0, 1.0]))
-
-
 def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None:
   from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
   from vbrl.tasks.push_t.mdp.commands import PushTCommand, PushTCommandCfg
