@@ -48,7 +48,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 44
+  assert len(task_ids) == 45
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     if "Distill" in task_id:
@@ -76,6 +76,7 @@ def test_distillation_tasks_pair_a_vision_student_with_the_state_actor() -> None
   for task_id in (
     "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-GoalOutlineDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
   ):
     agent = load_rl_cfg(task_id)
     env = load_env_cfg(task_id)

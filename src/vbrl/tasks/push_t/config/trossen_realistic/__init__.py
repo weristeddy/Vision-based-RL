@@ -71,6 +71,12 @@ _register(
   goal_observation_noise=_CALIBRATION_NOISE,
 )
 _register(
+  "Mjlab-PushT-GoalOutlineDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "DinoV2ViTS14-Afa6",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+)
+_register(
   "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
   "DinoV2ViTS14-Afa6",
   goal_in_observation=False,
