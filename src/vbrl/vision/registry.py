@@ -9,6 +9,7 @@ from .adapters import (
   AFAAdapter,
   FlattenAdapter,
   FlattenReluAdapter,
+  L2Normalize,
   LocalGridAdapter,
   SpatialSoftmaxAdapter,
 )
@@ -76,6 +77,16 @@ def _global_adapter(
     layers.extend((nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)))
   layers.append(nn.LayerNorm(channels))
   return nn.Sequential(*layers), channels
+
+
+def _global_normalized_adapter(
+  config: VisionConfig,
+  _: AdapterSpec,
+  channels: int,
+  spatial: bool,
+) -> tuple[nn.Module, int]:
+  pool = (nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)) if spatial else ()
+  return nn.Sequential(*pool, L2Normalize(), nn.LayerNorm(channels)), channels
 
 
 def _linear_adapter(
@@ -177,6 +188,18 @@ def _afa_adapter(
   return adapter, adapter.output_dim
 
 
+def _afa_full_adapter(
+  config: VisionConfig,
+  _: AdapterSpec,
+  channels: int,
+  spatial: bool,
+) -> tuple[nn.Module, int]:
+  if not spatial:  # pragma: no cover - guarded by capability declarations.
+    raise ValueError("AFA requires spatial features.")
+  pool = AFAAdapter(channels, num_heads=config.afa_num_heads)
+  return nn.Sequential(pool, nn.LayerNorm(channels)), channels
+
+
 ENCODERS: dict[EncoderName, EncoderSpec] = {
   "nature_cnn": EncoderSpec(
     "nature_cnn", 64, "scratch", True, _ALL_FEATURES, None,
@@ -204,6 +227,9 @@ ENCODERS: dict[EncoderName, EncoderSpec] = {
 
 ADAPTERS: dict[AdapterName, AdapterSpec] = {
   "global": AdapterSpec("global", "global", _global_adapter),
+  "global_normalized": AdapterSpec(
+    "global_normalized", "global", _global_normalized_adapter
+  ),
   "linear": AdapterSpec("linear", "global", _linear_adapter),
   # Asks for the native map, not `local_grid`, precisely because it must not be
   # resampled: "no adapter" means the encoder's own output reaches the policy.
@@ -216,6 +242,7 @@ ADAPTERS: dict[AdapterName, AdapterSpec] = {
     "spatial_softmax", "spatial", _spatial_softmax_adapter, 256
   ),
   "afa": AdapterSpec("afa", "spatial", _afa_adapter),
+  "afa_full": AdapterSpec("afa_full", "spatial", _afa_full_adapter),
 }
 
 
@@ -265,7 +292,7 @@ def check_composition(config: VisionConfig) -> None:
     raise ValueError(
       f"SpatialSoftmax uses a fixed {adapter.fixed_output_dim}-dimensional output."
     )
-  if config.adapter == "afa":
+  if config.adapter in ("afa", "afa_full"):
     if (
       isinstance(config.afa_num_heads, bool)
       or not isinstance(config.afa_num_heads, int)

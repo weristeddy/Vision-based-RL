@@ -166,6 +166,11 @@ class AttentionPoolLatent(nn.Module):
     return (attention @ value).transpose(1, 2).reshape(batch, channels)
 
 
+class L2Normalize(nn.Module):
+  def forward(self, features: torch.Tensor) -> torch.Tensor:
+    return F.normalize(features, dim=-1)
+
+
 class AFAAdapter(nn.Module):
   def __init__(
     self,

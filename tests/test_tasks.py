@@ -48,7 +48,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 45
+  assert len(task_ids) == 49
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     if "Distill" in task_id:
@@ -73,10 +73,16 @@ def test_distillation_tasks_pair_a_vision_student_with_the_state_actor() -> None
 
   state_agent = load_rl_cfg(STATE_TASK_ID)
   state_env = load_env_cfg(STATE_TASK_ID)
+  rgb = load_env_cfg("Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified")
+  assert "teacher" not in rgb.observations
   for task_id in (
     "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
     "Mjlab-PushT-GoalOutlineDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Global-TrossenMeasured",
+    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
+    "Mjlab-PushT-RealTableDistill-R3MResNet50-Global-TrossenMeasured",
+    "Mjlab-PushT-RealTableDistill-R3MResNet50-AfaFull32-TrossenMeasured",
   ):
     agent = load_rl_cfg(task_id)
     env = load_env_cfg(task_id)
@@ -89,7 +95,6 @@ def test_distillation_tasks_pair_a_vision_student_with_the_state_actor() -> None
     assert list(teacher.terms) == list(state_env.observations["actor"].terms)
     assert teacher.terms["target_pose"].params["calibration_bias"] is False
     assert "obj_pose" not in env.observations["actor"].terms
-    assert "teacher" not in load_env_cfg(task_id.replace("Distill", "")).observations
 
 
 def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:

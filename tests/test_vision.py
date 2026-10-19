@@ -19,8 +19,8 @@ BACKBONES = (
   "r3m_resnet50", "r3m_resnet50_layer3",
 )
 ADAPTER_NAMES = (
-  "global", "linear", "flatten", "flatten_relu", "local_grid",
-  "spatial_softmax", "afa",
+  "global", "global_normalized", "linear", "flatten", "flatten_relu", "local_grid",
+  "spatial_softmax", "afa", "afa_full",
 )
 
 
@@ -133,15 +133,16 @@ def test_afa_head_count_follows_the_published_64_wide_split() -> None:
   seen = 0
   for token in CURRENT_ARCHITECTURES:
     config = ARCHITECTURES[token]
-    if config.adapter != "afa":
+    if config.adapter not in ("afa", "afa_full"):
       continue
     seen += 1
     channels = ENCODERS[config.encoder].channels
     assert config.afa_num_heads == channels // AFA_HEAD_DIM, token
     assert channels % config.afa_num_heads == 0, token
-    assert token.endswith(f"-Afa{config.afa_num_heads}"), token
+    suffix = "Afa" if config.adapter == "afa" else "AfaFull"
+    assert token.endswith(f"-{suffix}{config.afa_num_heads}"), token
 
-  assert seen == 3
+  assert seen == 5
 
 
 @pytest.mark.usefixtures("_fake_pretrained_backbones")
@@ -154,9 +155,28 @@ def test_every_encoder_combines_with_every_adapter_and_loads_strictly(
   model = build_encoder(config, input_dim=(224, 224))
   restored = build_encoder(config, input_dim=(224, 224))
 
-  expected_dim = ENCODERS[encoder].channels if adapter == "global" else 256
+  native = ("global", "global_normalized", "afa_full")
+  expected_dim = ENCODERS[encoder].channels if adapter in native else 256
   assert model.output_dim == expected_dim
   restored.load_state_dict(model.state_dict(), strict=True)
+
+
+@pytest.mark.usefixtures("_fake_pretrained_backbones")
+@pytest.mark.parametrize("encoder", ("dinov2_vits14", "r3m_resnet50"))
+def test_paper_heads_keep_the_native_width_and_end_in_a_layer_norm(encoder: str) -> None:
+  from vbrl.vision.adapters import AFAAdapter, L2Normalize
+
+  channels = ENCODERS[encoder].channels
+  config = _config(encoder, "global_normalized")
+  head = build_encoder(config, input_dim=(224, 224)).adapter
+  assert [type(m) for m in head][-2:] == [L2Normalize, nn.LayerNorm]
+  assert not any(isinstance(m, nn.Linear) for m in head.modules())
+
+  config = _config(encoder, "afa_full", afa_num_heads=channels // 64)
+  model = build_encoder(config, input_dim=(224, 224))
+  pool, norm = model.adapter
+  assert isinstance(pool, AFAAdapter) and isinstance(pool.proj, nn.Identity)
+  assert isinstance(norm, nn.LayerNorm) and model.output_dim == channels
 
 
 def test_linear_encoder_keeps_legacy_single_projection_layout() -> None:

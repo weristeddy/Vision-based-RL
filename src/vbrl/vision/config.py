@@ -15,12 +15,14 @@ EncoderName: TypeAlias = Literal[
 AdapterName: TypeAlias = Literal[
   "none",
   "global",
+  "global_normalized",
   "linear",
   "flatten",
   "flatten_relu",
   "local_grid",
   "spatial_softmax",
   "afa",
+  "afa_full",
 ]
 Weights: TypeAlias = Literal["scratch", "pretrained"]
 FloatDType: TypeAlias = Literal["bfloat16", "float16", "float32"]

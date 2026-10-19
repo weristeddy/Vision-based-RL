@@ -120,3 +120,31 @@ _register(
   distill=True,
   **_REAL_TABLE,
 )
+_register(
+  "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Global-TrossenMeasured",
+  "DinoV2ViTS14-Global",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+  **_REAL_TABLE,
+)
+_register(
+  "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
+  "DinoV2ViTS14-AfaFull6",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+  **_REAL_TABLE,
+)
+_register(
+  "Mjlab-PushT-RealTableDistill-R3MResNet50-Global-TrossenMeasured",
+  "R3MResNet50-Global",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+  **_REAL_TABLE,
+)
+_register(
+  "Mjlab-PushT-RealTableDistill-R3MResNet50-AfaFull32-TrossenMeasured",
+  "R3MResNet50-AfaFull32",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+  **_REAL_TABLE,
+)
