@@ -13,6 +13,7 @@ SWEEP_COUNT="1"
 COUNT_SET="0"
 USE_FALLBACK="0"
 DEPENDENCY=""
+EXCLUDE=""
 
 usage() {
   command cat <<'EOF'
@@ -20,6 +21,7 @@ Usage:
   bash cluster/submit.sh --profile a100 -- TASK_ID [native MJLab options ...]
   bash cluster/submit.sh --profile a100 --sweep-agent entity/project/sweep-id [--count N]
   bash cluster/submit.sh --profile a100 --dependency afterany:<job-id> -- TASK_ID
+  bash cluster/submit.sh --profile b200 --exclude node-a,node-b -- TASK_ID
 
 Profiles: a100, b200, testing, a100-single, b200-single
 
@@ -61,6 +63,11 @@ while [[ $# -gt 0 ]]; do
     --dependency)
       [[ $# -ge 2 ]] || { echo "--dependency requires a value" >&2; exit 2; }
       DEPENDENCY="$2"
+      shift 2
+      ;;
+    --exclude)
+      [[ $# -ge 2 ]] || { echo "--exclude requires a node list" >&2; exit 2; }
+      EXCLUDE="$2"
       shift 2
       ;;
     --help|-h)
@@ -143,6 +150,7 @@ SBATCH_ARGS=(
 )
 [[ -z "${SELECTED_ACCOUNT}" ]] || SBATCH_ARGS+=(--account="${SELECTED_ACCOUNT}")
 [[ -z "${DEPENDENCY}" ]] || SBATCH_ARGS+=(--dependency="${DEPENDENCY}")
+[[ -z "${EXCLUDE}" ]] || SBATCH_ARGS+=(--exclude="${EXCLUDE}")
 
 if [[ "${MODE}" == "sweep" ]]; then
   exec sbatch "${SBATCH_ARGS[@]}" "${SCRIPT_DIR}/train.slurm" "${PROFILE}" \
