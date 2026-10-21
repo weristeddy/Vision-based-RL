@@ -135,6 +135,14 @@ _register(
   **_REAL_TABLE,
 )
 _register(
+  "Mjlab-PushT-WoodTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
+  "DinoV2ViTS14-AfaFull6",
+  goal_observation_noise=_CALIBRATION_NOISE,
+  distill=True,
+  real_goal_colour=True,
+  scene="real_texture_wood",
+)
+_register(
   "Mjlab-PushT-RealTableDistill-R3MResNet50-Global-TrossenMeasured",
   "R3MResNet50-Global",
   goal_observation_noise=_CALIBRATION_NOISE,

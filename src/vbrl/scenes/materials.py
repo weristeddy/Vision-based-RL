@@ -162,8 +162,9 @@ def _add_procedural_pool(spec: mujoco.MjSpec, bank: MaterialBank) -> tuple[str, 
 
 
 def _add_ambientcg_pool(spec: mujoco.MjSpec, bank: MaterialBank) -> tuple[str, ...]:
-  names = ambientcg_texture_names()
-  for path, texture_name in zip(ambientcg_pool_paths(), names, strict=True):
+  paths = ambientcg_pool_paths(bank.families)
+  names = ambientcg_texture_names(bank.families)
+  for path, texture_name in zip(paths, names, strict=True):
     spec.add_texture(
       name=texture_name,
       type=mujoco.mjtTexture.mjTEXTURE_2D,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -33,6 +34,7 @@ PROCEDURAL_OBJECT_SEED = 170306908
 AMBIENTCG_POOL_SIZE = 768
 AMBIENTCG_POOL_SEED = 170306909
 MUJOCO_MAX_TEXTURES = 1000
+AMBIENTCG_WOOD_FAMILIES = ("Wood", "WoodFloor", "Planks", "WoodSiding")
 
 BankKind = Literal["procedural", "ambientcg", "image"]
 LightSet = Literal["training", "realistic"]
@@ -119,6 +121,7 @@ class MaterialBank:
   seed: int | None = None
   checker_repeat: float = 6.0
   proxy_rgba: tuple[float, float, float, float] = (0.45, 0.45, 0.45, 1.0)
+  families: tuple[str, ...] = ()
 
   @property
   def material_name(self) -> str:
@@ -187,6 +190,14 @@ _AMBIENTCG_TABLE = MaterialBank(
   slot="texid",
   proxy_rgba=(0.0, 0.0, 0.0, 0.0),
 )
+_AMBIENTCG_WOOD_TABLE = MaterialBank(
+  kind="ambientcg",
+  prefix=AMBIENTCG_PREFIX,
+  pattern=AMBIENTCG_TEXTURE_PATTERN,
+  slot="texid",
+  proxy_rgba=(0.0, 0.0, 0.0, 0.0),
+  families=AMBIENTCG_WOOD_FAMILIES,
+)
 _RED_PLASTIC_OBJECT = MaterialBank(
   kind="image",
   prefix="ood_red_plastic_object",
@@ -242,6 +253,14 @@ _PRESETS: dict[str, ScenePreset] = {
   "real_table": ScenePreset(
     "real_table",
     table=_REAL_TABLE_BANK,
+    wide_lighting=True,
+    object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
+  ),
+  # real_table with the tabletop drawn from AmbientCG's wood families instead of
+  # the rig's one photo.
+  "real_texture_wood": ScenePreset(
+    "real_texture_wood",
+    table=_AMBIENTCG_WOOD_TABLE,
     wide_lighting=True,
     object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
   ),
@@ -312,9 +331,18 @@ def ambientcg_texture_paths() -> tuple[Path, ...]:
   return paths
 
 
-@lru_cache(maxsize=1)
-def ambientcg_pool_paths() -> tuple[Path, ...]:
+def ambientcg_family(path: Path) -> str:
+  match = re.match(r"[A-Za-z]+", path.name)
+  return match.group() if match else ""
+
+
+@lru_cache(maxsize=None)
+def ambientcg_pool_paths(families: tuple[str, ...] = ()) -> tuple[Path, ...]:
   paths = ambientcg_texture_paths()
+  if families:
+    paths = tuple(path for path in paths if ambientcg_family(path) in families)
+    if not paths:
+      raise ValueError(f"No AmbientCG texture belongs to the families {families}.")
   if len(paths) <= AMBIENTCG_POOL_SIZE:
     return paths
   indices = sorted(
@@ -323,17 +351,18 @@ def ambientcg_pool_paths() -> tuple[Path, ...]:
   return tuple(paths[index] for index in indices)
 
 
-@lru_cache(maxsize=1)
-def ambientcg_texture_names() -> tuple[str, ...]:
+@lru_cache(maxsize=None)
+def ambientcg_texture_names(families: tuple[str, ...] = ()) -> tuple[str, ...]:
   return tuple(
     f"{AMBIENTCG_PREFIX}texture_{index:04d}"
-    for index, _ in enumerate(ambientcg_pool_paths())
+    for index, _ in enumerate(ambientcg_pool_paths(families))
   )
 
 
 __all__ = [
   "AMBIENTCG_PREFIX",
   "AMBIENTCG_TEXTURE_PATTERN",
+  "AMBIENTCG_WOOD_FAMILIES",
   "CAMERA_POSITION_DR_RANGE_M",
   "CAMERA_ROTATION_DR_RANGE_RAD",
   "FILL_LIGHT_NAME",
@@ -353,6 +382,7 @@ __all__ = [
   "RandomizedSlot",
   "ScenePreset",
   "TexturePreset",
+  "ambientcg_family",
   "ambientcg_pool_paths",
   "ambientcg_texture_names",
   "ambientcg_texture_paths",

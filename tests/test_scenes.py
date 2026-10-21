@@ -15,7 +15,8 @@ from vbrl.scenes.presets import (  # noqa: E402
 
 ALL_SCENES = (
   "default", "procedural", "real_texture", "real_texture_red",
-  "real_texture_bordeaux", "real_table", "wood", "plaster", "peacock",
+  "real_texture_bordeaux", "real_table", "real_texture_wood", "wood", "plaster",
+  "peacock",
 )
 # Every training preset randomizes the sun's colour on top of its pose. The
 # matched-evaluation branch deliberately does not; see `_events` in the builder.
@@ -273,3 +274,20 @@ def test_a_recording_holds_the_sun_colour_but_keeps_its_pose_jitter() -> None:
   assert not frozenset(LIGHT_COLOUR_EVENTS) & frozenset(cfg.events)
   for kept in ("light_position", "light_direction", "table_material"):
     assert kept in cfg.events
+
+
+def test_real_texture_wood_draws_only_wood_textures() -> None:
+  from vbrl.scenes.builder import BACKDROP_COUNT, table_spec
+  from vbrl.scenes.presets import (
+    AMBIENTCG_WOOD_FAMILIES,
+    ambientcg_family,
+    ambientcg_pool_paths,
+  )
+
+  preset = get_preset("real_texture_wood")
+  assert preset.table is not None
+  paths = ambientcg_pool_paths(preset.table.families)
+
+  assert paths
+  assert all(ambientcg_family(path) in AMBIENTCG_WOOD_FAMILIES for path in paths)
+  assert table_spec(preset).compile().ntex == len(paths) + BACKDROP_COUNT
