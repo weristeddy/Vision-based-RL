@@ -51,7 +51,10 @@ def run(
   max_steps: int | None = None,
   keyboard_goal: bool = True,
   log: Any = None,
+  record_camera: Any = None,
 ) -> int:
+  if record_camera is not None and log is None:
+    raise ValueError("--record-camera needs --log to write its frames to.")
   # A Push-T goal's third number is a heading, not a z the keys may clamp.
   keyboard_goal = keyboard_goal and config.goal_space == "lift_xyz"
   motion = config.motion
@@ -70,6 +73,7 @@ def run(
 
   arm = TrossenArm(config)
   camera = RealSenseCamera(config) if policy.metadata.needs_camera else None
+  recorder = RealSenseCamera(record_camera) if record_camera is not None else None
   if camera is not None:
     saturated = camera.saturated_fraction()
     setting = (
@@ -122,6 +126,7 @@ def run(
     )
   }
   frames: list = []
+  record_frames: list = []
   networks: list = []
   stack = ExitStack()
   started_at = deadline = time.perf_counter()
@@ -139,6 +144,7 @@ def run(
 
       joint_pos, joint_vel = arm.read()
       frame = _image(camera)
+      record_frame = _image(recorder)
       camera_age = camera.age_ms() if camera is not None else np.nan
       picked = time.perf_counter()
       action = policy.act(
@@ -180,6 +186,8 @@ def run(
         trace["sent"].append(np.asarray(sent, dtype=np.float32))
         trace["time"].append(time.perf_counter() - started_at)
         frames.append(np.asarray(frame, dtype=np.uint8))
+        if recorder is not None:
+          record_frames.append(np.asarray(record_frame, dtype=np.uint8))
 
       step += 1
       deadline += period
@@ -213,6 +221,15 @@ def run(
         action_smoothing=np.float32(motion.action_smoothing),
         control_hz=np.float32(config.control_hz),
         frames=np.asarray(frames, dtype=np.uint8),
+        camera_serial=str(config.camera_serial),
+        **(
+          {
+            "record_frames": np.asarray(record_frames, dtype=np.uint8),
+            "record_camera_serial": str(record_camera.camera_serial),
+          }
+          if recorder is not None
+          else {}
+        ),
         **{k: np.asarray(v) for k, v in trace.items()},
       )
       print(f"Wrote {destination} ({len(trace['action'])} steps, {len(frames)} frames)")
@@ -240,6 +257,8 @@ def run(
       print(f"  the terminal was taken back {keys.reclaims} time(s)")
     if camera is not None:
       camera.close()
+    if recorder is not None:
+      recorder.close()
     # Park rather than release: idle is not gravity-compensated.
     arm.park(seconds=motion.home_seconds)
     arm.close()

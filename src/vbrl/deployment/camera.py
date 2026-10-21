@@ -23,6 +23,8 @@ class RealSenseCamera:
 
     self._pipeline = rs.pipeline()
     stream = rs.config()
+    if config.camera_serial is not None:
+      stream.enable_device(config.camera_serial)
     stream.enable_stream(
       rs.stream.color,
       config.camera_width,
@@ -43,6 +45,8 @@ class RealSenseCamera:
       # Auto white balance re-neutralizes the wood whenever the room light changes.
       sensor.set_option(rs.option.enable_auto_white_balance, 0)
       sensor.set_option(rs.option.white_balance, float(config.camera_white_balance_k))
+    if config.camera_gain is not None:
+      sensor.set_option(rs.option.gain, float(config.camera_gain))
 
     self._lock = threading.Lock()
     first = self._await_frame()
@@ -103,6 +107,8 @@ def _probe(argv: Any = None) -> int:
   parser.add_argument("--width", type=int, default=424)
   parser.add_argument("--height", type=int, default=240)
   parser.add_argument("--fps", type=int, default=None)
+  parser.add_argument("--serial", default=None)
+  parser.add_argument("--gain", type=float, default=None)
   parser.add_argument(
     "--exposures",
     type=float,
@@ -117,6 +123,8 @@ def _probe(argv: Any = None) -> int:
   pipeline = rs.pipeline()
   for rate in rates:
     stream = rs.config()
+    if arguments.serial is not None:
+      stream.enable_device(arguments.serial)
     stream.enable_stream(
       rs.stream.color, arguments.width, arguments.height, rs.format.rgb8, rate
     )
@@ -149,6 +157,8 @@ def _probe(argv: Any = None) -> int:
       f"{(auto >= 250).mean() * 100:7.1f}% {np.median(auto):7.0f} {auto.mean():7.1f}"
     )
     sensor.set_option(rs.option.enable_auto_exposure, 0)
+    if arguments.gain is not None:
+      sensor.set_option(rs.option.gain, arguments.gain)
     for exposure in arguments.exposures:
       sensor.set_option(rs.option.exposure, float(exposure))
       for _ in range(8):

@@ -59,6 +59,8 @@ class DeploymentConfig:
   camera_height: int = 240
   camera_exposure_us: float | None = None
   camera_white_balance_k: float | None = None
+  camera_serial: str | None = None
+  camera_gain: float | None = None
   command_goal_time_s: float = 0.0
   arm_model: str = "wxai_v0"
   motor_parameters: str = "wxai_v0_20260317"

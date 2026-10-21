@@ -43,6 +43,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     "camera frame.",
   )
   parser.add_argument(
+    "--record-camera",
+    help="another manifest whose camera (serial, exposure, gain, white balance) "
+    "is recorded alongside into the --log trace as record_frames",
+  )
+  parser.add_argument(
     "--home",
     action="store_true",
     help="move to the home pose and hold it, needing no camera; Ctrl-C parks",
@@ -88,6 +93,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     max_steps=arguments.max_steps,
     keyboard_goal=arguments.keyboard_goal,
     log=arguments.log,
+    record_camera=None
+    if arguments.record_camera is None
+    else load_config(arguments.record_camera),
   )
 
 

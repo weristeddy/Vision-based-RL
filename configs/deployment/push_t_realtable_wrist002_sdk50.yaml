@@ -8,7 +8,9 @@ arm_ip: 192.168.1.2
 goal_space: push_t_xy_yaw
 goal: [0.38442, 0.01567, 0.0124]
 
+camera_serial: "260322270027"
 camera_exposure_us: 11000
+camera_gain: 27
 camera_white_balance_k: 4800
 
 control_hz: 20.0

@@ -10,6 +10,8 @@ onnx_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_sim2real_5998.onnx
 
 arm_ip: 192.168.1.2
 
+camera_serial: "412622271761"   # wrist D405, the view the Sim2Real task trains on
+
 # Where to lift the cube to, in the robot's base frame. Put x, y above where the
 # cube sits and keep z clear of the gripper's height at home (z = 0.205), or the
 # policy reads "already there" and never lifts. Valid: x (0.3, 0.5),

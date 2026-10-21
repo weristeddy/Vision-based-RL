@@ -45,6 +45,39 @@ without it would integrate on the target instead of the measured position.
 the target; `--action-smoothing` is the weight of the new action in the moving
 average, so 1.0 is no smoothing. Both override the manifest's `motion:` block.
 
+## Push-T: distilled students and the PPO reference
+
+All five share the rig settings above (20 Hz, 50 ms SDK ramp, 11,000 us / 4,800 K)
+and name their camera explicitly: `camera_serial` 260322270027 is the external
+D405, 412622271761 the wrist D405. Students were distilled from the state policy
+`yregddj3`; the PPO policy is `twub0nml` (4 epochs).
+
+| manifest | W&B | encoder | camera | sim success |
+| --- | --- | --- | --- | --- |
+| `push_t_dinov2_afafull6_distill` | `7gazz0tn` | DINOv2-S + AFA (6 heads) | external | 0.89 |
+| `push_t_dinov2_afa6_distill` | `j5vixm7j` | DINOv2-S + AFA6 | external | 0.87 |
+| `push_t_r3m_afafull32_distill` | `v8qzh46c` | R3M + AFA (32 heads) | external | 0.43 |
+| `push_t_dinov2_afa6_wrist_distill` | `v0x4uv8f` | DINOv2-S + AFA6 | wrist | 0.92 |
+| `push_t_dinov2_afa6_rl_ep4` | `twub0nml` | DINOv2-S + AFA6, PPO | external | 0.80 |
+
+```bash
+uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afafull6_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/afafull6_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afa6_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/afa6_distill_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_r3m_afafull32_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/r3m_afafull32_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afa6_wrist_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/wrist_distill_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afa6_rl_ep4.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/rl_ep4_1.npz
+```
+
+Brightness is matched with gain, not exposure: both cameras keep 11,000 us (under the
+16.7 ms frame time at 60 fps, so no blur or extra latency) and raise `camera_gain` until
+the 224 x 224 crop's median matches the simulated median (external 128 at gain 27; wrist
+110 at home at gain 26, measured 2026-10-20). Re-probe after any lighting change:
+
+```bash
+uv run --no-sync python -m vbrl.deployment.camera --serial 260322270027 --gain 27 --exposures 11000
+uv run --no-sync python -m vbrl.deployment.camera --serial 412622271761 --gain 26 --exposures 11000
+```
+
 ## Lift cube
 
 ```bash
