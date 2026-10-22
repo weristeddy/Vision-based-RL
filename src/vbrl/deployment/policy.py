@@ -47,6 +47,8 @@ class PolicyMetadata:
   clip_actions: float | None
   needs_camera: bool
   source_run: str
+  control_hz: float | None = None
+  ramp_s: float | None = None
 
   @classmethod
   def from_onnx(cls, onnx_session: Any) -> PolicyMetadata:
@@ -90,6 +92,8 @@ class PolicyMetadata:
       ),
       needs_camera=any(i.name == "camera" for i in onnx_session.get_inputs()),
       source_run=meta.get("run_path", "unknown"),
+      control_hz=float(meta["control_hz"]) if "control_hz" in meta else None,
+      ramp_s=float(meta["ramp_s"]) if "ramp_s" in meta else None,
     )
 
   @property
@@ -235,12 +239,30 @@ class Policy:
     return np.concatenate([measured, measured[-1:]])
 
 
+def check_control(metadata: PolicyMetadata, config: Any) -> None:
+  for name, trained, deployed, fix in (
+    ("control_hz", metadata.control_hz, config.control_hz, "control_hz"),
+    (
+      "ramp_s",
+      metadata.ramp_s,
+      config.command_goal_time_s,
+      "command_goal_time_s, or re-export with vbrl-export-onnx --ramp-s",
+    ),
+  ):
+    if trained is not None and abs(trained - deployed) > 1e-6:
+      raise ValueError(
+        f"{config.onnx_file} was trained with {name}={trained:g} but the manifest "
+        f"runs it at {deployed:g}. Fix {fix}."
+      )
+
+
 def load_policy(config: Any) -> Policy:
   import onnxruntime as ort
 
   onnx_session = ort.InferenceSession(
     config.onnx_file, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
   )
+  check_control(PolicyMetadata.from_onnx(onnx_session), config)
   return Policy(
     onnx_session,
     goal=config.goal,
@@ -256,4 +278,11 @@ def _rotate_by_inverse(quaternion: Any, vector: Any) -> Any:
   return vector + 2.0 * (w * first + np.cross(axis, first))
 
 
-__all__ = ["ARM_JOINTS", "TERMS", "Policy", "PolicyMetadata", "load_policy"]
+__all__ = [
+  "ARM_JOINTS",
+  "TERMS",
+  "Policy",
+  "PolicyMetadata",
+  "check_control",
+  "load_policy",
+]

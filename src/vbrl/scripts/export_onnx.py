@@ -27,6 +27,12 @@ def main(argv: Sequence[str] | None = None) -> int:
   parser.add_argument("--action-scale", type=float)
   parser.add_argument("--action-reference", choices=("target", "measured"))
   parser.add_argument("--wrist-roll-scale", type=float)
+  parser.add_argument(
+    "--ramp-s",
+    type=float,
+    help="the run's env.actions.joint-pos.ramp-s; deployment requires the "
+    "manifest's command_goal_time_s to equal it",
+  )
   arguments = parser.parse_args(argv)
 
   ref = CheckpointRef.from_args(arguments)
@@ -42,6 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     action_scale=arguments.action_scale,
     action_reference=arguments.action_reference,
     wrist_roll_scale=arguments.wrist_roll_scale,
+    ramp_s=arguments.ramp_s,
   )
   _, runner, _, path = load_trained_policy(
     env, task_id=arguments.task_id, device=arguments.device, ref=ref

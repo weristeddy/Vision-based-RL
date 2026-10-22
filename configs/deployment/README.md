@@ -37,9 +37,11 @@ with `--wrist-roll-scale 0.02`. It removed the gripper's wrist-roll jitter (0.78
 | `push_t_realtable_target_sdk50` | `ok5ae9ph` | target | 0.90 | 0.15 m/s | 0.10 m/s |
 | `push_t_realtable_measured_sdk50` | `gh9nf7wc` | measured | 0.89 | 0.25 m/s | 0.13 m/s |
 
-Mean action over 128 episodes at the manifest goal. ONNX exported with `--action-scale 0.05`
-and `--action-reference` set to the run's reference; a measured-reference policy exported
-without it would integrate on the target instead of the measured position.
+Mean action over 128 episodes at the manifest goal. ONNX exported with `--action-scale 0.05`,
+`--ramp-s 0.05` and `--action-reference` set to the run's reference; a measured-reference
+policy exported without it would integrate on the target instead of the measured position.
+`vbrl-deploy` refuses a manifest whose `control_hz` or `command_goal_time_s` differs from
+the `control_hz` and `ramp_s` the export carries, so export with the run's own flags.
 
 `--action-gain` scales each action before smoothing and before it is added to
 the target; `--action-smoothing` is the weight of the new action in the moving
