@@ -9,7 +9,7 @@ from mjlab.sensor import ContactSensor
 from mjlab.tasks.manipulation import mdp as manipulation_mdp
 from mjlab.utils.lab_api.math import wrap_to_pi
 
-from ..geometry import yaw_from_quat
+from ..geometry import t_outline_distance, yaw_from_quat
 from .commands import push_t_command
 
 if TYPE_CHECKING:
@@ -90,6 +90,31 @@ def fingertip_height_excess(
     return excess
   found = _contact(env, sensor_name, "found").found
   return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
+
+
+# Distance from the fingertips to the T's side faces at mid-height. Riding on top
+# keeps the pads at least a half-height above that line, so a side push always
+# scores better than a press, with no contact gate to escape through.
+def side_face_reach(
+  env: ManagerBasedRlEnv,
+  object_name: str,
+  asset_cfg: SceneEntityCfg,
+  length_scale: float,
+) -> torch.Tensor:
+  if length_scale <= 0.0:
+    raise ValueError("side_face_reach needs length_scale > 0.")
+  asset: Entity = env.scene[asset_cfg.name]
+  obj: Entity = env.scene[object_name]
+  tip = asset.data.geom_pos_w[:, asset_cfg.geom_ids].mean(dim=1)
+  offset = tip - obj.data.root_link_pos_w
+  yaw = yaw_from_quat(obj.data.root_link_quat_w)
+  cos, sin = torch.cos(yaw), torch.sin(yaw)
+  local = torch.stack(
+    (cos * offset[:, 0] + sin * offset[:, 1], -sin * offset[:, 0] + cos * offset[:, 1]),
+    dim=-1,
+  )
+  distance = torch.hypot(t_outline_distance(local), offset[:, 2])
+  return 1.0 - torch.tanh(distance / length_scale)
 
 
 def at_goal_static(
@@ -186,6 +211,7 @@ __all__ = [
   "near_goal_ee_speed",
   "object_table_press",
   "peak_object_press",
+  "side_face_reach",
   "table_touch",
   "top_contact_share",
 ]

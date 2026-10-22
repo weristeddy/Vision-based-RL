@@ -130,6 +130,48 @@ def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:
   assert 0.0 < first[3] < 0.9
 
 
+def test_t_outline_distance_measures_to_the_nearest_edge_inside_and_out() -> None:
+  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS, t_outline_distance
+
+  (cx, cy), (hx, hy) = FOOTPRINT_PARTS[0].center_xy, FOOTPRINT_PARTS[0].half_extents_xy
+  points = torch.tensor(
+    [
+      [cx + hx - 0.01, cy - hy],
+      [cx + hx - 0.01, cy - hy - 0.03],
+      [cx + hx - 0.01, cy],
+    ],
+    dtype=torch.float64,
+  )
+
+  assert t_outline_distance(points).tolist() == pytest.approx([0.0, 0.03, 0.01])
+
+
+def test_side_face_reach_prefers_a_side_push_over_riding_on_top() -> None:
+  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS, HALF_HEIGHT
+  from vbrl.tasks.push_t.mdp.rewards import side_face_reach
+
+  (cx, cy), (_, hy) = FOOTPRINT_PARTS[0].center_xy, FOOTPRINT_PARTS[0].half_extents_xy
+  beside = [cx, cy - hy - 0.005, 0.0]
+  on_top = [cx, cy, 2.0 * HALF_HEIGHT + 0.004 - HALF_HEIGHT]
+  scene = {
+    "robot": SimpleNamespace(
+      data=SimpleNamespace(geom_pos_w=torch.tensor([[beside], [on_top]]))
+    ),
+    "object": SimpleNamespace(
+      data=SimpleNamespace(
+        root_link_pos_w=torch.zeros(2, 3),
+        root_link_quat_w=torch.tensor([[1.0, 0.0, 0.0, 0.0]] * 2),
+      )
+    ),
+  }
+  env = SimpleNamespace(scene=scene)
+  asset_cfg = SimpleNamespace(name="robot", geom_ids=[0])
+
+  reward = side_face_reach(env, "object", asset_cfg, length_scale=0.02)
+
+  assert reward[0] > reward[1] + 0.3
+
+
 def test_push_t_success_threshold_latches_metrics() -> None:
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
 
@@ -786,8 +828,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "near_goal_ee_speed",
     "table_touch",
     "object_table_press",
+    "side_face_reach",
     "ee_height_ceiling",
   )
+  assert cfg.rewards["side_face_reach"].weight == 0.0
+  assert cfg.rewards["side_face_reach"].params["length_scale"] == pytest.approx(0.02)
   assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
   assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
