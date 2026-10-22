@@ -7,7 +7,7 @@ from mjlab.entity import Entity
 from mjlab.managers import SceneEntityCfg
 from mjlab.sensor import ContactSensor
 from mjlab.tasks.manipulation import mdp as manipulation_mdp
-from mjlab.utils.lab_api.math import wrap_to_pi
+from mjlab.utils.lab_api.math import quat_apply, wrap_to_pi
 
 from ..geometry import yaw_from_quat
 from .commands import push_t_command
@@ -93,6 +93,22 @@ def fingertip_height_excess(
     return excess
   found = _contact(env, sensor_name, "found").found
   return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
+
+
+# 1 - cos of the angle between the gripper's pointing axis and straight down; yaw
+# about the vertical stays free. Policies held the gripper 25-50 deg off vertical
+# while pushing, touching the T with pad edges and the hand instead of the pads.
+def ee_tilt(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg,
+  axis: tuple[float, float, float] = (1.0, 0.0, 0.0),
+) -> torch.Tensor:
+  asset: Entity = env.scene[asset_cfg.name]
+  quat = asset.data.site_quat_w[:, asset_cfg.site_ids[0]]
+  pointing = torch.tensor(axis, dtype=quat.dtype, device=quat.device).expand(
+    quat.shape[0], 3
+  )
+  return 1.0 + quat_apply(quat, pointing)[:, 2]
 
 
 def at_goal_static(
@@ -182,6 +198,7 @@ def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
 __all__ = [
   "at_goal_static",
   "at_goal_share",
+  "ee_tilt",
   "fingertip_height_excess",
   "maniskill_dense_reward",
   "max_contact_force",

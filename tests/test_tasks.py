@@ -130,6 +130,18 @@ def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:
   assert 0.0 < first[3] < 0.9
 
 
+def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
+  from vbrl.tasks.push_t.mdp.rewards import ee_tilt
+
+  half = math.sqrt(0.5)
+  quats = torch.tensor([[half, 0.0, half, 0.0], [1.0, 0.0, 0.0, 0.0]])
+  scene = {"robot": SimpleNamespace(data=SimpleNamespace(site_quat_w=quats[:, None]))}
+
+  tilt = ee_tilt(SimpleNamespace(scene=scene), SimpleNamespace(name="robot", site_ids=[0]))
+
+  assert tilt.tolist() == pytest.approx([0.0, 1.0], abs=1e-6)
+
+
 @pytest.mark.parametrize(("contact_gate", "expected"), [(True, 0.0), (False, 1.5)])
 def test_resting_on_the_t_escapes_the_height_term_only_through_the_gate(
   contact_gate: bool, expected: float
@@ -813,7 +825,9 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "table_touch",
     "object_table_press",
     "ee_height_ceiling",
+    "ee_vertical",
   )
+  assert cfg.rewards["ee_vertical"].weight == 0.0
   assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
   assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
