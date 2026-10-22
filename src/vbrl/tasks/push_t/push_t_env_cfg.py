@@ -40,8 +40,6 @@ EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
 # Raising it is measured and reverted: -0.1 takes success to 0.008, and -0.05
 # moved the lowest pad only 27.6 -> 26.2 mm for 8-19% of overlap.
 EE_HEIGHT_WEIGHT = -0.02
-SIDE_FACE_REACH_WEIGHT = 0.0
-SIDE_FACE_REACH_LENGTH_M = 0.02
 TABLE_TOUCH_WEIGHT = -2.0 / 3.0
 # The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
 # distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
@@ -216,17 +214,6 @@ def build_env_cfg(
         "scale": OBJECT_PRESS_SCALE_N,
       },
     ),
-    "side_face_reach": RewardTermCfg(
-      func=mdp.side_face_reach,
-      weight=SIDE_FACE_REACH_WEIGHT,
-      params={
-        "object_name": object_name,
-        "asset_cfg": SceneEntityCfg(
-          "robot", geom_names=robot.fingertip_geom_pattern
-        ),
-        "length_scale": SIDE_FACE_REACH_LENGTH_M,
-      },
-    ),
     "ee_height_ceiling": RewardTermCfg(
       func=mdp.fingertip_height_excess,
       weight=EE_HEIGHT_WEIGHT,
@@ -236,6 +223,7 @@ def build_env_cfg(
         ),
         "ceiling": EE_HEIGHT_CEILING_M,
         "sensor_name": _CONTACT_SENSOR,
+        "contact_gate": True,
       },
     ),
   }

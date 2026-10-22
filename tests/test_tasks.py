@@ -130,46 +130,30 @@ def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:
   assert 0.0 < first[3] < 0.9
 
 
-def test_t_outline_distance_measures_to_the_nearest_edge_inside_and_out() -> None:
-  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS, t_outline_distance
+@pytest.mark.parametrize(("contact_gate", "expected"), [(True, 0.0), (False, 1.5)])
+def test_resting_on_the_t_escapes_the_height_term_only_through_the_gate(
+  contact_gate: bool, expected: float
+) -> None:
+  from vbrl.tasks.push_t.mdp.rewards import fingertip_height_excess
 
-  (cx, cy), (hx, hy) = FOOTPRINT_PARTS[0].center_xy, FOOTPRINT_PARTS[0].half_extents_xy
-  points = torch.tensor(
-    [
-      [cx + hx - 0.01, cy - hy],
-      [cx + hx - 0.01, cy - hy - 0.03],
-      [cx + hx - 0.01, cy],
-    ],
-    dtype=torch.float64,
-  )
-
-  assert t_outline_distance(points).tolist() == pytest.approx([0.0, 0.03, 0.01])
-
-
-def test_side_face_reach_prefers_a_side_push_over_riding_on_top() -> None:
-  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS, HALF_HEIGHT
-  from vbrl.tasks.push_t.mdp.rewards import side_face_reach
-
-  (cx, cy), (_, hy) = FOOTPRINT_PARTS[0].center_xy, FOOTPRINT_PARTS[0].half_extents_xy
-  beside = [cx, cy - hy - 0.005, 0.0]
-  on_top = [cx, cy, 2.0 * HALF_HEIGHT + 0.004 - HALF_HEIGHT]
   scene = {
     "robot": SimpleNamespace(
-      data=SimpleNamespace(geom_pos_w=torch.tensor([[beside], [on_top]]))
+      data=SimpleNamespace(geom_pos_w=torch.tensor([[[0.0, 0.0, 0.030]]]))
     ),
-    "object": SimpleNamespace(
-      data=SimpleNamespace(
-        root_link_pos_w=torch.zeros(2, 3),
-        root_link_quat_w=torch.tensor([[1.0, 0.0, 0.0, 0.0]] * 2),
-      )
+    "ee_object_contact": SimpleNamespace(
+      data=SimpleNamespace(found=torch.tensor([[1.0]]))
     ),
   }
-  env = SimpleNamespace(scene=scene)
-  asset_cfg = SimpleNamespace(name="robot", geom_ids=[0])
+  excess = fingertip_height_excess(
+    SimpleNamespace(scene=scene),
+    SimpleNamespace(name="robot", geom_ids=[0]),
+    ceiling=0.012,
+    sensor_name="ee_object_contact",
+    contact_gate=contact_gate,
+  )
 
-  reward = side_face_reach(env, "object", asset_cfg, length_scale=0.02)
+  assert excess.item() == pytest.approx(expected)
 
-  assert reward[0] > reward[1] + 0.3
 
 
 def test_push_t_success_threshold_latches_metrics() -> None:
@@ -828,11 +812,8 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "near_goal_ee_speed",
     "table_touch",
     "object_table_press",
-    "side_face_reach",
     "ee_height_ceiling",
   )
-  assert cfg.rewards["side_face_reach"].weight == 0.0
-  assert cfg.rewards["side_face_reach"].params["length_scale"] == pytest.approx(0.02)
   assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
   assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
@@ -853,6 +834,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
   assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
   assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
+  assert cfg.rewards["ee_height_ceiling"].params["contact_gate"] is True
   assert "vertical_contact_force" not in cfg.rewards
   assert "object_contact_force" not in cfg.rewards
   assert cfg.rewards["table_touch"].weight == TABLE_TOUCH_WEIGHT
