@@ -130,6 +130,29 @@ def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:
   assert 0.0 < first[3] < 0.9
 
 
+@pytest.mark.parametrize(
+  ("enabled", "normal_z", "force", "expected"),
+  [(False, 1.0, 5.0, False), (True, 1.0, 5.0, True), (True, 1.0, 0.5, False), (True, 0.0, 5.0, False)],
+)
+def test_top_face_contact_ends_the_episode_only_when_enabled(
+  enabled: bool, normal_z: float, force: float, expected: bool
+) -> None:
+  from vbrl.tasks.push_t.mdp.terminations import top_face_contact
+
+  data = SimpleNamespace(
+    found=torch.tensor([[1.0]]),
+    force=torch.tensor([[[0.0, 0.0, force]]]),
+    normal=torch.tensor([[[math.sqrt(1.0 - normal_z**2), 0.0, normal_z]]]),
+  )
+  env = SimpleNamespace(
+    scene={"ee_object_contact": SimpleNamespace(data=data)}, num_envs=1, device="cpu"
+  )
+
+  done = top_face_contact(env, "ee_object_contact", min_force_n=1.0, enabled=enabled)
+
+  assert done.tolist() == [expected]
+
+
 def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
   from vbrl.tasks.push_t.mdp.rewards import ee_tilt
 
@@ -874,8 +897,10 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "object_off_table",
     "invalid_object_state",
     "nan_detection",
+    "top_face_contact",
   )
   assert cfg.terminations["time_out"].time_out is True
+  assert cfg.terminations["top_face_contact"].params["enabled"] is False
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
   assert tuple(actor.terms) == PUSH_T_STATE_TERMS

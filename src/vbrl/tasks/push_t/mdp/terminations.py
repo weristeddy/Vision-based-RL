@@ -7,6 +7,8 @@ from mjlab.entity import Entity
 
 from vbrl.scenes.presets import TABLE_CENTER, TABLE_HALF_EXTENTS
 
+from .rewards import max_contact_force_on_face
+
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
@@ -52,7 +54,21 @@ def invalid_object_state(
 
 
 
+# A rule rather than a price: riding on the top face and dragging the T was worth
+# more than any penalty a policy could still learn under.
+def top_face_contact(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  min_force_n: float = 1.0,
+  enabled: bool = False,
+) -> torch.Tensor:
+  if not enabled:
+    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+  return max_contact_force_on_face(env, sensor_name, vertical=True) > min_force_n
+
+
 __all__ = [
   "invalid_object_state",
   "object_off_table",
+  "top_face_contact",
 ]

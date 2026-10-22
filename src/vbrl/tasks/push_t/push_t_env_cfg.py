@@ -282,6 +282,10 @@ def build_env_cfg(
       params={"object_name": object_name},
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
+    top_face_contact=TerminationTermCfg(
+      func=mdp.top_face_contact,
+      params={"sensor_name": _CONTACT_SENSOR, "min_force_n": 1.0, "enabled": False},
+    ),
   )
   cfg.curriculum = {}
   if penalty_ramp is not None:
