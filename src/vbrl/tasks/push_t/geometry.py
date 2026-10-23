@@ -172,6 +172,18 @@ class FootprintRasterizer:
     return intersection.to(dtype=object_xy.dtype) / self.goal_area
 
 
+def footprint_signed_distance(
+  points_xy: torch.Tensor, footprint_parts: Sequence[FootprintPart] = FOOTPRINT_PARTS
+) -> torch.Tensor:
+  centers, half_extents = _part_tensors(
+    footprint_parts, device=points_xy.device, dtype=points_xy.dtype
+  )
+  q = torch.abs(points_xy.unsqueeze(-2) - centers) - half_extents
+  outside = torch.linalg.vector_norm(q.clamp_min(0.0), dim=-1)
+  inside = q.amax(dim=-1).clamp_max(0.0)
+  return (outside + inside).amin(dim=-1)
+
+
 def footprint_overlap_from_pose(
   *,
   object_xy: torch.Tensor,
@@ -206,4 +218,5 @@ __all__ = [
   "MASK_HALF_WIDTH",
   "REST_HEIGHT",
   "footprint_overlap_from_pose",
+  "footprint_signed_distance",
 ]

@@ -153,6 +153,32 @@ def test_top_face_contact_ends_the_episode_only_when_enabled(
   assert done.tolist() == [expected]
 
 
+def test_footprint_signed_distance_is_negative_inside_and_positive_outside() -> None:
+  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS, footprint_signed_distance
+
+  (cx, cy), (hx, hy) = FOOTPRINT_PARTS[0].center_xy, FOOTPRINT_PARTS[0].half_extents_xy
+  points = torch.tensor([[cx + hx - 0.01, cy], [cx + hx - 0.01, cy - hy - 0.03]])
+
+  assert footprint_signed_distance(points).tolist() == pytest.approx([-0.01, 0.03])
+
+
+def test_start_success_ignores_the_first_reset_and_rises_with_success() -> None:
+  from vbrl.tasks.push_t.mdp.commands import PushTCommand
+
+  command = object.__new__(PushTCommand)
+  command.cfg = SimpleNamespace(start_success_rate=0.5)
+  command._mode_success = torch.full((2,), 0.5)
+  command._start_mode = torch.tensor([-1, -1, 1, 1])
+  command.episode_success = torch.tensor([0.0, 0.0, 1.0, 1.0])
+
+  command._update_mode_success(torch.tensor([0, 1]))
+  assert command._mode_success.tolist() == [0.5, 0.5]
+
+  command._update_mode_success(torch.tensor([2, 3]))
+  assert command._mode_success[0] == 0.5
+  assert command._mode_success[1] > 0.8
+
+
 def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
   from vbrl.tasks.push_t.mdp.rewards import ee_tilt
 

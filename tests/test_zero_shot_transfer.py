@@ -406,3 +406,33 @@ def test_the_arm_can_actually_push_the_object() -> None:
     )
   finally:
     env.close()
+
+
+@pytest.mark.sim
+@pytest.mark.gpu
+def test_near_object_starts_place_the_pads_beside_the_t_and_hold() -> None:
+  from mjlab.envs import ManagerBasedRlEnv
+  from mjlab.tasks.registry import load_env_cfg
+
+  import vbrl.tasks  # noqa: F401
+  from vbrl.tasks.push_t.geometry import HALF_HEIGHT
+
+  cfg = load_env_cfg(STATE_TASK_ID, play=True)
+  cfg.scene.num_envs = 64
+  cfg.commands["push_t_goal"].near_object_start = True
+  env = ManagerBasedRlEnv(cfg, device=DEVICE)
+  try:
+    env.reset()
+    robot = env.scene["robot"]
+    near = env.command_manager.get_term("push_t_goal")._start_mode == 1
+    held = robot.data.joint_pos[:, :6].clone()
+    for _ in range(10):
+      env.step(torch.zeros(64, env.action_manager.total_action_dim, device=DEVICE))
+    pads = robot.data.geom_pos_w[:, robot.find_geoms("gripper_(left|right)_pad")[0]]
+    height = pads.mean(1)[:, 2] - env.scene.env_origins[:, 2]
+
+    assert near.any() and not near.all()
+    assert (height[near] - HALF_HEIGHT).abs().max() < 2e-3
+    assert (robot.data.joint_pos[:, :6] - held).abs().max() < 1e-3
+  finally:
+    env.close()

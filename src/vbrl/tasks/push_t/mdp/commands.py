@@ -20,6 +20,7 @@ from ..geometry import (
   MASK_HALF_WIDTH,
   FootprintPart,
   FootprintRasterizer,
+  footprint_signed_distance,
 )
 
 if TYPE_CHECKING:
@@ -56,6 +57,30 @@ class PushTCommand(LiftingCommand):
     self.metrics["overlap"] = torch.zeros(
       self.num_envs, device=self.device
     )
+    if cfg.near_object_start:
+      self._init_start_bank(env)
+
+  def _init_start_bank(self, env: ManagerBasedRlEnv) -> None:
+    from ..arm_placement import placement_table
+
+    self._robot = env.scene["robot"]
+    grid, joint_pos, valid = placement_table(
+      env.sim.mj_model,
+      self._robot.data.default_joint_pos[0, :6].cpu().numpy(),
+      self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy(),
+      np.arange(0.07, 0.64, 0.01),
+      np.arange(-0.33, 0.34, 0.01),
+      np.linspace(0.0, np.pi, 6, endpoint=False),
+      HALF_HEIGHT,
+    )
+    reachable = valid.any(1)
+    joint_pos = np.nan_to_num(joint_pos[reachable])
+    self._pad_xy = torch.tensor(grid[reachable], dtype=torch.float, device=self.device)
+    self._placements = torch.tensor(joint_pos, dtype=torch.float, device=self.device)
+    self._placement_valid = torch.tensor(valid[reachable], device=self.device)
+    self._start_mode = torch.full((self.num_envs,), -1, device=self.device)
+    self._mode_success = torch.full((2,), 0.5, device=self.device)
+    self.metrics["near_object_start"] = torch.zeros(self.num_envs, device=self.device)
 
   @property
   def command(self) -> torch.Tensor:
@@ -109,8 +134,46 @@ class PushTCommand(LiftingCommand):
   def compute_success(self) -> torch.Tensor:
     return self.get_at_goal()
 
+  def _update_mode_success(self, env_ids: torch.Tensor) -> None:
+    modes = self._start_mode[env_ids]
+    done = modes >= 0
+    success = self.episode_success[env_ids][done].float()
+    count = torch.bincount(modes[done], minlength=2)
+    mean = torch.bincount(modes[done], weights=success, minlength=2) / count.clamp_min(1)
+    keep = (1.0 - self.cfg.start_success_rate) ** count
+    self._mode_success = keep * self._mode_success + (1.0 - keep) * mean
+
+  def _place_arm(
+    self, env_ids: torch.Tensor, object_pos: torch.Tensor, object_yaw: torch.Tensor
+  ) -> None:
+    p = self._mode_success
+    weights = self.cfg.start_sampling_floor + torch.sqrt(p * (1.0 - p))
+    near = torch.multinomial(weights, len(env_ids), replacement=True) == 1
+    base = self._robot.data.default_root_state[env_ids, :2]
+    dx, dy = (self._pad_xy - (object_pos[:, :2] - base)[:, None]).unbind(-1)
+    cos, sin = torch.cos(object_yaw)[:, None], torch.sin(object_yaw)[:, None]
+    local = torch.stack((cos * dx + sin * dy, cos * dy - sin * dx), dim=-1)
+    gap = footprint_signed_distance(local, self.cfg.footprint_parts)
+    low, high = self.cfg.near_object_gap
+    candidates = (gap >= low) & (gap <= high)
+    near &= candidates.any(1)
+    self._start_mode[env_ids] = near.long()
+    self.metrics["near_object_start"][env_ids] = near.float()
+    ids = env_ids[near]
+    if len(ids) == 0:
+      return
+    point = torch.multinomial(candidates[near].float(), 1).squeeze(1)
+    yaw = torch.multinomial(self._placement_valid[point].float(), 1).squeeze(1)
+    joint_pos = self._robot.data.default_joint_pos[ids].clone()
+    joint_pos[:, :6] = self._placements[point, yaw]
+    velocity = torch.zeros_like(joint_pos)
+    self._robot.write_joint_state_to_sim(joint_pos, velocity, env_ids=ids)
+    self._env.action_manager.get_term("joint_pos").reset(ids)
+
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     n = len(env_ids)
+    if self.cfg.near_object_start:
+      self._update_mode_success(env_ids)
     self.episode_success[env_ids] = 0.0
     self._overlap_cache_step = None
     object_range = self.cfg.object_pose_range
@@ -165,6 +228,8 @@ class PushTCommand(LiftingCommand):
     self.object.write_root_link_velocity_to_sim(
       torch.zeros(n, 6, device=self.device), env_ids=env_ids
     )
+    if self.cfg.near_object_start:
+      self._place_arm(env_ids, object_pos, object_yaw)
     if self._goal_marker is not None:
       marker_pos = self.target_pos[env_ids].clone()
       marker_pos[:, 2] = origins[:, 2]
@@ -225,6 +290,10 @@ class PushTCommandCfg(LiftingCommandCfg):
   mask_half_width: float = MASK_HALF_WIDTH
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
+  near_object_start: bool = False
+  near_object_gap: tuple[float, float] = (0.02, 0.04)
+  start_sampling_floor: float = 0.05
+  start_success_rate: float = 0.01
 
   def build(self, env: ManagerBasedRlEnv) -> PushTCommand:
     return PushTCommand(self, env)
