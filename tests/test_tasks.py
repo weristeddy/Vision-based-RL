@@ -424,6 +424,10 @@ def test_outline_reach_peaks_on_the_side_face_not_over_the_centre_of_mass() -> N
   assert centre[1] > centre[0]
   assert outline[0] > outline[1]
   assert outline[0] == pytest.approx((0.5 + 0.5 + 1.0 / 20.0) / 3.0)
+  heavier = maniskill_dense_reward(
+    env, "push_t_goal", "object", asset_cfg, reach_outline=True, reach_weight=0.25
+  )
+  assert heavier[0] == pytest.approx((0.5 + 0.5 + 0.25) / 3.0)
 
 
 def test_push_t_object_origin_sits_on_its_centre_of_mass() -> None:
@@ -923,6 +927,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
   assert cfg.rewards["maniskill_dense"].params["reach_outline"] is False
+  assert cfg.rewards["maniskill_dense"].params["reach_weight"] == 0.05
   assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
   assert cfg.rewards["joint_vel_l2"].weight == pytest.approx(-0.05)

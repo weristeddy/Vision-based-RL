@@ -57,6 +57,7 @@ def maniskill_dense_reward(
   object_name: str,
   asset_cfg: SceneEntityCfg = _ROBOT,
   reach_outline: bool = False,
+  reach_weight: float = 0.05,
 ) -> torch.Tensor:
   command = push_t_command(env, command_name)
   obj: Entity = env.scene[object_name]
@@ -81,8 +82,8 @@ def maniskill_dense_reward(
   reward = (
     weight * (1.0 - yaw_error / torch.pi)
     + (1.0 - weight) * (1.0 - torch.tanh(_DISTANCE_SCALE * goal_distance)).square()
-    + torch.sqrt((1.0 - torch.tanh(_DISTANCE_SCALE * tcp_distance)).clamp_min(0.0))
-    / 20.0
+    + reach_weight
+    * torch.sqrt((1.0 - torch.tanh(_DISTANCE_SCALE * tcp_distance)).clamp_min(0.0))
   )
   reward = torch.where(command.get_at_goal(), _MAX_REWARD, reward)
   return reward / _MAX_REWARD
