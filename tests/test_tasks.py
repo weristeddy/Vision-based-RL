@@ -384,6 +384,48 @@ def test_push_t_reward_is_maniskill_dense_with_a_linear_orientation_summand() ->
   )
 
 
+def test_outline_reach_peaks_on_the_side_face_not_over_the_centre_of_mass() -> None:
+  from mjlab.managers.scene_entity_config import SceneEntityCfg
+
+  from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
+  from vbrl.tasks.push_t.mdp import maniskill_dense_reward
+  from vbrl.tasks.push_t.mdp.commands import PushTCommand
+
+  crossbar = FOOTPRINT_PARTS[0]
+  side = (crossbar.center_xy[0] + crossbar.half_extents_xy[0], crossbar.center_xy[1])
+  command = object.__new__(PushTCommand)
+  command.cfg = SimpleNamespace(orientation_weight=0.5)
+  command.target_pos = torch.zeros(2, 3)
+  command.target_yaw = torch.zeros(2)
+  command.get_at_goal = lambda: torch.zeros(2, dtype=torch.bool)
+  pushed_object = SimpleNamespace(
+    data=SimpleNamespace(
+      root_link_pos_w=torch.tensor([[0.0, 0.0, 0.012]] * 2),
+      root_link_quat_w=torch.tensor([[1.0, 0.0, 0.0, 0.0]] * 2),
+    )
+  )
+  robot = SimpleNamespace(
+    data=SimpleNamespace(
+      site_pos_w=torch.tensor([[[*side, 0.012]], [[0.0, 0.0, 0.036]]]),
+      root_link_quat_w=torch.tensor([[1.0, 0.0, 0.0, 0.0]] * 2),
+    )
+  )
+  env = SimpleNamespace(
+    command_manager=SimpleNamespace(get_term=lambda name: command),
+    scene={"robot": robot, "object": pushed_object},
+  )
+  asset_cfg = SceneEntityCfg("robot")
+  asset_cfg.site_ids = [0]
+
+  centre = maniskill_dense_reward(env, "push_t_goal", "object", asset_cfg)
+  outline = maniskill_dense_reward(
+    env, "push_t_goal", "object", asset_cfg, reach_outline=True
+  )
+  assert centre[1] > centre[0]
+  assert outline[0] > outline[1]
+  assert outline[0] == pytest.approx((0.5 + 0.5 + 1.0 / 20.0) / 3.0)
+
+
 def test_push_t_object_origin_sits_on_its_centre_of_mass() -> None:
   import mujoco
 
@@ -880,6 +922,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
   assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
+  assert cfg.rewards["maniskill_dense"].params["reach_outline"] is False
   assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
   assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
   assert cfg.rewards["joint_vel_l2"].weight == pytest.approx(-0.05)

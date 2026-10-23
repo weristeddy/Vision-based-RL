@@ -9,7 +9,7 @@ from mjlab.sensor import ContactSensor
 from mjlab.tasks.manipulation import mdp as manipulation_mdp
 from mjlab.utils.lab_api.math import quat_apply, wrap_to_pi
 
-from ..geometry import yaw_from_quat
+from ..geometry import footprint_signed_distance, yaw_from_quat
 from .commands import push_t_command
 
 if TYPE_CHECKING:
@@ -35,11 +35,28 @@ def _press(data: Any) -> torch.Tensor:
   return torch.nan_to_num(data.force[..., 2], nan=0.0).sum(dim=-1).abs()
 
 
+# The centre of mass lies inside the T, so the closest a closed gripper gets to it
+# is on the top face; t2fn9uc9 avoided the T for 2,500 iterations between that
+# pull and the top_face_contact termination.
+def _outline_distance(
+  env: ManagerBasedRlEnv, obj: Entity, asset_cfg: SceneEntityCfg
+) -> torch.Tensor:
+  robot: Entity = env.scene[asset_cfg.name]
+  offset = robot.data.site_pos_w[:, asset_cfg.site_ids].squeeze(1)
+  offset = offset - obj.data.root_link_pos_w
+  yaw = yaw_from_quat(obj.data.root_link_quat_w)
+  cos, sin = torch.cos(yaw), torch.sin(yaw)
+  dx, dy = offset[:, 0], offset[:, 1]
+  local = torch.stack((cos * dx + sin * dy, cos * dy - sin * dx), dim=-1)
+  return torch.hypot(footprint_signed_distance(local).abs(), offset[:, 2])
+
+
 def maniskill_dense_reward(
   env: ManagerBasedRlEnv,
   command_name: str,
   object_name: str,
   asset_cfg: SceneEntityCfg = _ROBOT,
+  reach_outline: bool = False,
 ) -> torch.Tensor:
   command = push_t_command(env, command_name)
   obj: Entity = env.scene[object_name]
@@ -49,8 +66,12 @@ def maniskill_dense_reward(
   goal_distance = torch.linalg.vector_norm(
     command.target_pos[:, :2] - obj.data.root_link_pos_w[:, :2], dim=-1
   )
-  tcp_distance = torch.linalg.vector_norm(
-    manipulation_mdp.ee_to_object_distance(env, object_name, asset_cfg), dim=-1
+  tcp_distance = (
+    _outline_distance(env, obj, asset_cfg)
+    if reach_outline
+    else torch.linalg.vector_norm(
+      manipulation_mdp.ee_to_object_distance(env, object_name, asset_cfg), dim=-1
+    )
   )
   weight = float(command.cfg.orientation_weight)
   # Linear, not ManiSkill's ((cos e + 1) / 2)**2: any function of cos e has zero

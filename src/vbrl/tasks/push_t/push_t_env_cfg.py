@@ -171,7 +171,7 @@ def build_env_cfg(
     "maniskill_dense": RewardTermCfg(
       func=mdp.maniskill_dense_reward,
       weight=1.0,
-      params={**common, "asset_cfg": robot_ee},
+      params={**common, "asset_cfg": robot_ee, "reach_outline": False},
     ),
     "action_rate_l2": RewardTermCfg(
       func=mdp.action_rate_l2,
