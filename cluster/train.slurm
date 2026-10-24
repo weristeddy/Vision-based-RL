@@ -167,14 +167,9 @@ else
     esac
   done
   if [[ "${GPU_COUNT}" == "4" ]]; then
-    # Four ranks share one policy update, so the per-rank environment count is
-    # part of the topology rather than a tuning knob: changing it silently
-    # changes the effective batch every rank contributes to.
-    [[ "${USER_SET_NUM_ENVS}" == "0" ]] || {
-      echo "The four-GPU launcher owns --env.scene.num-envs." >&2
-      exit 2
-    }
-    TRAIN_ARGS=("$@" --env.scene.num-envs 1024 --gpu-ids all)
+    # --env.scene.num-envs is per rank: the batch is four times it.
+    TRAIN_ARGS=("$@" --gpu-ids all)
+    [[ "${USER_SET_NUM_ENVS}" == "1" ]] || TRAIN_ARGS+=(--env.scene.num-envs 1024)
   else
     # One rank owns the whole update, so the environment count *is* the batch
     # and is the thing worth tuning. Default to the four-rank per-rank figure so

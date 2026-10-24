@@ -25,11 +25,10 @@ Usage:
 
 Profiles: a100, b200, testing, a100-single, b200-single
 
-A four-GPU profile receives four GPUs and 1,024 environments per rank, and owns
-both --env.scene.num-envs and --gpu-ids. A *-single profile receives one GPU,
-defaults to 1,024 environments, and lets --env.scene.num-envs through: with one
-rank the environment count is the batch, so it is a tuning knob rather than
-topology. mjlab runs a single GPU in-process, with no torchrunx launcher.
+A four-GPU profile receives four GPUs, owns --gpu-ids, and defaults to 1,024
+environments per rank; --env.scene.num-envs sets the per-rank count. A *-single
+profile receives one GPU and defaults to 1,024 environments. mjlab runs a single
+GPU in-process, with no torchrunx launcher.
 
 The first training argument is one registered MJLab task ID; remaining arguments
 pass unchanged to the native MJLab/Tyro CLI.
