@@ -81,7 +81,7 @@ fi
 
 if [[ -f /etc/slurm/local_job_dir.sh ]]; then
   # shellcheck disable=SC1091
-  source /etc/slurm/local_job_dir.sh
+  source /etc/slurm/local_job_dir.sh || true
 fi
 RUNTIME_DIR="${LOCAL_JOB_DIR:-}"
 # Some nodes set LOCAL_JOB_DIR to a directory the job may not create.
