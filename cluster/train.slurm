@@ -79,12 +79,13 @@ if [[ ! -f "${CONTAINER_PATH}" ]]; then
   exit 1
 fi
 
+# Some nodes' local_job_dir.sh fails to create LOCAL_JOB_DIR and exits, which
+# would end this script if sourced directly.
+RUNTIME_DIR=""
 if [[ -f /etc/slurm/local_job_dir.sh ]]; then
   # shellcheck disable=SC1091
-  source /etc/slurm/local_job_dir.sh || true
+  RUNTIME_DIR="$(source /etc/slurm/local_job_dir.sh >&2; echo "${LOCAL_JOB_DIR:-}")" || true
 fi
-RUNTIME_DIR="${LOCAL_JOB_DIR:-}"
-# Some nodes set LOCAL_JOB_DIR to a directory the job may not create.
 if [[ -z "${RUNTIME_DIR}" ]] || ! mkdir -p "${RUNTIME_DIR}" 2>/dev/null; then
   RUNTIME_DIR="/tmp/vbrl-${SLURM_JOB_ID:-manual}"
 fi
