@@ -83,7 +83,11 @@ if [[ -f /etc/slurm/local_job_dir.sh ]]; then
   # shellcheck disable=SC1091
   source /etc/slurm/local_job_dir.sh
 fi
-RUNTIME_DIR="${LOCAL_JOB_DIR:-/tmp/vbrl-${SLURM_JOB_ID:-manual}}"
+RUNTIME_DIR="${LOCAL_JOB_DIR:-}"
+# Some nodes set LOCAL_JOB_DIR to a directory the job may not create.
+if [[ -z "${RUNTIME_DIR}" ]] || ! mkdir -p "${RUNTIME_DIR}" 2>/dev/null; then
+  RUNTIME_DIR="/tmp/vbrl-${SLURM_JOB_ID:-manual}"
+fi
 TORCHRUNX_DIR="${RUNTIME_DIR}/torchrunx"
 WARP_DIR="${RUNTIME_DIR}/warp"
 # Warp compiles its CUDA kernels through NVRTC and writes a precompiled header
