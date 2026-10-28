@@ -19,12 +19,13 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 
 
 TASK_IDS = (
-  "Mjlab-PushT-State-TrossenIdentified",
+  "Mjlab-PushT-State-Trossen",
   "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
+  "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
 )
 VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
+STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
+PUSH_T_PPO_TASK_ID = "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen"
 
 NUM_ENVS = 8
 IMAGE_SIZE = (224, 224)
@@ -190,7 +191,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
+  task_id = "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model
@@ -238,7 +239,7 @@ def _training_stack(task_id: str, log_dir: Path):
   env_cfg.seed = 0
   agent_cfg = load_rl_cfg(task_id)
   agent_cfg.max_iterations = 1
-  agent_cfg.num_steps_per_env = 8
+  agent_cfg.num_steps_per_env = 16
   agent_cfg.save_interval = 1
   agent_cfg.logger = "tensorboard"
 
@@ -266,7 +267,7 @@ def _float_state(module) -> dict:
 @pytest.mark.gpu
 @requires_cuda
 @requires_weights
-@pytest.mark.parametrize("task_id", (STATE_TASK_ID, VISUAL_TASK_ID))
+@pytest.mark.parametrize("task_id", (STATE_TASK_ID, VISUAL_TASK_ID, PUSH_T_PPO_TASK_ID))
 def test_one_learning_iteration_updates_the_policy(
   task_id: str, tmp_path: Path
 ) -> None:
@@ -369,7 +370,7 @@ def test_the_arm_can_actually_push_the_object() -> None:
   from vbrl.runtime import build_env
 
   env = build_env(
-    "Mjlab-PushT-State-TrossenIdentified", device=DEVICE, num_envs=16, seed=0
+    "Mjlab-PushT-State-Trossen", device=DEVICE, num_envs=16, seed=0
   )
   try:
     robot, obj = env.scene["robot"], env.scene["object"]

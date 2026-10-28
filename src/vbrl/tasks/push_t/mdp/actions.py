@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import torch
 from mjlab.actuator.actuator import TransmissionType
@@ -16,10 +16,9 @@ class TargetRelativeJointPositionAction(BaseAction):
     super().__init__(cfg=cfg, env=env)
     if cfg.ramp_s < 0.0:
       raise ValueError(f"ramp_s must be >= 0; got {cfg.ramp_s}.")
-    if cfg.wrist_roll_scale is not None:
-      scale = torch.as_tensor(self._scale, dtype=torch.float, device=self.device)
-      self._scale = scale.expand(self.num_envs, self.action_dim).clone()
-      self._scale[:, self._target_names.index("joint_5")] = cfg.wrist_roll_scale
+    scale = torch.as_tensor(self._scale, dtype=torch.float, device=self.device)
+    self._scale = scale.expand(self.num_envs, self.action_dim).clone()
+    self._scale[:, self._target_names.index("joint_5")] = cfg.wrist_roll_scale
     limits = self._entity.data.soft_joint_pos_limits[:, self._target_ids]
     self.low, self.high = limits[..., 0], limits[..., 1]
     self._target = self._entity.data.joint_pos[:, self._target_ids].clone()
@@ -51,11 +50,9 @@ class TargetRelativeJointPositionAction(BaseAction):
 
   def process_actions(self, actions: torch.Tensor) -> None:
     super().process_actions(actions)
-    if self.cfg.reference == "measured":
-      base = self._entity.data.joint_pos[:, self._target_ids]
-    else:
-      base = self._target
-    self._target = torch.clamp(base + self._processed_actions, self.low, self.high)
+    self._target = torch.clamp(
+      self._target + self._processed_actions, self.low, self.high
+    )
     self._ramp = (self._target - self._setpoint) / self._ramp_substeps
 
   def apply_actions(self) -> None:
@@ -64,18 +61,14 @@ class TargetRelativeJointPositionAction(BaseAction):
       self._ramp.abs() < remaining.abs(), self._ramp, remaining
     )
     self._setpoint = self._setpoint + step
-    command = self._setpoint
-    if self.cfg.ramp_feedforward:
-      command = command + step / self._physics_dt * self._lead_per_velocity
+    command = self._setpoint + step / self._physics_dt * self._lead_per_velocity
     self._entity.set_joint_position_target(command, joint_ids=self._target_ids)
 
 
 @dataclass(kw_only=True)
 class TargetRelativeJointPositionActionCfg(BaseActionCfg):
-  reference: Literal["target", "measured"] = "target"
-  ramp_s: float = 0.0
-  ramp_feedforward: bool = True
-  wrist_roll_scale: float | None = None
+  ramp_s: float
+  wrist_roll_scale: float
 
   def __post_init__(self) -> None:
     self.transmission_type = TransmissionType.JOINT

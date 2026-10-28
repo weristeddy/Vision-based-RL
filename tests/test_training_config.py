@@ -75,55 +75,52 @@ def test_wandb_tags_never_exceed_the_limit_wandb_enforces() -> None:
     wandb_task_tag("Mjlab-" + "X" * 65)
 
 
-def test_push_t_rgb_preserves_the_maniskill_style_training_contract() -> None:
+def test_push_t_students_distill_with_the_teachers_network() -> None:
   from mjlab.tasks.registry import load_rl_cfg
 
-  from vbrl.training.ppo import VisualPpoCfg
+  from vbrl.training.distillation import VisualDistillationCfg
 
-  agent = load_rl_cfg(
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
-  )
+  state = load_rl_cfg("Mjlab-PushT-State-Trossen")
+  student = load_rl_cfg("Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen")
 
-  assert agent.actor.hidden_dims == (256, 256, 128)
-  assert agent.actor.activation == "relu"
-  assert agent.actor.distribution_cfg == {
-    "class_name": "GaussianDistribution",
-    "init_std": 1.0,
-    "std_type": "log",
-    "std_range": (0.0, 1.5),
-  }
-  assert agent.algorithm.entropy_coef == 0.005
-  assert agent.algorithm.action_head_init_scale == 0.01
-  assert agent.algorithm.bound_loss_coef > 0.0
-  assert isinstance(agent.algorithm, VisualPpoCfg)
-  assert agent.algorithm.cache_frozen_features is True
-  assert agent.algorithm.feature_cache_dtype == "bfloat16"
-  assert agent.algorithm.gradient_accumulation_steps == 8
-  assert agent.algorithm.early_stop_kl is True
-  assert agent.clip_actions == 1.0
+  assert state.algorithm.learning_rate == 0.0001
+  assert state.max_iterations == 8000
+  assert isinstance(student.algorithm, VisualDistillationCfg)
+  assert student.max_iterations == 5000
+  assert student.obs_groups == {"student": ("actor", "camera"), "teacher": ("teacher",)}
+  assert student.teacher.hidden_dims == state.actor.hidden_dims == (256, 256, 128)
+  assert student.teacher.activation == state.actor.activation == "relu"
+  assert student.teacher.distribution_cfg == state.actor.distribution_cfg
+  assert student.student.distribution_cfg["init_std"] == 0.1
+  assert student.clip_actions == state.clip_actions == 1.0
 
 
-def test_push_t_state_trains_like_the_vision_policy() -> None:
+def test_push_t_visual_ppo_trains_exactly_like_the_teacher() -> None:
   from dataclasses import asdict
 
-  from mjlab.tasks.registry import load_rl_cfg
+  from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
-  state = load_rl_cfg("Mjlab-PushT-State-TrossenIdentified")
-  rgb = load_rl_cfg("Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified")
-  batching = (
-    "cache_frozen_features",
-    "feature_cache_dtype",
-    "gradient_accumulation_steps",
-  )
-  a, b = asdict(state.algorithm), asdict(rgb.algorithm)
+  from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import STATE_TASK_ID
+
+  task_id = "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen"
+  state, ppo = load_rl_cfg(STATE_TASK_ID), load_rl_cfg(task_id)
+  batching = ("cache_frozen_features", "gradient_accumulation_steps")
+  a, b = asdict(state.algorithm), asdict(ppo.algorithm)
   assert {k: v for k, v in a.items() if k not in batching} == {
     k: v for k, v in b.items() if k not in batching
   }
-  assert state.algorithm.gradient_accumulation_steps == 1
-  for model in ("actor", "critic"):
-    s, r = getattr(state, model), getattr(rgb, model)
-    assert (s.hidden_dims, s.activation) == (r.hidden_dims, r.activation)
-  assert state.actor.cnn_cfg is None
+  assert ppo.algorithm.gradient_accumulation_steps == 8
+  assert ppo.max_iterations == state.max_iterations
+  assert ppo.obs_groups == {"actor": ("actor", "camera"), "critic": ("critic",)}
+  assert ppo.actor.distribution_cfg == state.actor.distribution_cfg
+  assert ppo.critic == state.critic
+
+  state_env, ppo_env = load_env_cfg(STATE_TASK_ID), load_env_cfg(task_id)
+  assert ppo_env.rewards == state_env.rewards
+  assert ppo_env.terminations == state_env.terminations
+  assert ppo_env.actions == state_env.actions
+  assert ppo_env.commands["push_t_goal"].near_object_start is True
+  assert "teacher" not in ppo_env.observations
 
 
 def test_every_sweep_fixes_one_registered_task_and_varies_native_keys_only() -> None:
@@ -172,16 +169,3 @@ def test_every_sweep_flag_path_parses_against_the_train_cli() -> None:
       config=mjlab.TYRO_FLAGS,
     )
     assert parsed.env.scene.num_envs == 1024, name
-
-
-def test_push_t_penalty_ramps_finish_well_inside_the_budget() -> None:
-  from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
-
-  for task_id in (
-    "Mjlab-PushT-State-TrossenIdentified",
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
-  ):
-    ramp = load_env_cfg(task_id).curriculum["penalty_ramp"].params
-    agent = load_rl_cfg(task_id)
-    full_weight = ramp["end_step"] / agent.num_steps_per_env
-    assert full_weight <= 0.5 * agent.max_iterations, task_id

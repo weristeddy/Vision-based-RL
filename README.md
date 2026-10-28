@@ -5,9 +5,9 @@ Two tasks (Lift-Cube, Push-T), a Trossen WidowX AI arm, and a visual-encoder sta
 that trains either a frozen pretrained backbone or a CNN from scratch.
 
 **The task ID is the contract.** An ID such as
-`Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified` fixes the task,
-robot, scene, camera, encoder, adapter and network. Learning rate, seed and
-iteration count are flags, so many runs share one ID.
+`Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen` fixes the task, robot,
+scene, camera, encoder, adapter, network and, for Push-T, the whole training
+recipe. Seed, env count and iteration count remain flags.
 
 ## Install
 
@@ -29,19 +29,19 @@ vbrl-list architectures       # one section
 Watch an untrained policy in the browser — no checkpoint needed, opens Viser:
 
 ```bash
-vbrl-play Mjlab-PushT-State-TrossenIdentified --agent random
+vbrl-play Mjlab-PushT-State-Trossen --agent random
 ```
 
 Train the state-based Push-T task (fast, no camera):
 
 ```bash
-vbrl-train Mjlab-PushT-State-TrossenIdentified --agent.max-iterations 50
+vbrl-train Mjlab-PushT-State-Trossen --agent.max-iterations 50
 ```
 
-Train a visual policy, and record a video while it runs:
+Train a visual Lift-Cube policy, and record a video while it runs:
 
 ```bash
-vbrl-train Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
+vbrl-train Mjlab-LiftCube-RealTexture-DinoV2ViTS14-Afa6-Trossen \
   --env.scene.num-envs 512 --agent.max-iterations 100 --video True
 ```
 
@@ -81,7 +81,42 @@ Every run writes a deployable ONNX beside its checkpoint automatically.
 ```bash
 vbrl-evaluate configs/evaluation/ood_4096.yaml
 vbrl-analyze  configs/analysis/lift_cube_rgb/trossen/default.yaml
-vbrl-deploy   configs/deployment/push_t_realtable_target_sdk50.yaml --dry-run
+vbrl-deploy   configs/deployment/push_t_real_table_dinov2_afafull6.yaml --dry-run
+```
+
+## Push-T
+
+Seven task IDs, one recipe. A state policy trains with PPO on privileged object
+poses; the visual policies are DAgger students of that one teacher (student acts,
+teacher labels, MSE on the mean), plus one visual policy trained by PPO on the
+teacher's exact recipe for comparison.
+
+| task ID | |
+| --- | --- |
+| `Mjlab-PushT-State-Trossen` | PPO teacher, 8,000 iterations |
+| `Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen` | student, the rig's tabletop photo |
+| `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | student, AmbientCG wood tabletops |
+| `Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen` | student, encoder comparison |
+| `Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen` | student, encoder comparison |
+| `Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen` | student, encoder comparison |
+| `Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen` | visual PPO, the teacher's recipe from pixels |
+
+The recipe lives in code, not flags: 20 Hz, action scale 0.025 (wrist roll 0.02)
+onto the previous target, the Trossen SDK's 50 ms goal ramp modelled in sim,
+10 s episodes. The teacher additionally starts part of its episodes with the pads
+beside the T and ends an episode when the gripper presses on the T's top face. It reproduces the
+deployed policies: teacher `w924eo8a`, students `ed70t2t7` (real table) and
+`k1kqta8a` (wood).
+
+```bash
+# The teacher: four ranks x 8,192 envs.
+bash cluster/submit.sh --profile a100 -- \
+  Mjlab-PushT-State-Trossen --env.scene.num-envs 8192
+
+# A student: four ranks x 1,024 envs, 5,000 iterations, teacher from its W&B run.
+bash cluster/submit.sh --profile a100 -- \
+  Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen \
+  --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run>
 ```
 
 ## Real robot
@@ -105,7 +140,7 @@ Run a policy from a manifest under [`configs/deployment/`](configs/deployment/).
 Every run homes the arm first and parks it afterwards:
 
 ```bash
-vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml
+vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml
 vbrl-deploy configs/deployment/lift_cube.yaml --dry-run       # no motion, sanity check
 vbrl-deploy configs/deployment/lift_cube.yaml --max-steps 250
 vbrl-deploy configs/deployment/lift_cube.yaml --log run.npz   # per-step trace
@@ -149,17 +184,17 @@ passes everything after `--` through unchanged:
 ```bash
 # Four GPUs; --env.scene.num-envs and --gpu-ids are set by the profile.
 bash cluster/submit.sh --profile a100 -- \
-  Mjlab-PushT-State-TrossenIdentified --agent.max-iterations 500
+  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Afa6-TrossenRealistic
 
 # One GPU; you own --env.scene.num-envs. ~1.6x the wall clock, a quarter of the GPUs.
 bash cluster/submit.sh --profile a100-single -- \
-  Mjlab-PushT-State-TrossenIdentified --env.scene.num-envs 4096
+  Mjlab-PushT-State-Trossen --env.scene.num-envs 4096
 
 # One job per architecture in a variant.
 bash cluster/submit_sweep.sh --variant Sim2Real --profile b200-single --dry-run
 
 # Viewing and evaluation.
-bash cluster/view.sh     --profile testing -- Mjlab-PushT-State-TrossenIdentified --agent random
+bash cluster/view.sh     --profile testing -- Mjlab-PushT-State-Trossen --agent random
 bash cluster/evaluate.sh --profile testing -- configs/evaluation/ood_4096.yaml
 ```
 

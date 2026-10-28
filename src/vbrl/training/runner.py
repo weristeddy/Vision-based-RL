@@ -46,8 +46,6 @@ def policy_metadata(
   }.get(type(action_cfg), "absolute")
   term = base.action_manager.get_term("joint_pos")
   if isinstance(action_cfg, TargetRelativeJointPositionActionCfg):
-    if action_cfg.reference == "measured":
-      metadata["action_type"] = "relative"
     metadata["ramp_s"] = float(action_cfg.ramp_s)
     metadata["target_low"] = term.low[0].cpu().tolist()
     metadata["target_high"] = term.high[0].cpu().tolist()

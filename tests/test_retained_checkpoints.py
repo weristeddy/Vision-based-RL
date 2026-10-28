@@ -26,14 +26,10 @@ def _retained_models():
   from vbrl.evaluation.suite import load_config
 
   models = {}
-  for config_path in (
-    "configs/evaluation/peacock_24.yaml",
-    "configs/evaluation/push_t_retained.yaml",
-  ):
-    for model in load_config(config_path).models:
-      assert model.ref.checkpoint_file is not None
-      models[model.ref.checkpoint_file] = model
-  assert len(models) == 26
+  for model in load_config("configs/evaluation/peacock_24.yaml").models:
+    assert model.ref.checkpoint_file is not None
+    models[model.ref.checkpoint_file] = model
+  assert len(models) == 24
   return tuple(models.values())
 
 

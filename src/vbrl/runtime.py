@@ -168,9 +168,6 @@ def build_env(
   drop_terminations: bool = False,
   fixed_lighting: bool = False,
   action_scale: float | None = None,
-  action_reference: str | None = None,
-  wrist_roll_scale: float | None = None,
-  ramp_s: float | None = None,
 ) -> Any:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
@@ -195,12 +192,6 @@ def build_env(
     cfg.terminations = {}
   if action_scale is not None:
     cfg.actions["joint_pos"].scale = action_scale
-  if action_reference is not None:
-    cfg.actions["joint_pos"].reference = action_reference
-  if wrist_roll_scale is not None:
-    cfg.actions["joint_pos"].wrist_roll_scale = wrist_roll_scale
-  if ramp_s is not None:
-    cfg.actions["joint_pos"].ramp_s = ramp_s
   return ManagerBasedRlEnv(cfg=cfg, device=device)
 
 

@@ -1,0 +1,26 @@
+version: 1
+
+# Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen, W&B k1kqta8a iteration 4999,
+# distilled from the state teacher w924eo8a.
+onnx_file: ckpts/push_t/dinov2_vits14_afafull6_wood_distill_w924eo8a_4999.onnx
+
+arm_ip: 192.168.1.2
+
+goal_space: push_t_xy_yaw
+goal: [0.38442, 0.01567, 0.0124]
+
+camera_serial: "260322270027"
+# Measured 2026-10-26 against 256 real_table renders: brightness 128 (sim median 127), R/G 1.38 (1.36).
+camera_exposure_us: 8000
+camera_gain: 27
+camera_white_balance_k: 4400
+
+control_hz: 20.0
+command_goal_time_s: 0.05
+
+motion:
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 6.0
+  home_seconds: 3.0

@@ -127,7 +127,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   )
 
   state = trossen_realistic_push_t_state_env_cfg()
-  rgb = trossen_realistic_push_t_rgb_env_cfg()
+  rgb = trossen_realistic_push_t_rgb_env_cfg(scene="real_table")
 
   assert tuple(state.observations["actor"].terms) == PUSH_T_STATE
   assert tuple(state.observations["critic"].terms) == PUSH_T_CRITIC
@@ -136,22 +136,20 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert tuple(rgb.observations["critic"].terms) == PUSH_T_CRITIC
   assert tuple(rgb.observations["camera"].terms) == ("external_cam_rgb",)
   state_action, rgb_action = state.actions["joint_pos"], rgb.actions["joint_pos"]
-  assert state_action.scale == rgb_action.scale
+  assert state_action == rgb_action
+  assert (state_action.scale, state_action.wrist_roll_scale) == (0.025, 0.02)
+  assert state_action.ramp_s == 0.05
   assert state_action.actuator_names == rgb_action.actuator_names
   state_goal, rgb_goal = state.commands["push_t_goal"], rgb.commands["push_t_goal"]
   assert state_goal.goal_marker_name is None
   assert rgb_goal.goal_marker_name == "goal_marker"
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.success_threshold == rgb_goal.success_threshold
-  assert tuple(state.curriculum) == ("penalty_ramp", "near_goal_speed_ramp")
-  assert tuple(rgb.curriculum) == ("penalty_ramp", "near_goal_speed_ramp")
-  state_ramp = state.curriculum["penalty_ramp"].params
-  rgb_ramp = rgb.curriculum["penalty_ramp"].params
-  assert (state_ramp["start_step"], state_ramp["end_step"]) == (16_000, 64_000)
-  assert (rgb_ramp["start_step"], rgb_ramp["end_step"]) == (64_000, 112_000)
+  assert state_goal.near_object_start and not rgb_goal.near_object_start
+  assert state.curriculum == rgb.curriculum == {}
   assert state.rewards == rgb.rewards
-  assert state.terminations == rgb.terminations
-  assert state.episode_length_s == rgb.episode_length_s == 6.0
+  assert set(state.terminations) - set(rgb.terminations) == {"top_face_contact"}
+  assert state.episode_length_s == rgb.episode_length_s == 10.0
   assert state.decimation == rgb.decimation == 10
 
   camera = _camera(rgb, "external_cam")
@@ -192,7 +190,7 @@ def test_rgb_camera_term_preserves_native_uint8_bchw() -> None:
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "collision"}),
     ("trossen_lift_cube_env_cfg", {"camera_geometry": "visual"}),
     ("trossen_realistic_push_t_state_env_cfg", {}),
-    ("trossen_realistic_push_t_rgb_env_cfg", {}),
+    ("trossen_realistic_push_t_rgb_env_cfg", {"scene": "real_table"}),
   ),
   ids=("lift-collision", "lift-visual", "push-t-state", "push-t-rgb"),
 )
@@ -222,8 +220,8 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
   for task_id in (
     "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
     "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
-    "Mjlab-PushT-State-TrossenIdentified",
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
+    "Mjlab-PushT-State-Trossen",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
   ):
     train = load_env_cfg(task_id)
     play = load_env_cfg(task_id, play=True)

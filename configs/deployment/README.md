@@ -13,71 +13,41 @@ removes it. The alternative is `source .venv/bin/activate` once, after which
 
 ## Push-T
 
-Trained with the Trossen SDK's 50 ms linear ramp and its velocity feedforward
-modelled in sim (`ramp_s 0.05`), so the manifests command with
-`command_goal_time_s: 0.05` -- the two must match. Scale 0.05 at 20 Hz,
-near-goal speed penalty -80 ramped, action rate -0.01. The goal marker is the
-hollow outline: a 15 mm green frame tracing the T footprint. A filled marker is
-out of distribution.
+Two DAgger students of the state teacher `w924eo8a`, both DINOv2-S with AFA at
+full width (6 heads), external D405 (`camera_serial` 260322270027):
+
+| manifest | task ID | W&B |
+| --- | --- | --- |
+| `push_t_real_table_dinov2_afafull6` | `Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen` | `ed70t2t7` |
+| `push_t_wood_table_dinov2_afafull6` | `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | `k1kqta8a` |
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_wrist002_sdk50.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_wrist002_sdk50.yaml --max-steps 400
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --max-steps 400
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_measured_sdk50.yaml --max-steps 400
+uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/real_table_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/wood_table_1.npz
 ```
 
-`push_t_realtable_wrist002_sdk50` (W&B `o2uvn93k`, sim success 0.87) is the target
-policy retrained with `--env.actions.joint-pos.wrist-roll-scale 0.02` and exported
-with `--wrist-roll-scale 0.02`. It removed the gripper's wrist-roll jitter (0.78 to
-0.27 rad/s) and is the best on the rig so far, 1 of 5 runs at the goal.
+The policies trained at 20 Hz with the Trossen SDK's 50 ms linear goal ramp
+modelled in sim, so the manifests command with `command_goal_time_s: 0.05`.
+`vbrl-deploy` refuses a manifest whose `control_hz` or `command_goal_time_s`
+differs from the `control_hz` and `ramp_s` in the ONNX metadata. The action
+scale (0.025, wrist roll 0.02) travels in the metadata too. The goal marker is
+the hollow outline: a 15 mm green frame tracing the T footprint. A filled marker
+is out of distribution.
 
-| manifest | W&B | reference | sim success | fingertip approaching T | T 1-3 cm from goal |
-| --- | --- | --- | --- | --- | --- |
-| `push_t_realtable_target_sdk50` | `ok5ae9ph` | target | 0.90 | 0.15 m/s | 0.10 m/s |
-| `push_t_realtable_measured_sdk50` | `gh9nf7wc` | measured | 0.89 | 0.25 m/s | 0.13 m/s |
+`motion:` in these manifests passes the policy through unshaped
+(`action_smoothing: 1.0`, `max_joint_step: null`). `--action-gain` scales each
+action before smoothing and before it is added to the target;
+`--action-smoothing` is the weight of the new action in the moving average, so
+1.0 is no smoothing. Both override the manifest's `motion:` block.
 
-Mean action over 128 episodes at the manifest goal. ONNX exported with `--action-scale 0.05`,
-`--ramp-s 0.05` and `--action-reference` set to the run's reference; a measured-reference
-policy exported without it would integrate on the target instead of the measured position.
-`vbrl-deploy` refuses a manifest whose `control_hz` or `command_goal_time_s` differs from
-the `control_hz` and `ramp_s` the export carries, so export with the run's own flags.
-
-`--action-gain` scales each action before smoothing and before it is added to
-the target; `--action-smoothing` is the weight of the new action in the moving
-average, so 1.0 is no smoothing. Both override the manifest's `motion:` block.
-
-## Push-T: distilled students and the PPO reference
-
-All five share the rig settings above (20 Hz, 50 ms SDK ramp, 11,000 us / 4,800 K)
-and name their camera explicitly: `camera_serial` 260322270027 is the external
-D405, 412622271761 the wrist D405. Students were distilled from the state policy
-`yregddj3`; the PPO policy is `twub0nml` (4 epochs).
-
-| manifest | W&B | encoder | camera | sim success |
-| --- | --- | --- | --- | --- |
-| `push_t_dinov2_afafull6_distill` | `7gazz0tn` | DINOv2-S + AFA (6 heads) | external | 0.89 |
-| `push_t_dinov2_afa6_distill` | `j5vixm7j` | DINOv2-S + AFA6 | external | 0.87 |
-| `push_t_r3m_afafull32_distill` | `v8qzh46c` | R3M + AFA (32 heads) | external | 0.43 |
-| `push_t_dinov2_afa6_wrist_distill` | `v0x4uv8f` | DINOv2-S + AFA6 | wrist | 0.92 |
-| `push_t_dinov2_afa6_rl_ep4` | `twub0nml` | DINOv2-S + AFA6, PPO | external | 0.80 |
+Brightness is matched with gain at a fixed exposure: 8,000 us, gain 27 and
+4,400 K bring the 224 x 224 crop to median 128 and R/G 1.38 against the
+simulated 127 and 1.36 (measured 2026-10-26). Re-probe after any lighting
+change:
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afafull6_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/afafull6_1.npz
-uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afa6_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/afa6_distill_1.npz
-uv run --no-sync vbrl-deploy configs/deployment/push_t_r3m_afafull32_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/r3m_afafull32_1.npz
-uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afa6_wrist_distill.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/wrist_distill_1.npz
-uv run --no-sync vbrl-deploy configs/deployment/push_t_dinov2_afa6_rl_ep4.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/rl_ep4_1.npz
-```
-
-Brightness is matched with gain, not exposure: both cameras keep 11,000 us (under the
-16.7 ms frame time at 60 fps, so no blur or extra latency) and raise `camera_gain` until
-the 224 x 224 crop's median matches the simulated median (external 128 at gain 27; wrist
-110 at home at gain 26, measured 2026-10-20). Re-probe after any lighting change:
-
-```bash
-uv run --no-sync python -m vbrl.deployment.camera --serial 260322270027 --gain 27 --exposures 11000
-uv run --no-sync python -m vbrl.deployment.camera --serial 412622271761 --gain 26 --exposures 11000
+uv run --no-sync python -m vbrl.deployment.camera --serial 260322270027 --gain 27 --exposures 8000
 ```
 
 ## Lift cube
@@ -100,13 +70,12 @@ it). The policies have no local `.pt`, only the exported ONNX, so the weights
 come from W&B and the task ID supplies the architecture:
 
 ```bash
-uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/ok5ae9ph \
-  --wandb-checkpoint-name model_14999.pt --action-scale 0.05 --num-envs 4
+uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/ed70t2t7 \
+  --wandb-checkpoint-name model_4999.pt --num-envs 4
 ```
 
-`vbrl-play` has no flag for the ramp or the action reference, so it replays
-these policies with the registered defaults (no ramp, target reference).
+The task ID fixes the action scale and the ramp, so the replay matches training.
 
 Add `--goal 0.38442 0.01567 0.0124` to pin the goal to the rig's marker pose,
 which is what the deployment manifests use; without it the goal randomizes over
@@ -138,9 +107,9 @@ leave it off to keep the viewer up.
 ## Before and after a run
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --home
-uv run --no-sync vbrl-deploy configs/deployment/push_t_realtable_target_sdk50.yaml --park
+uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --home
+uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --park
 ```
 
 `--dry-run` homes the arm, reads the sensors and evaluates the policy without

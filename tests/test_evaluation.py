@@ -180,16 +180,7 @@ def test_committed_thesis_evaluations_pin_local_structural_references() -> None:
     if reference[0].startswith("Mjlab-LiftCube-")
   }
   assert len({checkpoint for _, checkpoint in lift}) == 24
-  assert {
-    reference
-    for reference in references
-    if reference[0].startswith("Mjlab-PushT-")
-  } == {
-    (
-      "Mjlab-PushT-State-TrossenIdentified",
-      "ckpts/push_t/state.pt",
-    ),
-  }
+  assert lift == references
 
 
 class _CommandManager:

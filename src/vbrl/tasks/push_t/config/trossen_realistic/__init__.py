@@ -1,8 +1,5 @@
-import functools
-
 from mjlab.tasks.registry import register_mjlab_task
 
-from vbrl.asset_zoo.robots.definition import CameraView
 from vbrl.training.runner import VbrlDistillationRunner, VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
 
@@ -18,37 +15,25 @@ from .rl_cfg import (
 )
 
 
-def _register(
-  task_id: str,
-  architecture: str,
-  *,
-  goal_in_observation: bool = True,
-  scene: str = "real_texture",
-  real_goal_colour: bool = False,
-  goal_observation_noise: tuple[float, float] = (0.0, 0.0),
-  camera_view: CameraView = "external",
-  distill: bool = False,
-) -> None:
-  env = functools.partial(
-    trossen_realistic_push_t_rgb_env_cfg,
-    goal_in_observation=goal_in_observation,
-    scene=scene,
-    real_goal_colour=real_goal_colour,
-    goal_observation_noise=goal_observation_noise,
-    camera_view=camera_view,
-    teacher_observations=distill,
-  )
-  rl_cfg = (
-    trossen_realistic_push_t_rgb_distillation_runner_cfg
-    if distill
-    else trossen_realistic_push_t_rgb_ppo_runner_cfg
-  )
+def _distill(task_id: str, architecture: str, scene: str) -> None:
   register_mjlab_task(
     task_id,
-    env(),
-    env(play=True),
-    rl_cfg(task_id, ARCHITECTURES[architecture], camera_view),
-    VbrlDistillationRunner if distill else VbrlOnPolicyRunner,
+    trossen_realistic_push_t_rgb_env_cfg(scene=scene),
+    trossen_realistic_push_t_rgb_env_cfg(scene=scene, play=True),
+    trossen_realistic_push_t_rgb_distillation_runner_cfg(
+      task_id, ARCHITECTURES[architecture]
+    ),
+    VbrlDistillationRunner,
+  )
+
+
+def _ppo(task_id: str, architecture: str, scene: str) -> None:
+  register_mjlab_task(
+    task_id,
+    trossen_realistic_push_t_rgb_env_cfg(scene=scene, distill=False),
+    trossen_realistic_push_t_rgb_env_cfg(scene=scene, distill=False, play=True),
+    trossen_realistic_push_t_rgb_ppo_runner_cfg(task_id, ARCHITECTURES[architecture]),
+    VbrlOnPolicyRunner,
   )
 
 
@@ -59,100 +44,9 @@ register_mjlab_task(
   trossen_realistic_push_t_state_ppo_runner_cfg(),
   VbrlOnPolicyRunner,
 )
-# The goal-conditioned variants carry a per-episode bias on the observed goal --
-# 3 mm and 1.5 deg -- the rig's measured calibration chain (1.33 mm extrinsic
-# repeatability, ~0.4 mm tag detection, +/-1 mm hand-measured margin) with
-# headroom. The reward keeps the true goal, so only the actor is misled.
-_CALIBRATION_NOISE = (0.003, 0.026)
-
-_register(
-  "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-)
-_register(
-  "Mjlab-PushT-GoalOutlineDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-)
-_register(
-  "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_in_observation=False,
-)
-
-# The overfitted arm: the rig's own tabletop laid down once with no texture DR,
-# and object and marker colours narrowed to what its camera measures. Everything
-# else matches the pair above, so the difference is the scene alone.
-_REAL_TABLE = {"real_goal_colour": True, "scene": "real_table"}
-_register(
-  "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_in_observation=False,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTableWrist-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  camera_view="wrist",
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-  "DinoV2ViTS14-Afa6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  camera_view="wrist",
-  distill=True,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Global-TrossenMeasured",
-  "DinoV2ViTS14-Global",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
-  "DinoV2ViTS14-AfaFull6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-WoodTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
-  "DinoV2ViTS14-AfaFull6",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-  real_goal_colour=True,
-  scene="real_texture_wood",
-)
-_register(
-  "Mjlab-PushT-RealTableDistill-R3MResNet50-Global-TrossenMeasured",
-  "R3MResNet50-Global",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-  **_REAL_TABLE,
-)
-_register(
-  "Mjlab-PushT-RealTableDistill-R3MResNet50-AfaFull32-TrossenMeasured",
-  "R3MResNet50-AfaFull32",
-  goal_observation_noise=_CALIBRATION_NOISE,
-  distill=True,
-  **_REAL_TABLE,
-)
+_distill("Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_table")
+_distill("Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen", "DinoV2ViTS14-Global", "real_table")
+_distill("Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen", "R3MResNet50-AfaFull32", "real_table")
+_distill("Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen", "R3MResNet50-Global", "real_table")
+_distill("Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_texture_wood")
+_ppo("Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_table")

@@ -7,8 +7,7 @@ from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillation
 from vbrl.training.ppo import VisualPpoCfg
 from vbrl.vision.config import VisionConfig
 
-STATE_TASK_ID = "Mjlab-PushT-State-TrossenIdentified"
-_RGB_MAX_ITERATIONS = 15000
+STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
 _DISTILLATION_MAX_ITERATIONS = 5000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
@@ -30,7 +29,7 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
   return VisualPpoCfg(
     num_learning_epochs=4,
     num_mini_batches=16,
-    learning_rate=0.0002,
+    learning_rate=0.0001,
     schedule="fixed",
     # Horizon 1/(1-gamma) = 267 steps (13 s at 20 Hz) against the 200-step
     # episode. lam stays
@@ -89,24 +88,18 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
 
 
 def trossen_realistic_push_t_rgb_ppo_runner_cfg(
-  task_id: str,
-  vision: VisionConfig,
-  camera_view: str = "external",
+  task_id: str, vision: VisionConfig
 ) -> RslRlOnPolicyRunnerCfg:
-  vision_data = vision.asdict()
   return RslRlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
-    max_iterations=_RGB_MAX_ITERATIONS,
+    max_iterations=8000,
     obs_groups={
       "actor": ("actor", "camera"),
       "critic": ("critic",),
     },
-    # Above max_iterations, so the only checkpoint is the unconditional final
-    # save RSL-RL does after the loop. These runs upload to W&B, where the run
-    # files are what fills the 200 GB quota.
-    save_interval=_RGB_MAX_ITERATIONS + 1,
-    experiment_name="push_t_rgb_trossen_realistic_d435",
+    save_interval=8001,
+    experiment_name="push_t_rgb_ppo",
     run_name=wandb_task_tag(task_id),
     logger="wandb",
     wandb_project="mjlab",
@@ -114,22 +107,15 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       wandb_task_tag(task_id),
       "push_t",
       "rgb",
+      "ppo",
       vision.encoder,
       vision.adapter,
-      "success_90",
-      "sim2real_dr",
-      "real_texture",
-      f"{camera_view}_cam",
-      "visual_goal",
     ),
     clip_actions=1.0,
     upload_model=True,
     actor=RslRlModelCfg(
       **_NETWORK,
-      cnn_cfg={
-        "vision": vision_data,
-        "latent_batchnorm": False,
-      },
+      cnn_cfg={"vision": vision.asdict(), "latent_batchnorm": False},
       distribution_cfg=_GAUSSIAN,
       class_name="vbrl.vision.model:VisionModel",
     ),
@@ -143,9 +129,7 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
 
 
 def trossen_realistic_push_t_rgb_distillation_runner_cfg(
-  task_id: str,
-  vision: VisionConfig,
-  camera_view: str = "external",
+  task_id: str, vision: VisionConfig
 ) -> DistillationRunnerCfg:
   return DistillationRunnerCfg(
     seed=0,
@@ -164,7 +148,6 @@ def trossen_realistic_push_t_rgb_distillation_runner_cfg(
       "distillation",
       vision.encoder,
       vision.adapter,
-      f"{camera_view}_cam",
     ),
     clip_actions=1.0,
     upload_model=True,

@@ -104,6 +104,15 @@ class PushTCommand(LiftingCommand):
       self._overlap_cache_step = step
     return self._overlap_cache
 
+  # An env ended by nan_detection resets with a NaN object state, which would
+  # turn the whole step's metric mean into NaN.
+  def reset(self, env_ids: torch.Tensor | slice | None) -> dict[str, float]:
+    extras = {
+      name: value[env_ids].nanmean().item() for name, value in self.metrics.items()
+    }
+    super().reset(env_ids)
+    return extras
+
   def _record_success(self, overlap: torch.Tensor) -> torch.Tensor:
     object_pos = self.object.data.root_link_pos_w
     object_yaw = euler_xyz_from_quat(

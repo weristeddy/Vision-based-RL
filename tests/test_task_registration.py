@@ -46,30 +46,22 @@ EXPECTED_TASK_IDS = frozenset(
       f"Mjlab-LiftCube-Sim2Real-{arch}-TrossenRealistic"
       for arch in SIM2REAL_ARCHITECTURES
     ),
-    "Mjlab-PushT-State-TrossenIdentified",
-    "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-GoalOutlinePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
-    # The same pair on the rig scene: one fixed table texture, no texture DR.
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTablePixel-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTableWrist-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-GoalOutlineDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Global-TrossenMeasured",
-    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
-    "Mjlab-PushT-RealTableDistill-R3MResNet50-Global-TrossenMeasured",
-    "Mjlab-PushT-RealTableDistill-R3MResNet50-AfaFull32-TrossenMeasured",
-    "Mjlab-PushT-WoodTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
+    "Mjlab-PushT-State-Trossen",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen",
+    "Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen",
+    "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_50_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_43_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 50
+  assert len(EXPECTED_TASK_IDS) == 43
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -106,8 +98,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     assert external <= {"external_cam"}, f"{task_id} has {external}"
     seen_external += bool(external)
 
-  # Lift-Cube and Push-T RealTableWrist are wrist-camera tasks: they declare `cam` alone.
-  assert seen_external == 11
+  assert seen_external == 6
 
 
 def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:
@@ -142,7 +133,7 @@ def test_every_visual_id_names_a_row_of_the_architecture_table() -> None:
 
   registered = vbrl_task_ids()
   for task_id in registered:
-    if task_id.endswith(("-State-Trossen", "-State-TrossenIdentified")):
+    if task_id.endswith("-State-Trossen"):
       continue
     token = re.sub(r"^Mjlab-\w+-\w+-|-\w+$", "", task_id)
     assert token in ARCHITECTURES, task_id
@@ -197,7 +188,7 @@ print(json.dumps(list(vbrl_task_ids())))
 def test_native_registry_returns_independent_environment_and_agent_copies() -> None:
   from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
-  task_id = "Mjlab-PushT-GoalOutline-DinoV2ViTS14-Afa6-TrossenIdentified"
+  task_id = "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen"
   first_env, second_env = load_env_cfg(task_id), load_env_cfg(task_id)
   first_agent, second_agent = load_rl_cfg(task_id), load_rl_cfg(task_id)
 
@@ -230,7 +221,7 @@ def test_push_t_rgb_camera_pose_is_drawn_once_per_env() -> None:
     trossen_realistic_push_t_rgb_env_cfg,
   )
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg()
+  cfg = trossen_realistic_push_t_rgb_env_cfg(scene="real_table")
   for name in ("camera_position", "camera_orientation", "camera_fovy"):
     assert cfg.events[name].mode == "startup", name
 
@@ -240,40 +231,10 @@ def test_push_t_rgb_critic_sees_clean_goal_and_relative_pose() -> None:
     trossen_realistic_push_t_rgb_env_cfg,
   )
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg()
+  cfg = trossen_realistic_push_t_rgb_env_cfg(scene="real_table")
   actor = cfg.observations["actor"].terms
   critic = cfg.observations["critic"].terms
   assert actor["target_pose"].params.get("calibration_bias", True)
   assert critic["target_pose"].params["calibration_bias"] is False
   assert {"relative_yaw", "object_to_goal", "ee_to_object"} <= set(critic)
   assert not {"relative_yaw", "object_to_goal", "ee_to_object"} & set(actor)
-
-
-def test_push_t_ramps_contact_penalties_from_zero() -> None:
-  from types import SimpleNamespace
-
-  from vbrl.tasks.push_t.config.trossen_realistic.env_cfgs import (
-    trossen_realistic_push_t_rgb_env_cfg,
-    trossen_realistic_push_t_state_env_cfg,
-  )
-  from vbrl.tasks.push_t.mdp import penalty_weight_ramp
-
-  rgb = trossen_realistic_push_t_rgb_env_cfg()
-  cfg = trossen_realistic_push_t_state_env_cfg()
-  term = cfg.curriculum["penalty_ramp"]
-  assert (
-    term.params["reward_names"]
-    == rgb.curriculum["penalty_ramp"].params["reward_names"]
-  )
-  full = {name: cfg.rewards[name].weight for name in term.params["reward_names"]}
-  env = SimpleNamespace(
-    common_step_counter=0,
-    device="cpu",
-    reward_manager=SimpleNamespace(get_term_cfg=lambda name: cfg.rewards[name]),
-  )
-  ramp = penalty_weight_ramp(term, env)
-  for step, scale in ((0, 0.0), (16_000, 0.0), (40_000, 0.5), (64_000, 1.0), (99_000, 1.0)):
-    env.common_step_counter = step
-    ramp(env, None, **term.params)
-    for name, weight in full.items():
-      assert cfg.rewards[name].weight == pytest.approx(weight * scale), (name, step)

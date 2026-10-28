@@ -67,7 +67,8 @@ def _registered_vision_configs() -> dict[str, dict]:
 
   found: dict[str, dict] = {}
   for task_id in sorted(list_tasks()):
-    actor = getattr(load_rl_cfg(task_id), "actor", None)
+    agent = load_rl_cfg(task_id)
+    actor = getattr(agent, "actor", None) or getattr(agent, "student", None)
     if actor is None or not str(actor.class_name).startswith("vbrl.vision.model:"):
       continue
     found[task_id] = dict(actor.cnn_cfg["vision"])

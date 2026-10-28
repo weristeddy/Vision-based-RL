@@ -6,7 +6,6 @@ import torch
 from mjlab.entity import Entity
 from mjlab.managers import SceneEntityCfg
 from mjlab.sensor import ContactSensor
-from mjlab.tasks.manipulation import mdp as manipulation_mdp
 from mjlab.utils.lab_api.math import quat_apply, wrap_to_pi
 
 from ..geometry import footprint_signed_distance, yaw_from_quat
@@ -20,6 +19,7 @@ _ROBOT = SceneEntityCfg("robot")
 _DISTANCE_SCALE = 5.0
 _MAX_REWARD = 3.0
 _VERTICAL = 0.7
+_REACH_WEIGHT = 0.05
 
 
 def _contact(env: ManagerBasedRlEnv, sensor_name: str, *fields: str) -> Any:
@@ -56,8 +56,6 @@ def maniskill_dense_reward(
   command_name: str,
   object_name: str,
   asset_cfg: SceneEntityCfg = _ROBOT,
-  reach_outline: bool = False,
-  reach_weight: float = 0.05,
 ) -> torch.Tensor:
   command = push_t_command(env, command_name)
   obj: Entity = env.scene[object_name]
@@ -67,13 +65,7 @@ def maniskill_dense_reward(
   goal_distance = torch.linalg.vector_norm(
     command.target_pos[:, :2] - obj.data.root_link_pos_w[:, :2], dim=-1
   )
-  tcp_distance = (
-    _outline_distance(env, obj, asset_cfg)
-    if reach_outline
-    else torch.linalg.vector_norm(
-      manipulation_mdp.ee_to_object_distance(env, object_name, asset_cfg), dim=-1
-    )
-  )
+  tcp_distance = _outline_distance(env, obj, asset_cfg)
   weight = float(command.cfg.orientation_weight)
   # Linear, not ManiSkill's ((cos e + 1) / 2)**2: any function of cos e has zero
   # gradient at 0 and at pi -- 0.302 at 45 degrees, 0.000 at 180 -- so a push
@@ -82,7 +74,7 @@ def maniskill_dense_reward(
   reward = (
     weight * (1.0 - yaw_error / torch.pi)
     + (1.0 - weight) * (1.0 - torch.tanh(_DISTANCE_SCALE * goal_distance)).square()
-    + reach_weight
+    + _REACH_WEIGHT
     * torch.sqrt((1.0 - torch.tanh(_DISTANCE_SCALE * tcp_distance)).clamp_min(0.0))
   )
   reward = torch.where(command.get_at_goal(), _MAX_REWARD, reward)
@@ -95,26 +87,6 @@ def top_contact_share(
   data = _contact(env, sensor_name, "found", "normal")
   vertical = data.normal[..., 2].abs() > verticality_threshold
   return ((data.found > 0) & vertical).any(dim=-1).float()
-
-
-def fingertip_height_excess(
-  env: ManagerBasedRlEnv,
-  asset_cfg: SceneEntityCfg,
-  ceiling: float,
-  sensor_name: str | None = None,
-  contact_gate: bool = True,
-) -> torch.Tensor:
-  if ceiling <= 0.0:
-    raise ValueError("fingertip_height_excess needs ceiling > 0.")
-  asset: Entity = env.scene[asset_cfg.name]
-  lowest = asset.data.geom_pos_w[:, asset_cfg.geom_ids, 2].min(dim=-1).values
-  excess = ((lowest - ceiling) / ceiling).clamp_min(0.0)
-  # The gate lets any gripper-T contact switch the term off, and resting on the
-  # T's top face is contact: yregddj3 sat on the top face for 72 % of its steps.
-  if sensor_name is None or not contact_gate:
-    return excess
-  found = _contact(env, sensor_name, "found").found
-  return excess * (found.amax(dim=-1) <= 0).to(excess.dtype)
 
 
 # 1 - cos of the angle between the gripper's pointing axis and straight down; yaw
@@ -140,38 +112,6 @@ def at_goal_static(
   vel = env.scene[asset_cfg.name].data.joint_vel[:, asset_cfg.joint_ids]
   static = 1.0 - torch.tanh(5.0 * torch.linalg.vector_norm(vel, dim=-1))
   return static * command.get_at_goal().to(static.dtype)
-
-
-# Gated on position error alone, so a T in place with its yaw off still gets
-# slow corrective pushes.
-def near_goal_ee_speed(
-  env: ManagerBasedRlEnv,
-  command_name: str,
-  object_name: str,
-  asset_cfg: SceneEntityCfg,
-  length_scale: float,
-) -> torch.Tensor:
-  command = push_t_command(env, command_name)
-  goal_distance = torch.linalg.vector_norm(
-    command.target_pos[:, :2] - env.scene[object_name].data.root_link_pos_w[:, :2],
-    dim=-1,
-  )
-  speed = env.scene[asset_cfg.name].data.site_lin_vel_w[:, asset_cfg.site_ids[0]]
-  return torch.exp(-goal_distance / length_scale) * speed.square().sum(dim=-1)
-
-
-# Zero-set is "do not press down", so pushing stays free at any magnitude --
-# unlike every earlier attempt, whose zero-set was "do not touch the object".
-def object_table_press(
-  env: ManagerBasedRlEnv, sensor_name: str, onset: float, scale: float
-) -> torch.Tensor:
-  if scale <= 0.0:
-    raise ValueError("object_table_press needs scale > 0.")
-  data = _contact(env, sensor_name, "force")
-  # Squared: a light touch on the top face stays nearly free, a hard press does
-  # not. Capped so one jammed contact cannot dominate an update.
-  excess = ((_press(data) - onset) / scale).clamp_min(0.0)
-  return excess.square().clamp_max(100.0)
 
 
 def peak_object_press(
@@ -221,12 +161,9 @@ __all__ = [
   "at_goal_static",
   "at_goal_share",
   "ee_tilt",
-  "fingertip_height_excess",
   "maniskill_dense_reward",
   "max_contact_force",
   "max_contact_force_on_face",
-  "near_goal_ee_speed",
-  "object_table_press",
   "peak_object_press",
   "table_touch",
   "top_contact_share",

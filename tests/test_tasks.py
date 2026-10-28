@@ -48,10 +48,10 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 50
+  assert len(task_ids) == 43
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
-    if "Distill" in task_id:
+    if hasattr(agent, "student"):
       continue
     visual = agent.actor.cnn_cfg is not None
     assert tuple(agent.obs_groups) == ("actor", "critic")
@@ -73,16 +73,13 @@ def test_distillation_tasks_pair_a_vision_student_with_the_state_actor() -> None
 
   state_agent = load_rl_cfg(STATE_TASK_ID)
   state_env = load_env_cfg(STATE_TASK_ID)
-  rgb = load_env_cfg("Mjlab-PushT-RealTable-DinoV2ViTS14-Afa6-TrossenIdentified")
-  assert "teacher" not in rgb.observations
+  assert "teacher" not in state_env.observations
   for task_id in (
-    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTableWristDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-GoalOutlineDistill-DinoV2ViTS14-Afa6-TrossenIdentified",
-    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-Global-TrossenMeasured",
-    "Mjlab-PushT-RealTableDistill-DinoV2ViTS14-AfaFull6-TrossenMeasured",
-    "Mjlab-PushT-RealTableDistill-R3MResNet50-Global-TrossenMeasured",
-    "Mjlab-PushT-RealTableDistill-R3MResNet50-AfaFull32-TrossenMeasured",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen",
+    "Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen",
+    "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
   ):
     agent = load_rl_cfg(task_id)
     env = load_env_cfg(task_id)
@@ -131,11 +128,11 @@ def test_push_t_overlap_is_deterministic_and_pose_aware() -> None:
 
 
 @pytest.mark.parametrize(
-  ("enabled", "normal_z", "force", "expected"),
-  [(False, 1.0, 5.0, False), (True, 1.0, 5.0, True), (True, 1.0, 0.5, False), (True, 0.0, 5.0, False)],
+  ("normal_z", "force", "expected"),
+  [(1.0, 5.0, True), (1.0, 0.5, False), (0.0, 5.0, False)],
 )
-def test_top_face_contact_ends_the_episode_only_when_enabled(
-  enabled: bool, normal_z: float, force: float, expected: bool
+def test_top_face_contact_ends_the_episode_on_a_vertical_press(
+  normal_z: float, force: float, expected: bool
 ) -> None:
   from vbrl.tasks.push_t.mdp.terminations import top_face_contact
 
@@ -148,7 +145,7 @@ def test_top_face_contact_ends_the_episode_only_when_enabled(
     scene={"ee_object_contact": SimpleNamespace(data=data)}, num_envs=1, device="cpu"
   )
 
-  done = top_face_contact(env, "ee_object_contact", min_force_n=1.0, enabled=enabled)
+  done = top_face_contact(env, "ee_object_contact", min_force_n=1.0)
 
   assert done.tolist() == [expected]
 
@@ -179,6 +176,20 @@ def test_start_success_ignores_the_first_reset_and_rises_with_success() -> None:
   assert command._mode_success[1] > 0.8
 
 
+def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
+  from vbrl.tasks.push_t.mdp.commands import PushTCommand
+
+  command = object.__new__(PushTCommand)
+  command.metrics = {"position_error": torch.tensor([0.1, float("nan"), 0.3, 0.5])}
+  command.command_counter = torch.ones(4, dtype=torch.long)
+  command._resample = lambda env_ids: None
+
+  extras = command.reset(torch.tensor([0, 1, 2]))
+
+  assert extras["position_error"] == pytest.approx(0.2)
+  assert command.metrics["position_error"].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.5])
+
+
 def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
   from vbrl.tasks.push_t.mdp.rewards import ee_tilt
 
@@ -189,32 +200,6 @@ def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
   tilt = ee_tilt(SimpleNamespace(scene=scene), SimpleNamespace(name="robot", site_ids=[0]))
 
   assert tilt.tolist() == pytest.approx([0.0, 1.0], abs=1e-6)
-
-
-@pytest.mark.parametrize(("contact_gate", "expected"), [(True, 0.0), (False, 1.5)])
-def test_resting_on_the_t_escapes_the_height_term_only_through_the_gate(
-  contact_gate: bool, expected: float
-) -> None:
-  from vbrl.tasks.push_t.mdp.rewards import fingertip_height_excess
-
-  scene = {
-    "robot": SimpleNamespace(
-      data=SimpleNamespace(geom_pos_w=torch.tensor([[[0.0, 0.0, 0.030]]]))
-    ),
-    "ee_object_contact": SimpleNamespace(
-      data=SimpleNamespace(found=torch.tensor([[1.0]]))
-    ),
-  }
-  excess = fingertip_height_excess(
-    SimpleNamespace(scene=scene),
-    SimpleNamespace(name="robot", geom_ids=[0]),
-    ceiling=0.012,
-    sensor_name="ee_object_contact",
-    contact_gate=contact_gate,
-  )
-
-  assert excess.item() == pytest.approx(expected)
-
 
 
 def test_push_t_success_threshold_latches_metrics() -> None:
@@ -332,6 +317,7 @@ def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None
 def test_push_t_reward_is_maniskill_dense_with_a_linear_orientation_summand() -> None:
   from mjlab.managers.scene_entity_config import SceneEntityCfg
 
+  from vbrl.tasks.push_t.geometry import footprint_signed_distance
   from vbrl.tasks.push_t.mdp import maniskill_dense_reward
   from vbrl.tasks.push_t.mdp.commands import PushTCommand
 
@@ -364,7 +350,9 @@ def test_push_t_reward_is_maniskill_dense_with_a_linear_orientation_summand() ->
   asset_cfg.site_ids = [0]
 
   distances = torch.tensor([0.20, 0.10])
-  ee_distances = torch.tensor([0.10, 0.20])
+  ee_distances = footprint_signed_distance(
+    torch.tensor([[0.10, 0.0], [-0.20, 0.0]])
+  ).abs()
   yaw_errors = torch.tensor([0.0, math.pi])
   shaped = (
     (1.0 - yaw_errors.abs() / math.pi) / 2.0
@@ -417,17 +405,9 @@ def test_outline_reach_peaks_on_the_side_face_not_over_the_centre_of_mass() -> N
   asset_cfg = SceneEntityCfg("robot")
   asset_cfg.site_ids = [0]
 
-  centre = maniskill_dense_reward(env, "push_t_goal", "object", asset_cfg)
-  outline = maniskill_dense_reward(
-    env, "push_t_goal", "object", asset_cfg, reach_outline=True
-  )
-  assert centre[1] > centre[0]
+  outline = maniskill_dense_reward(env, "push_t_goal", "object", asset_cfg)
   assert outline[0] > outline[1]
   assert outline[0] == pytest.approx((0.5 + 0.5 + 1.0 / 20.0) / 3.0)
-  heavier = maniskill_dense_reward(
-    env, "push_t_goal", "object", asset_cfg, reach_outline=True, reach_weight=0.25
-  )
-  assert heavier[0] == pytest.approx((0.5 + 0.5 + 0.25) / 3.0)
 
 
 def test_push_t_object_origin_sits_on_its_centre_of_mass() -> None:
@@ -494,31 +474,6 @@ def _push_t_reward_env(target_pos, target_yaw, object_pos, object_yaw, weight=0.
   return env, asset_cfg
 
 
-def test_push_t_height_ceiling_is_not_charged_while_touching_the_object() -> None:
-  from mjlab.managers import SceneEntityCfg
-
-  from vbrl.tasks.push_t.mdp import fingertip_height_excess
-
-  robot = SimpleNamespace(
-    data=SimpleNamespace(
-      geom_pos_w=torch.tensor([[[0.0, 0.0, 0.048]], [[0.0, 0.0, 0.048]]])
-    )
-  )
-  sensor = SimpleNamespace(data=SimpleNamespace(found=torch.tensor([[0.0], [1.0]])))
-  env = SimpleNamespace(scene={"robot": robot, "ee_object_contact": sensor})
-  cfg = SceneEntityCfg("robot")
-  cfg.geom_ids = slice(None)
-
-  assert torch.allclose(
-    fingertip_height_excess(env, cfg, 0.024), torch.tensor([1.0, 1.0])
-  )
-  assert torch.allclose(
-    fingertip_height_excess(env, cfg, 0.024, "ee_object_contact"),
-    torch.tensor([1.0, 0.0]),
-  )
-  with pytest.raises(ValueError, match="ceiling > 0"):
-    fingertip_height_excess(env, cfg, 0.0)
-
 def test_push_t_table_touch_is_binary_over_the_whole_robot() -> None:
   from vbrl.tasks.push_t.mdp import max_contact_force, table_touch
 
@@ -561,8 +516,8 @@ def test_push_t_at_goal_static_rewards_a_still_arm_only_at_the_goal() -> None:
 
 
 
-def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
-  from vbrl.tasks.push_t.mdp import object_table_press, peak_object_press
+def test_push_t_peak_object_press_subtracts_the_weight() -> None:
+  from vbrl.tasks.push_t.mdp import peak_object_press
 
   W = 0.497
   sensor = SimpleNamespace(
@@ -578,29 +533,8 @@ def test_push_t_object_table_press_is_zero_for_a_pure_lateral_push() -> None:
     )
   )
   env = SimpleNamespace(scene={"object_table_contact": sensor})
-  out = object_table_press(env, "object_table_contact", onset=W + 2.0, scale=5.0)
-
-  assert float(out[0]) == 0.0
-  assert float(out[1]) == 0.0
-  assert float(out[2]) == pytest.approx(0.0)
-  assert float(out[3]) == pytest.approx((28.0 / 5.0) ** 2)
-
-  jammed = SimpleNamespace(
-    scene={
-      "object_table_contact": SimpleNamespace(
-        data=SimpleNamespace(force=torch.tensor([[[0.0, 0.0, -(W + 500.0)]]]))
-      )
-    }
-  )
-  assert float(
-    object_table_press(jammed, "object_table_contact", onset=W + 2.0, scale=5.0)[0]
-  ) == pytest.approx(100.0)
-
   press = peak_object_press(env, "object_table_contact", weight_n=W)
   assert press.tolist() == pytest.approx([0.0, 0.0, 2.0, 30.0])
-
-  with pytest.raises(ValueError, match="scale > 0"):
-    object_table_press(env, "object_table_contact", onset=W, scale=0.0)
 
 
 def test_push_t_max_contact_force_splits_top_from_side() -> None:
@@ -853,10 +787,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.push_t_env_cfg import (
     ACTION_RATE_WEIGHT,
     ACTION_SCALE,
-    EE_HEIGHT_CEILING_M,
-    EE_HEIGHT_WEIGHT,
-    OBJECT_PRESS_ONSET_N,
-    OBJECT_PRESS_SCALE_N,
     OBJECT_WEIGHT_N,
     TABLE_TOUCH_WEIGHT,
   )
@@ -869,7 +799,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "force" in sensors["object_table_contact"].fields
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
-  assert cfg.episode_length_s == 6.0
+  assert cfg.episode_length_s == 10.0
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 10
   assert cfg.scale_rewards_by_dt is False
@@ -890,15 +820,12 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert isinstance(action, TargetRelativeJointPositionActionCfg)
   assert action.actuator_names == definition.arm_actuator_names
   assert len(action.actuator_names) == 6
-  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.075)
+  assert action.scale == pytest.approx(ACTION_SCALE) == pytest.approx(0.025)
+  assert action.wrist_roll_scale == pytest.approx(0.02)
+  assert action.ramp_s == pytest.approx(0.05)
   assert action.clip is None
-  # Held, like the deployment's goal-time-0 command, on the arm whose gains and
-  # friction were measured on the rig.
   from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML
-  from vbrl.deployment.config import DeploymentConfig
 
-  deployment = DeploymentConfig(onnx_file="", arm_ip="")
-  assert deployment.command_goal_time_s == 0.0
   assert 1.0 / (cfg.sim.mujoco.timestep * cfg.decimation) == pytest.approx(20.0)
   assert cfg.scene.entities["robot"].spec_fn.args[0] == str(WXAI_MEASURED_XML)
   assert {
@@ -910,26 +837,20 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert command.success_threshold == pytest.approx(0.90)
   assert command.resampling_time_range == (1.0e9, 1.0e9)
   assert command.mask_resolution == 64
+  assert command.near_object_start is True
 
   assert tuple(cfg.rewards) == (
     "maniskill_dense",
     "action_rate_l2",
     "joint_vel_l2",
     "at_goal_static",
-    "near_goal_ee_speed",
     "table_touch",
-    "object_table_press",
-    "ee_height_ceiling",
     "ee_vertical",
   )
-  assert cfg.rewards["ee_vertical"].weight == 0.0
-  assert cfg.rewards["near_goal_ee_speed"].weight == 0.0
-  assert cfg.rewards["near_goal_ee_speed"].params["length_scale"] == 0.03
+  assert cfg.rewards["ee_vertical"].weight == pytest.approx(-0.1)
   assert cfg.rewards["maniskill_dense"].weight == pytest.approx(1.0)
-  assert cfg.rewards["maniskill_dense"].params["reach_outline"] is False
-  assert cfg.rewards["maniskill_dense"].params["reach_weight"] == 0.05
-  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.002)
-  assert ACTION_RATE_WEIGHT == pytest.approx(-0.002)
+  assert cfg.rewards["action_rate_l2"].weight == pytest.approx(-0.01)
+  assert ACTION_RATE_WEIGHT == pytest.approx(-0.01)
   assert cfg.rewards["joint_vel_l2"].weight == pytest.approx(-0.05)
   assert cfg.rewards["joint_vel_l2"].params["asset_cfg"].joint_names == (
     definition.arm_actuator_names
@@ -938,24 +859,12 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "joint_vel_hinge" not in cfg.rewards
   assert cfg.rewards["at_goal_static"].weight == pytest.approx(0.5)
 
-  from vbrl.tasks.push_t.geometry import HALF_HEIGHT
-
-  assert EE_HEIGHT_CEILING_M == pytest.approx(2.0 * HALF_HEIGHT) == pytest.approx(0.024)
-  assert cfg.rewards["ee_height_ceiling"].weight == pytest.approx(-0.02)
-  assert EE_HEIGHT_WEIGHT == pytest.approx(-0.02)
-  assert cfg.rewards["ee_height_ceiling"].params["sensor_name"] == "ee_object_contact"
-  assert cfg.rewards["ee_height_ceiling"].params["ceiling"] == EE_HEIGHT_CEILING_M
-  assert cfg.rewards["ee_height_ceiling"].params["contact_gate"] is True
   assert "vertical_contact_force" not in cfg.rewards
   assert "object_contact_force" not in cfg.rewards
   assert cfg.rewards["table_touch"].weight == TABLE_TOUCH_WEIGHT
-  assert pytest.approx(-2 / 3) == TABLE_TOUCH_WEIGHT
-  press = cfg.rewards["object_table_press"].params
-  assert press["sensor_name"] == "object_table_contact"
+  assert pytest.approx(-1.0) == TABLE_TOUCH_WEIGHT
   assert OBJECT_WEIGHT_N == pytest.approx(0.497)
-  assert press["onset"] == pytest.approx(1.497) == OBJECT_PRESS_ONSET_N
-  assert press["scale"] == pytest.approx(5.0) == OBJECT_PRESS_SCALE_N
-  assert cfg.rewards["object_table_press"].weight == pytest.approx(-0.01)
+  assert cfg.metrics["peak_object_press"].params["weight_n"] == OBJECT_WEIGHT_N
 
   assert cfg.rewards["table_touch"].params["sensor_name"] == "robot_table_contact"
   table = sensors["robot_table_contact"]
@@ -963,8 +872,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert table.secondary.entity == "table"
   assert cfg.metrics["peak_table_force"].params["sensor_name"] == "robot_table_contact"
 
-  assert tuple(cfg.curriculum) == ("penalty_ramp", "near_goal_speed_ramp")
-
+  assert cfg.curriculum == {}
 
   assert tuple(cfg.terminations) == (
     "time_out",
@@ -974,7 +882,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
     "top_face_contact",
   )
   assert cfg.terminations["time_out"].time_out is True
-  assert cfg.terminations["top_face_contact"].params["enabled"] is False
+  assert cfg.terminations["top_face_contact"].params["min_force_n"] == 1.0
 
   actor, critic = cfg.observations["actor"], cfg.observations["critic"]
   assert tuple(actor.terms) == PUSH_T_STATE_TERMS
@@ -1000,10 +908,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert APPEARANCE_EVENTS.isdisjoint(cfg.events)
 
 
-def test_push_t_play_only_disables_actor_noise_and_curriculum() -> None:
+def test_push_t_play_starts_at_home_without_actor_noise() -> None:
   cfg = _push_t(play=True)
 
   assert cfg.observations["actor"].enable_corruption is False
-  assert cfg.curriculum == {}
-  assert cfg.episode_length_s == 6.0
+  assert cfg.commands["push_t_goal"].near_object_start is False
+  assert "top_face_contact" not in cfg.terminations
+  assert cfg.episode_length_s == 10.0
   assert cfg.commands["push_t_goal"].resampling_time_range == (1.0e9, 1.0e9)

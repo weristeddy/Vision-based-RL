@@ -5,7 +5,6 @@ import math
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import (
-  CurriculumTermCfg,
   EventTermCfg,
   MetricsTermCfg,
   ObservationTermCfg,
@@ -31,34 +30,19 @@ _TABLE_SENSOR = "robot_table_contact"
 # (110-200 ms lag, 4-14 mrad friction deadband) swallowed most per-step actions,
 # and the same recipe reached 0.64 mean-action success against 0.96 here.
 DECIMATION = 10
-ACTION_SCALE = 0.075
-EPISODE_LENGTH_S = 6.0
+ACTION_SCALE = 0.025
+WRIST_ROLL_SCALE = 0.02
+RAMP_S = 0.05
+EPISODE_LENGTH_S = 10.0
 SUCCESS_THRESHOLD = 0.90
-# The object's own height, so it follows the T. Linear, not quadratic: a constant
-# gradient pulls the arm down from any height; a quadratic is weakest at the ceiling.
-EE_HEIGHT_CEILING_M = 2.0 * HALF_HEIGHT
-# Raising it is measured and reverted: -0.1 takes success to 0.008, and -0.05
-# moved the lowest pad only 27.6 -> 26.2 mm for 8-19% of overlap.
-EE_HEIGHT_WEIGHT = -0.02
-EE_VERTICAL_WEIGHT = 0.0
-TABLE_TOUCH_WEIGHT = -2.0 / 3.0
+EE_VERTICAL_WEIGHT = -0.1
+TABLE_TOUCH_WEIGHT = -1.0
 # The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
 # distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
 OBJECT_WEIGHT_N = 0.497
-OBJECT_PRESS_ONSET_N = OBJECT_WEIGHT_N + 1.0
-OBJECT_PRESS_SCALE_N = 5.0
-OBJECT_PRESS_WEIGHT = -0.01
-# `action_rate_l2` is upstream Lift-Cube's -0.01 at a fifth, because for a Gaussian
-# policy consecutive actions differ by 2*sigma^2 even when the mean never moves.
-ACTION_RATE_WEIGHT = -0.002
+ACTION_RATE_WEIGHT = -0.01
 JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
-NEAR_GOAL_SPEED_LENGTH_M = 0.03
-PENALTY_RAMP_STEPS = (16_000, 64_000)
-# Iterations 4,000 to 7,000 at num_steps_per_env=16, after the slowest visual
-# runs pass 0.1 success, and the same for every encoder so a sweep stays fair.
-VISUAL_PENALTY_RAMP_STEPS = (64_000, 112_000)
-_RAMPED_PENALTIES = ("object_table_press", "action_rate_l2", "joint_vel_l2")
 
 
 WORKSPACE_X = (0.2, 0.5)
@@ -99,12 +83,9 @@ def build_env_cfg(
   robot: RobotDefinition,
   object_name: str,
   rgb: bool = False,
+  distill: bool = False,
   play: bool = False,
-  visual_goal: bool = False,
-  goal_in_observation: bool = True,
   goal_observation_noise: tuple[float, float] = (0.0, 0.0),
-  penalty_ramp: tuple[int, int] | None = None,
-  teacher_observations: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   cfg = make_tabletop_env_cfg(
     robot, action_delay=True, fixed_closed_gripper=True
@@ -147,7 +128,7 @@ def build_env_cfg(
   }
   cfg.observations["actor"].nan_policy = "sanitize"
   cfg.observations["critic"].nan_policy = "sanitize"
-  if teacher_observations:
+  if distill:
     teacher = copy.deepcopy(cfg.observations["actor"])
     teacher.terms["target_pose"].params["calibration_bias"] = False
     cfg.observations["teacher"] = teacher
@@ -157,13 +138,15 @@ def build_env_cfg(
       entity_name="robot",
       actuator_names=robot.arm_actuator_names,
       scale=ACTION_SCALE,
+      wrist_roll_scale=WRIST_ROLL_SCALE,
+      ramp_s=RAMP_S,
       preserve_order=True,
     )
   }
   cfg.commands = {
     _COMMAND: _command(
       object_name,
-      goal_marker_name=GOAL_ENTITY_NAME if visual_goal else None,
+      goal_marker_name=GOAL_ENTITY_NAME if rgb else None,
       goal_observation_noise=goal_observation_noise,
     )
   }
@@ -174,8 +157,6 @@ def build_env_cfg(
       params={
         **common,
         "asset_cfg": robot_ee,
-        "reach_outline": False,
-        "reach_weight": 0.05,
       },
     ),
     "action_rate_l2": RewardTermCfg(
@@ -197,40 +178,10 @@ def build_env_cfg(
         "asset_cfg": SceneEntityCfg("robot", joint_names=robot.arm_actuator_names),
       },
     ),
-    "near_goal_ee_speed": RewardTermCfg(
-      func=mdp.near_goal_ee_speed,
-      weight=0.0,
-      params={
-        **common,
-        "asset_cfg": robot_ee,
-        "length_scale": NEAR_GOAL_SPEED_LENGTH_M,
-      },
-    ),
     "table_touch": RewardTermCfg(
       func=mdp.table_touch,
       weight=TABLE_TOUCH_WEIGHT,
       params={"sensor_name": _TABLE_SENSOR},
-    ),
-    "object_table_press": RewardTermCfg(
-      func=mdp.object_table_press,
-      weight=OBJECT_PRESS_WEIGHT,
-      params={
-        "sensor_name": _OBJECT_TABLE_SENSOR,
-        "onset": OBJECT_PRESS_ONSET_N,
-        "scale": OBJECT_PRESS_SCALE_N,
-      },
-    ),
-    "ee_height_ceiling": RewardTermCfg(
-      func=mdp.fingertip_height_excess,
-      weight=EE_HEIGHT_WEIGHT,
-      params={
-        "asset_cfg": SceneEntityCfg(
-          "robot", geom_names=robot.fingertip_geom_pattern
-        ),
-        "ceiling": EE_HEIGHT_CEILING_M,
-        "sensor_name": _CONTACT_SENSOR,
-        "contact_gate": True,
-      },
     ),
     "ee_vertical": RewardTermCfg(
       func=mdp.ee_tilt,
@@ -287,31 +238,8 @@ def build_env_cfg(
       params={"object_name": object_name},
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
-    top_face_contact=TerminationTermCfg(
-      func=mdp.top_face_contact,
-      params={"sensor_name": _CONTACT_SENSOR, "min_force_n": 1.0, "enabled": False},
-    ),
   )
   cfg.curriculum = {}
-  if penalty_ramp is not None:
-    cfg.curriculum["penalty_ramp"] = CurriculumTermCfg(
-      func=mdp.penalty_weight_ramp,
-      params={
-        "reward_names": list(_RAMPED_PENALTIES),
-        "start_step": penalty_ramp[0],
-        "end_step": penalty_ramp[1],
-      },
-    )
-    # Its own entry so a run can move it alone: tyro parses the shared ramp's
-    # reward_names as a single string.
-    cfg.curriculum["near_goal_speed_ramp"] = CurriculumTermCfg(
-      func=mdp.penalty_weight_ramp,
-      params={
-        "reward_names": ["near_goal_ee_speed"],
-        "start_step": penalty_ramp[0],
-        "end_step": penalty_ramp[1],
-      },
-    )
   cfg.events["arm_joint_position_noise"] = EventTermCfg(
     func=mdp.reset_joints_with_gaussian_offset,
     mode="reset",
@@ -401,14 +329,16 @@ def build_env_cfg(
   cfg.viewer.height = 480
 
   if rgb:
-    actor = cfg.observations["actor"]
-    actor.terms.pop("obj_pose")
-    if not goal_in_observation:
-      actor.terms.pop("target_pose")
+    cfg.observations["actor"].terms.pop("obj_pose")
+  if not (distill or play):
+    cfg.commands[_COMMAND].near_object_start = True
+    cfg.terminations["top_face_contact"] = TerminationTermCfg(
+      func=mdp.top_face_contact,
+      params={"sensor_name": _CONTACT_SENSOR, "min_force_n": 1.0},
+    )
 
   if play:
     cfg.observations["actor"].enable_corruption = False
-    cfg.curriculum = {}
   return cfg
 
 

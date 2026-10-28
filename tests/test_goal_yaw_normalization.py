@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import onnx
-import pytest
 import torch
 from onnx.reference import ReferenceEvaluator
 from rsl_rl.modules import EmpiricalNormalization
@@ -39,15 +38,14 @@ def test_goal_yaw_stays_unscaled_after_pinned_training_and_export(tmp_path):
   np.testing.assert_allclose(exported, actual.numpy(), atol=1e-6)
 
 
-@pytest.mark.parametrize("pixel", [False, True])
-def test_runner_selects_goal_yaw_in_actor_and_critic(monkeypatch, pixel):
+def test_runner_selects_goal_yaw_in_actor_and_critic(monkeypatch):
   from mjlab.rl.runner import MjlabOnPolicyRunner
 
   from vbrl.tasks.push_t.config.trossen_realistic.env_cfgs import (
     trossen_realistic_push_t_rgb_env_cfg,
   )
 
-  cfg = trossen_realistic_push_t_rgb_env_cfg(goal_in_observation=not pixel)
+  cfg = trossen_realistic_push_t_rgb_env_cfg(scene="real_table")
   sizes = {
     "qpos": 8,
     "qvel": 8,
@@ -82,8 +80,7 @@ def test_runner_selects_goal_yaw_in_actor_and_critic(monkeypatch, pixel):
 
   monkeypatch.setattr(MjlabOnPolicyRunner, "__init__", init)
   VbrlOnPolicyRunner(env, {"obs_groups": {"actor": ("actor", "camera")}})
-  assert isinstance(models["actor"].obs_normalizer, GoalYawNormalization) is not pixel
+  assert isinstance(models["actor"].obs_normalizer, GoalYawNormalization)
   assert isinstance(models["critic"].obs_normalizer, GoalYawNormalization)
   assert models["critic"].obs_normalizer.yaw_start == 32
-  if not pixel:
-    assert models["actor"].obs_normalizer.yaw_start == 32
+  assert models["actor"].obs_normalizer.yaw_start == 32
