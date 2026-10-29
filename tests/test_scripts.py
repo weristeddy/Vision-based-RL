@@ -40,20 +40,119 @@ def test_train_config_exposes_the_flags_sweeps_and_cluster_scripts_use() -> None
   fields = set(TrainConfig.__dataclass_fields__)
 
   assert {"env", "agent", "video", "gpu_ids", "log_root"} <= fields
-  assert "label" in fields
+  assert {"label", "evaluate"} <= fields
+  assert config.evaluate is True
   assert config.gpu_ids == [0]
   assert config.env.scene.num_envs > 0
   assert {"VBRL*", "WANDB*", "HF*"} <= set(WORKER_ENV)
 
 
-def test_mjlab_still_reads_the_env_var_list_vbrl_appends_to() -> None:
-  import inspect
-
+def test_training_returns_its_run_directory(monkeypatch, tmp_path: Path) -> None:
   import mjlab.scripts.train as upstream
+  import mjlab.utils.gpu
 
-  source = inspect.getsource(upstream.launch_training)
-  assert "torchrunx.DEFAULT_ENV_VARS_FOR_COPY" in source
-  assert '("MUJOCO*",)' in source
+  from vbrl.scripts.train import TrainConfig, _launch
+
+  calls = []
+  monkeypatch.setattr(upstream, "run_train", lambda *a: calls.append(a))
+  monkeypatch.setattr(mjlab.utils.gpu, "select_gpus", lambda ids: ([0], 1))
+  args = TrainConfig.from_task(TASK_ID)
+  object.__setattr__(args, "log_root", str(tmp_path))
+
+  log_dir = _launch(TASK_ID, args)
+
+  assert calls == [(TASK_ID, args, log_dir)]
+  assert log_dir.parent == tmp_path / args.agent.experiment_name
+  assert log_dir.name.endswith(args.agent.run_name)
+
+
+def test_saved_checkpoints_sort_by_iteration(tmp_path: Path) -> None:
+  from vbrl.evaluation.checkpoints import saved_checkpoints
+
+  for name in ("model_1000.pt", "model_200.pt", "model_100.pt", "run.onnx", "x.pt"):
+    (tmp_path / name).touch()
+
+  saved = saved_checkpoints(tmp_path)
+
+  assert [iteration for iteration, _ in saved] == [100, 200, 1000]
+  assert saved[-1][1] == tmp_path / "model_1000.pt"
+
+
+def test_each_checkpoint_is_averaged_over_its_episodes(monkeypatch) -> None:
+  import vbrl.evaluation.rollout as rollout
+  import vbrl.runtime as runtime
+  from vbrl.evaluation.checkpoints import evaluate_checkpoints
+
+  env = SimpleNamespace(close=lambda: None)
+  monkeypatch.setattr(runtime, "build_env", lambda *a, **k: env)
+  monkeypatch.setattr(
+    runtime, "load_trained_policy", lambda env, **k: (env, None, k["ref"], None)
+  )
+  episodes = {
+    "a.pt": [{"success": 1.0, "seed": 0}, {"success": 0.0, "seed": 0}],
+    "b.pt": [{"success": 1.0, "seed": 0}, {"success": 1.0, "seed": 0}],
+  }
+  monkeypatch.setattr(
+    rollout, "run_episodes", lambda env, ref, seed: episodes[ref.checkpoint_file]
+  )
+
+  rows = evaluate_checkpoints(
+    TASK_ID, [(1, Path("a.pt")), (2, Path("b.pt"))], device="cpu"
+  )
+
+  assert rows == [{"iteration": 1, "success": 0.5}, {"iteration": 2, "success": 1.0}]
+
+
+class _Run:
+  def __init__(self) -> None:
+    self.rows, self.summary, self.saved, self.finished = [], {}, [], False
+
+  def define_metric(self, *args, **kwargs) -> None:
+    pass
+
+  def log(self, row: dict) -> None:
+    self.rows.append(row)
+
+  def save(self, path: str, base_path: str) -> None:
+    self.saved.append(Path(path).name)
+
+  def finish(self) -> None:
+    self.finished = True
+
+
+@pytest.mark.parametrize("evaluate", (True, False))
+def test_after_training_the_run_is_evaluated_published_and_trimmed(
+  monkeypatch, tmp_path: Path, evaluate: bool
+) -> None:
+  import wandb
+
+  import vbrl.evaluation.checkpoints as checkpoints
+  from vbrl.scripts.train import TrainConfig, _finish
+
+  for iteration in (100, 200):
+    (tmp_path / f"model_{iteration}.pt").touch()
+  (tmp_path / f"{tmp_path.name}.onnx").touch()
+
+  def evaluate_checkpoints(task_id, saved, *, device, scene=None):
+    return [{"iteration": i, "success": 0.5 if scene else 0.25} for i, _ in saved]
+
+  run = _Run()
+  monkeypatch.setattr(checkpoints, "evaluate_checkpoints", evaluate_checkpoints)
+  monkeypatch.setattr(wandb, "init", lambda **k: run)
+  monkeypatch.setenv("WANDB_RUN_ID", "abc123")
+  args = TrainConfig.from_task("Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen")
+  object.__setattr__(args, "evaluate", evaluate)
+
+  _finish("Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen", args, tmp_path)
+
+  assert run.finished
+  assert run.saved == ["model_200.pt", f"{tmp_path.name}.onnx"]
+  assert (tmp_path / "model_100.pt").exists() is not evaluate
+  if evaluate:
+    assert (tmp_path / "evaluation.csv").exists()
+    assert (tmp_path / "final_evaluation.csv").exists()
+    assert {"eval/iteration": 200, "eval/success": 0.25} in run.rows
+    assert run.summary["final/real_texture_wood/success"] == 0.5
 
 
 def test_vbrl_list_prints_every_registry_from_its_own_table(capsys) -> None:

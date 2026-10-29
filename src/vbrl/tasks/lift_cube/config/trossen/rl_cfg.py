@@ -64,7 +64,7 @@ def trossen_lift_cube_ppo_runner_cfg(
       "actor": ("actor", "camera"),
       "critic": ("critic",),
     },
-    save_interval=1_000_000,
+    save_interval=100,
     experiment_name="trossen_lift_cube_rgb",
     run_name=wandb_task_tag(task_id),
     logger="wandb",

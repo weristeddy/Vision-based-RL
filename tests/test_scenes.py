@@ -67,12 +67,11 @@ def test_matched_dr_is_rejected_for_non_ood_scenes(scene: str) -> None:
     get_preset(scene, eval_dr="matched")
 
 
-def test_replace_scene_rejects_a_non_ood_target() -> None:
+def test_replace_scene_rejects_an_unknown_scene() -> None:
   from vbrl.scenes.builder import replace_scene
 
-  cfg = _apply("real_texture")
-  with pytest.raises(ValueError, match="not an OOD texture replacement"):
-    replace_scene(cfg, scene="procedural")
+  with pytest.raises(ValueError, match="Unknown scene"):
+    replace_scene(_apply("real_texture"), scene="marble")
 
 
 @pytest.mark.parametrize(
@@ -238,7 +237,7 @@ def test_realistic_scenes_add_a_fill_light() -> None:
     assert (found >= 0) is has_fill, scene
 
 
-@pytest.mark.parametrize("scene", ood_scenes())
+@pytest.mark.parametrize("scene", ("real_table", "real_texture_wood", *ood_scenes()))
 def test_apply_scene_and_replace_scene_agree(scene: str) -> None:
   from vbrl.scenes.builder import replace_scene
 
@@ -253,10 +252,10 @@ def test_apply_scene_and_replace_scene_agree(scene: str) -> None:
     assert term.params == other.params, name
   assert frozenset(direct.scene.entities) == frozenset(replaced.scene.entities)
   for entity in ("table", "cube"):
-    assert (
-      direct.scene.entities[entity].spec_fn().to_xml()
-      == replaced.scene.entities[entity].spec_fn().to_xml()
-    ), entity
+    specs = [cfg.scene.entities[entity].spec_fn() for cfg in (direct, replaced)]
+    for spec in specs:
+      spec.compile()
+    assert specs[0].to_xml() == specs[1].to_xml(), entity
 
 
 def test_a_recording_holds_the_sun_colour_but_keeps_its_pose_jitter() -> None:

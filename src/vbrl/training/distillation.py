@@ -31,6 +31,7 @@ class DistillationRunnerCfg(RslRlBaseRunnerCfg):
   teacher: RslRlModelCfg = field(default_factory=RslRlModelCfg)
   algorithm: VisualDistillationCfg = field(default_factory=VisualDistillationCfg)
   class_name: str = "DistillationRunner"
+  evaluation_scenes: tuple[str, ...] = ()
 
 
 class VisualDistillation(Distillation):

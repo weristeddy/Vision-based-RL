@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
+from mjlab.rl import RslRlOnPolicyRunnerCfg
 from mjlab.rl.runner import MjlabOnPolicyRunner
 from rsl_rl.modules import EmpiricalNormalization
 from rsl_rl.runners import DistillationRunner
+
+
+@dataclass
+class VbrlOnPolicyRunnerCfg(RslRlOnPolicyRunnerCfg):
+  evaluation_scenes: tuple[str, ...] = ()
 
 
 class GoalYawNormalization(EmpiricalNormalization):
@@ -115,4 +122,9 @@ class VbrlDistillationRunner(VbrlOnPolicyRunner, DistillationRunner):
     super().__init__(env, train_cfg, log_dir, device)
 
 
-__all__ = ["VbrlDistillationRunner", "VbrlOnPolicyRunner", "policy_metadata"]
+__all__ = [
+  "VbrlDistillationRunner",
+  "VbrlOnPolicyRunner",
+  "VbrlOnPolicyRunnerCfg",
+  "policy_metadata",
+]

@@ -586,7 +586,7 @@ def replace_scene(
   scene: str,
   eval_dr: EvaluationDr = "fixed",
 ) -> ManagerBasedRlEnvCfg:
-  preset = get_preset(scene, eval_dr=eval_dr, require_ood=True)
+  preset = get_preset(scene, eval_dr=eval_dr)
   object_name = _task_object(cfg.scene.entities)
   source = cfg.scene.entities[object_name].spec_fn
   assert source is not None

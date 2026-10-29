@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg
+from mjlab.rl import RslRlModelCfg
 
 from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillationCfg
 from vbrl.training.ppo import VisualPpoCfg
+from vbrl.training.runner import VbrlOnPolicyRunnerCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
+_EVALUATION_SCENES = ("real_table", "real_texture_wood")
 _DISTILLATION_MAX_ITERATIONS = 5000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
@@ -56,8 +58,8 @@ def _algorithm(**vision_batching) -> VisualPpoCfg:
   )
 
 
-def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
-  return RslRlOnPolicyRunnerCfg(
+def trossen_realistic_push_t_state_ppo_runner_cfg() -> VbrlOnPolicyRunnerCfg:
+  return VbrlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
     max_iterations=8000,
@@ -65,7 +67,7 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       "actor": ("actor",),
       "critic": ("critic",),
     },
-    save_interval=50,
+    save_interval=100,
     experiment_name="push_t_state_trossen_realistic_sim2real_dr",
     run_name=wandb_task_tag(STATE_TASK_ID),
     logger="wandb",
@@ -89,8 +91,8 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
 
 def trossen_realistic_push_t_rgb_ppo_runner_cfg(
   task_id: str, vision: VisionConfig
-) -> RslRlOnPolicyRunnerCfg:
-  return RslRlOnPolicyRunnerCfg(
+) -> VbrlOnPolicyRunnerCfg:
+  return VbrlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
     max_iterations=8000,
@@ -98,7 +100,8 @@ def trossen_realistic_push_t_rgb_ppo_runner_cfg(
       "actor": ("actor", "camera"),
       "critic": ("critic",),
     },
-    save_interval=8001,
+    save_interval=100,
+    evaluation_scenes=_EVALUATION_SCENES,
     experiment_name="push_t_rgb_ppo",
     run_name=wandb_task_tag(task_id),
     logger="wandb",
@@ -136,7 +139,8 @@ def trossen_realistic_push_t_rgb_distillation_runner_cfg(
     num_steps_per_env=16,
     max_iterations=_DISTILLATION_MAX_ITERATIONS,
     obs_groups={"student": ("actor", "camera"), "teacher": ("teacher",)},
-    save_interval=_DISTILLATION_MAX_ITERATIONS + 1,
+    save_interval=100,
+    evaluation_scenes=_EVALUATION_SCENES,
     experiment_name="push_t_rgb_distillation",
     run_name=wandb_task_tag(task_id),
     logger="wandb",
