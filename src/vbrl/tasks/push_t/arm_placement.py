@@ -8,10 +8,11 @@ JOINTS = tuple(f"robot/joint_{i}" for i in range(6))
 PADS = ("robot/gripper_left_pad", "robot/gripper_right_pad")
 
 
-def _rotation(yaw: float) -> np.ndarray:
+def gripper_rotation(yaw: float, tilt: float = 0.0) -> np.ndarray:
   down = np.array([0.0, 0.0, -1.0])
   across = np.array([np.cos(yaw), np.sin(yaw), 0.0])
-  return np.column_stack((down, across, np.cross(down, across)))
+  pointing = np.cos(tilt) * down + np.sin(tilt) * np.cross(down, across)
+  return np.column_stack((pointing, across, np.cross(pointing, across)))
 
 
 def placement_table(
@@ -20,7 +21,7 @@ def placement_table(
   limits: np.ndarray,
   xs: np.ndarray,
   ys: np.ndarray,
-  yaws: np.ndarray,
+  rotations: np.ndarray,
   height: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
   import mujoco
@@ -67,20 +68,19 @@ def placement_table(
       q = np.clip(q + step, low, high)
     return None
 
-  joint_pos = np.full((len(xs), len(ys), len(yaws), 6), np.nan)
-  warm = np.tile(seed, (len(yaws), 1))
+  joint_pos = np.full((len(xs), len(ys), len(rotations), 6), np.nan)
+  warm = np.tile(seed, (len(rotations), 1))
   for i, x in enumerate(xs):
     for j in range(len(ys)) if i % 2 == 0 else reversed(range(len(ys))):
-      for k, yaw in enumerate(yaws):
-        rotation = _rotation(yaw)
+      for k, rotation in enumerate(rotations):
         pad = np.array([base[0] + x, base[1] + ys[j], top + height])
         q = solve(warm[k].copy(), pad - rotation @ offset, rotation)
         if q is not None and not touches_table(q):
           joint_pos[i, j, k] = warm[k] = q
 
   grid = np.stack(np.meshgrid(xs, ys, indexing="ij"), axis=-1).reshape(-1, 2)
-  joint_pos = joint_pos.reshape(len(grid), len(yaws), 6)
+  joint_pos = joint_pos.reshape(len(grid), len(rotations), 6)
   return grid, joint_pos, ~np.isnan(joint_pos[..., 0])
 
 
-__all__ = ["placement_table"]
+__all__ = ["gripper_rotation", "placement_table"]

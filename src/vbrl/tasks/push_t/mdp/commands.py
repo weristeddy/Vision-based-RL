@@ -61,25 +61,30 @@ class PushTCommand(LiftingCommand):
       self._init_start_bank(env)
 
   def _init_start_bank(self, env: ManagerBasedRlEnv) -> None:
-    from ..arm_placement import placement_table
+    from ..arm_placement import gripper_rotation, placement_table
 
     self._robot = env.scene["robot"]
-    grid, joint_pos, valid = placement_table(
-      env.sim.mj_model,
-      self._robot.data.default_joint_pos[0, :6].cpu().numpy(),
-      self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy(),
-      np.arange(0.07, 0.64, 0.01),
-      np.arange(-0.33, 0.34, 0.01),
-      np.linspace(0.0, np.pi, 6, endpoint=False),
-      HALF_HEIGHT,
+    yaws = np.linspace(0.0, np.pi, self.cfg.start_yaws, endpoint=False)
+    tilt = self.cfg.start_tilt
+    rotations = [gripper_rotation(y, t) for y in yaws for t in (0.0, tilt, -tilt)]
+    seed = self._robot.data.default_joint_pos[0, :6].cpu().numpy()
+    limits = self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy()
+    xs, ys = np.arange(0.13, 0.58, 0.01), np.arange(-0.27, 0.28, 0.01)
+    tables = [
+      placement_table(env.sim.mj_model, seed, limits, xs, ys, rotations, height)
+      for height, _, _ in self.cfg.start_levels
+    ]
+    grid = tables[0][0]
+    placements = np.stack([np.nan_to_num(t[1]) for t in tables])
+    self._pad_xy = torch.tensor(grid, dtype=torch.float, device=self.device)
+    self._placements = torch.tensor(placements, dtype=torch.float, device=self.device)
+    self._placement_valid = torch.tensor(
+      np.stack([t[2] for t in tables]), device=self.device
     )
-    reachable = valid.any(1)
-    joint_pos = np.nan_to_num(joint_pos[reachable])
-    self._pad_xy = torch.tensor(grid[reachable], dtype=torch.float, device=self.device)
-    self._placements = torch.tensor(joint_pos, dtype=torch.float, device=self.device)
-    self._placement_valid = torch.tensor(valid[reachable], device=self.device)
     self._start_mode = torch.full((self.num_envs,), -1, device=self.device)
-    self._mode_success = torch.full((2,), 0.5, device=self.device)
+    self._mode_success = torch.full(
+      (len(self.cfg.start_levels) + 1,), 0.5, device=self.device
+    )
     self.metrics["near_object_start"] = torch.zeros(self.num_envs, device=self.device)
 
   @property
@@ -147,8 +152,10 @@ class PushTCommand(LiftingCommand):
     modes = self._start_mode[env_ids]
     done = modes >= 0
     success = self.episode_success[env_ids][done].float()
-    count = torch.bincount(modes[done], minlength=2)
-    mean = torch.bincount(modes[done], weights=success, minlength=2) / count.clamp_min(1)
+    levels = len(self._mode_success)
+    count = torch.bincount(modes[done], minlength=levels)
+    mean = torch.bincount(modes[done], weights=success, minlength=levels)
+    mean = mean / count.clamp_min(1)
     keep = (1.0 - self.cfg.start_success_rate) ** count
     self._mode_success = keep * self._mode_success + (1.0 - keep) * mean
 
@@ -157,24 +164,29 @@ class PushTCommand(LiftingCommand):
   ) -> None:
     p = self._mode_success
     weights = self.cfg.start_sampling_floor + torch.sqrt(p * (1.0 - p))
-    near = torch.multinomial(weights, len(env_ids), replacement=True) == 1
+    mode = torch.multinomial(weights, len(env_ids), replacement=True)
     base = self._robot.data.default_root_state[env_ids, :2]
     dx, dy = (self._pad_xy - (object_pos[:, :2] - base)[:, None]).unbind(-1)
     cos, sin = torch.cos(object_yaw)[:, None], torch.sin(object_yaw)[:, None]
     local = torch.stack((cos * dx + sin * dy, cos * dy - sin * dx), dim=-1)
     gap = footprint_signed_distance(local, self.cfg.footprint_parts)
-    low, high = self.cfg.near_object_gap
-    candidates = (gap >= low) & (gap <= high)
-    near &= candidates.any(1)
-    self._start_mode[env_ids] = near.long()
-    self.metrics["near_object_start"][env_ids] = near.float()
-    ids = env_ids[near]
+    joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
+    for level, (_, low, high) in enumerate(self.cfg.start_levels):
+      valid = self._placement_valid[level]
+      candidates = (gap >= low) & (gap <= high) & valid.any(1)
+      chosen = (mode == level + 1) & candidates.any(1)
+      mode[(mode == level + 1) & ~chosen] = 0
+      if not chosen.any():
+        continue
+      point = torch.multinomial(candidates[chosen].float(), 1).squeeze(1)
+      rotation = torch.multinomial(valid[point].float(), 1).squeeze(1)
+      joint_pos[chosen, :6] = self._placements[level, point, rotation]
+    self._start_mode[env_ids] = mode
+    self.metrics["near_object_start"][env_ids] = (mode > 0).float()
+    ids = env_ids[mode > 0]
     if len(ids) == 0:
       return
-    point = torch.multinomial(candidates[near].float(), 1).squeeze(1)
-    yaw = torch.multinomial(self._placement_valid[point].float(), 1).squeeze(1)
-    joint_pos = self._robot.data.default_joint_pos[ids].clone()
-    joint_pos[:, :6] = self._placements[point, yaw]
+    joint_pos = joint_pos[mode > 0]
     velocity = torch.zeros_like(joint_pos)
     self._robot.write_joint_state_to_sim(joint_pos, velocity, env_ids=ids)
     self._env.action_manager.get_term("joint_pos").reset(ids)
@@ -300,7 +312,17 @@ class PushTCommandCfg(LiftingCommandCfg):
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
   near_object_start: bool = False
-  near_object_gap: tuple[float, float] = (0.02, 0.04)
+  # (pad height over the table, signed distance to the outline low, high), one
+  # start type each besides home: pads beside the T at mid-height, 3 mm over the
+  # top face, 3 cm over it. None starts in contact: at 2 cm beside the T a 25 deg
+  # tilt leaned the hand onto the top face in 15 of 131 starts.
+  start_levels: tuple[tuple[float, float, float], ...] = (
+    (HALF_HEIGHT, 0.03, 0.05),
+    (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03),
+    (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05),
+  )
+  start_yaws: int = 4
+  start_tilt: float = math.radians(25.0)
   start_sampling_floor: float = 0.05
   start_success_rate: float = 0.01
 

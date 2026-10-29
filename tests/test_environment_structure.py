@@ -145,7 +145,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert rgb_goal.goal_marker_name == "goal_marker"
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.success_threshold == rgb_goal.success_threshold
-  assert state_goal.near_object_start and not rgb_goal.near_object_start
+  assert state_goal.near_object_start and rgb_goal.near_object_start
   assert state.curriculum == rgb.curriculum == {}
   assert state.rewards == rgb.rewards
   assert set(state.terminations) - set(rgb.terminations) == {"top_face_contact"}

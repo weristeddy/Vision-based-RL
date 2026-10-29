@@ -330,8 +330,9 @@ def build_env_cfg(
 
   if rgb:
     cfg.observations["actor"].terms.pop("obj_pose")
-  if not (distill or play):
+  if not play:
     cfg.commands[_COMMAND].near_object_start = True
+  if not (distill or play):
     cfg.terminations["top_face_contact"] = TerminationTermCfg(
       func=mdp.top_face_contact,
       params={"sensor_name": _CONTACT_SENSOR, "min_force_n": 1.0},

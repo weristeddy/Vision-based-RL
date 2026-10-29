@@ -190,6 +190,20 @@ def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
   assert command.metrics["position_error"].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.5])
 
 
+def test_gripper_rotation_tilts_the_pointing_axis_about_the_finger_axis() -> None:
+  import numpy as np
+
+  from vbrl.tasks.push_t.arm_placement import gripper_rotation
+
+  rotation = gripper_rotation(0.7, math.radians(25.0))
+
+  assert np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-9)
+  assert np.isclose(np.linalg.det(rotation), 1.0)
+  assert np.degrees(np.arccos(-rotation[2, 0])) == pytest.approx(25.0)
+  assert rotation[2, 1] == pytest.approx(0.0)
+  assert np.allclose(gripper_rotation(0.7)[:, 0], (0.0, 0.0, -1.0))
+
+
 def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
   from vbrl.tasks.push_t.mdp.rewards import ee_tilt
 

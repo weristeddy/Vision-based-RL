@@ -411,29 +411,35 @@ def test_the_arm_can_actually_push_the_object() -> None:
 
 @pytest.mark.sim
 @pytest.mark.gpu
-def test_near_object_starts_place_the_pads_beside_the_t_and_hold() -> None:
+def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> None:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
 
   import vbrl.tasks  # noqa: F401
-  from vbrl.tasks.push_t.geometry import HALF_HEIGHT
+  from vbrl.tasks.push_t.mdp.rewards import max_contact_force
 
   cfg = load_env_cfg(STATE_TASK_ID, play=True)
-  cfg.scene.num_envs = 64
+  cfg.scene.num_envs = 128
   cfg.commands["push_t_goal"].near_object_start = True
   env = ManagerBasedRlEnv(cfg, device=DEVICE)
   try:
     env.reset()
     robot = env.scene["robot"]
-    near = env.command_manager.get_term("push_t_goal")._start_mode == 1
+    command = env.command_manager.get_term("push_t_goal")
+    mode = command._start_mode.clone()
     held = robot.data.joint_pos[:, :6].clone()
-    for _ in range(10):
-      env.step(torch.zeros(64, env.action_manager.total_action_dim, device=DEVICE))
+    env.step(torch.zeros(128, env.action_manager.total_action_dim, device=DEVICE))
+    touching = max_contact_force(env, "ee_object_contact") > 0.0
+    for _ in range(9):
+      env.step(torch.zeros(128, env.action_manager.total_action_dim, device=DEVICE))
     pads = robot.data.geom_pos_w[:, robot.find_geoms("gripper_(left|right)_pad")[0]]
     height = pads.mean(1)[:, 2] - env.scene.env_origins[:, 2]
 
-    assert near.any() and not near.all()
-    assert (height[near] - HALF_HEIGHT).abs().max() < 2e-3
+    assert set(mode.tolist()) == set(range(len(command.cfg.start_levels) + 1))
+    for level, (expected, _, _) in enumerate(command.cfg.start_levels):
+      placed = mode == level + 1
+      assert (height[placed] - expected).abs().max() < 3e-3, level
+    assert not touching[mode > 0].any()
     assert (robot.data.joint_pos[:, :6] - held).abs().max() < 1e-3
   finally:
     env.close()
