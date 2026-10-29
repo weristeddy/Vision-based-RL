@@ -51,12 +51,10 @@ class PushTCommand(LiftingCommand):
     )
     self._overlap_cache = torch.zeros(self.num_envs, device=self.device)
     self._overlap_cache_step: int | None = None
-    self.metrics["yaw_error"] = torch.zeros(
-      self.num_envs, device=self.device
-    )
-    self.metrics["overlap"] = torch.zeros(
-      self.num_envs, device=self.device
-    )
+    for name in ("object_height", "at_goal"):
+      self.metrics.pop(name)
+    self.metrics["yaw_error"] = torch.zeros(self.num_envs, device=self.device)
+    self.metrics["overlap"] = torch.zeros(self.num_envs, device=self.device)
     if cfg.near_object_start:
       self._init_start_bank(env)
 
@@ -85,7 +83,6 @@ class PushTCommand(LiftingCommand):
     self._mode_success = torch.full(
       (len(self.cfg.start_levels) + 1,), 0.5, device=self.device
     )
-    self.metrics["near_object_start"] = torch.zeros(self.num_envs, device=self.device)
 
   @property
   def command(self) -> torch.Tensor:
@@ -134,7 +131,6 @@ class PushTCommand(LiftingCommand):
       wrap_to_pi(self.target_yaw - object_yaw)
     )
     self.metrics["overlap"] = overlap
-    self.metrics["at_goal"] = at_goal.to(overlap.dtype)
     self.metrics["episode_success"] = self.episode_success
     return at_goal
 
@@ -142,7 +138,6 @@ class PushTCommand(LiftingCommand):
     return self._record_success(self.get_overlap())
 
   def _update_metrics(self) -> None:
-    self.metrics["object_height"] = self.object.data.root_link_pos_w[:, 2]
     self._record_success(self.get_overlap())
 
   def compute_success(self) -> torch.Tensor:
@@ -182,7 +177,6 @@ class PushTCommand(LiftingCommand):
       rotation = torch.multinomial(valid[point].float(), 1).squeeze(1)
       joint_pos[chosen, :6] = self._placements[level, point, rotation]
     self._start_mode[env_ids] = mode
-    self.metrics["near_object_start"][env_ids] = (mode > 0).float()
     ids = env_ids[mode > 0]
     if len(ids) == 0:
       return

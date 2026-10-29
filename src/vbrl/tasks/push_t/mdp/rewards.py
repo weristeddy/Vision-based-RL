@@ -31,10 +31,6 @@ def _contact(env: ManagerBasedRlEnv, sensor_name: str, *fields: str) -> Any:
   return data
 
 
-def _press(data: Any) -> torch.Tensor:
-  return torch.nan_to_num(data.force[..., 2], nan=0.0).sum(dim=-1).abs()
-
-
 # The centre of mass lies inside the T, so the closest a closed gripper gets to it
 # is on the top face; t2fn9uc9 avoided the T for 2,500 iterations between that
 # pull and the top_face_contact termination.
@@ -81,14 +77,6 @@ def maniskill_dense_reward(
   return reward / _MAX_REWARD
 
 
-def top_contact_share(
-  env: ManagerBasedRlEnv, sensor_name: str, verticality_threshold: float = _VERTICAL
-) -> torch.Tensor:
-  data = _contact(env, sensor_name, "found", "normal")
-  vertical = data.normal[..., 2].abs() > verticality_threshold
-  return ((data.found > 0) & vertical).any(dim=-1).float()
-
-
 # 1 - cos of the angle between the gripper's pointing axis and straight down; yaw
 # about the vertical stays free. Policies held the gripper 25-50 deg off vertical
 # while pushing, touching the T with pad edges and the hand instead of the pads.
@@ -114,21 +102,6 @@ def at_goal_static(
   return static * command.get_at_goal().to(static.dtype)
 
 
-def peak_object_press(
-  env: ManagerBasedRlEnv, sensor_name: str, weight_n: float
-) -> torch.Tensor:
-  return (_press(_contact(env, sensor_name, "force")) - weight_n).clamp_min(0.0)
-
-
-def max_contact_force(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
-  data = _contact(env, sensor_name)
-  force = data.force_history if data.force_history is not None else data.force
-  if force is None:
-    raise RuntimeError(f"Contact sensor {sensor_name!r} needs force.")
-  magnitude = torch.linalg.vector_norm(force, dim=-1)
-  return torch.nan_to_num(magnitude, nan=0.0).flatten(1).amax(dim=-1)
-
-
 # Reads force, not force_history: the classifying normal is only published at
 # policy-step resolution.
 def max_contact_force_on_face(
@@ -150,21 +123,10 @@ def table_touch(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   return (_contact(env, sensor_name, "found").found > 0).any(dim=-1).float()
 
 
-# `episode_success` latches on the first at-goal step, so it says whether the
-# goal was ever reached, not whether the arm held it. This says how much of the
-# episode was spent there.
-def at_goal_share(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-  return push_t_command(env, command_name).get_at_goal().float()
-
-
 __all__ = [
   "at_goal_static",
-  "at_goal_share",
   "ee_tilt",
   "maniskill_dense_reward",
-  "max_contact_force",
   "max_contact_force_on_face",
-  "peak_object_press",
   "table_touch",
-  "top_contact_share",
 ]

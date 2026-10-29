@@ -111,7 +111,7 @@ def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:
       continue
     cfg = load_env_cfg(task_id)
     command = cfg.commands["push_t_goal"]
-    assert "goal_yaw_range" not in cfg.curriculum, task_id
+    assert cfg.curriculum == {}, task_id
     assert command.success_threshold == pytest.approx(0.90), task_id
     assert command.target_yaw_range == pytest.approx((-math.pi, math.pi)), task_id
 

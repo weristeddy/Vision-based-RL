@@ -82,12 +82,6 @@ class VbrlOnPolicyRunner(MjlabOnPolicyRunner):
         yaw_start = sum(dim[0] for dim in dims[: names.index("target_pose")]) + 3
         model.obs_normalizer = GoalYawNormalization(model.obs_dim, yaw_start).to(device)
 
-  def load(self, path: str, *args, **kwargs) -> dict:
-    infos = super().load(path, *args, **kwargs)
-    if hasattr(self.alg, "iteration"):
-      self.alg.iteration = self.current_learning_iteration
-    return infos
-
   def save(self, path: str, infos: Any = None) -> None:
     super().save(path, infos)
     policy_dir, filename, onnx_path = self._get_export_paths(path)

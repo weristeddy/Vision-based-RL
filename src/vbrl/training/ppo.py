@@ -17,9 +17,6 @@ class VisualPpoCfg(RslRlPpoAlgorithmCfg):
   feature_cache_dtype: str = "bfloat16"
   gradient_accumulation_steps: int = 1
   early_stop_kl: bool = False
-  entropy_coef_final: float | None = None
-  entropy_decay_start: int = 0
-  entropy_decay_iterations: int = 0
   bound_loss_coef: float = 0.0
   action_head_init_scale: float | None = None
   class_name: str = "vbrl.training.ppo:VisualPPO"
@@ -55,9 +52,6 @@ class VisualPPO(PPO):
     feature_cache_dtype: str = "bfloat16",
     gradient_accumulation_steps: int = 1,
     early_stop_kl: bool = False,
-    entropy_coef_final: float | None = None,
-    entropy_decay_start: int = 0,
-    entropy_decay_iterations: int = 0,
     bound_loss_coef: float = 0.0,
     action_head_init_scale: float | None = None,
     **kwargs,
@@ -68,17 +62,6 @@ class VisualPPO(PPO):
       with torch.no_grad():
         self.actor.mlp[-1].weight.mul_(action_head_init_scale)
         self.actor.mlp[-1].bias.zero_()
-    self.initial_entropy_coef = float(self.entropy_coef)
-    self.entropy_coef_final = entropy_coef_final
-    self.entropy_decay_start = int(entropy_decay_start)
-    self.entropy_decay_iterations = int(entropy_decay_iterations)
-    self.iteration = 0
-    if entropy_coef_final is not None and (
-      entropy_coef_final < 0.0 or self.entropy_decay_iterations < 0
-    ):
-      raise ValueError(
-        "entropy_coef_final and entropy_decay_iterations must be non-negative."
-      )
     self._cached_feature_models = [
       model
       for model in (self._raw_actor, self._raw_critic)
@@ -105,22 +88,7 @@ class VisualPPO(PPO):
   def compute_returns(self, obs: TensorDict) -> None:
     super().compute_returns(self._with_cached_features(obs))
 
-  def scheduled_entropy_coef(self, iteration: int) -> float:
-    if self.entropy_coef_final is None:
-      return self.initial_entropy_coef
-    elapsed = iteration - self.entropy_decay_start
-    if elapsed <= 0:
-      return self.initial_entropy_coef
-    if elapsed >= self.entropy_decay_iterations:
-      return float(self.entropy_coef_final)
-    fraction = elapsed / self.entropy_decay_iterations
-    return self.initial_entropy_coef + fraction * (
-      self.entropy_coef_final - self.initial_entropy_coef
-    )
-
   def update(self) -> dict[str, float]:
-    self.entropy_coef = self.scheduled_entropy_coef(self.iteration)
-    self.iteration += 1
     if (
       self.gradient_accumulation_steps == 1
       and not self.early_stop_kl
@@ -129,8 +97,6 @@ class VisualPPO(PPO):
       losses = super().update()
     else:
       losses = self._update_with_gradient_accumulation()
-    if self.entropy_coef_final is not None:
-      losses["entropy_coef"] = self.entropy_coef
     return losses
 
   def _with_cached_features(self, obs: TensorDict) -> TensorDict:

@@ -24,7 +24,6 @@ from .goal_marker import GOAL_ENTITY_NAME
 
 _COMMAND = "push_t_goal"
 _CONTACT_SENSOR = "ee_object_contact"
-_OBJECT_TABLE_SENSOR = "object_table_contact"
 _TABLE_SENSOR = "robot_table_contact"
 # 20 Hz: one decision per arm response time. At 50 Hz the measured shoulder
 # (110-200 ms lag, 4-14 mrad friction deadband) swallowed most per-step actions,
@@ -37,9 +36,6 @@ EPISODE_LENGTH_S = 10.0
 SUCCESS_THRESHOLD = 0.90
 EE_VERTICAL_WEIGHT = -0.1
 TABLE_TOUCH_WEIGHT = -1.0
-# The printed object weighed 50.7 g, against the 172.8 g the MJCF used to carry; sliding
-# distance goes as 1/m^2, so the old mass travelled 11.6x less for the same push.
-OBJECT_WEIGHT_N = 0.497
 ACTION_RATE_WEIGHT = -0.01
 JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
@@ -189,15 +185,9 @@ def build_env_cfg(
       params={"asset_cfg": robot_ee},
     ),
   }
-  # Hardware-safety readouts. Metrics carry no weight and never enter the return.
+  # Metrics carry no weight and never enter the return. A lateral push is bounded
+  # by the task (the T slides at ~0.7 N); a press into the top face only by the arm.
   cfg.metrics = {
-    "peak_table_force": MetricsTermCfg(
-      func=mdp.max_contact_force,
-      reduce="max",
-      params={"sensor_name": _TABLE_SENSOR},
-    ),
-    # A lateral push is bounded by the task (the T slides at ~0.7 N); a press
-    # into the top face is bounded only by the arm.
     "peak_top_face_force": MetricsTermCfg(
       func=mdp.max_contact_force_on_face,
       reduce="max",
@@ -207,25 +197,6 @@ def build_env_cfg(
       func=mdp.max_contact_force_on_face,
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
-    ),
-    # Weight subtracted, so 0.0 means "not pressing".
-    "peak_object_press": MetricsTermCfg(
-      func=mdp.peak_object_press,
-      reduce="max",
-      params={
-        "sensor_name": _OBJECT_TABLE_SENSOR,
-        "weight_n": OBJECT_WEIGHT_N,
-      },
-    ),
-    "top_contact_share": MetricsTermCfg(
-      func=mdp.top_contact_share,
-      reduce="mean",
-      params={"sensor_name": _CONTACT_SENSOR},
-    ),
-    "at_goal_share": MetricsTermCfg(
-      func=mdp.at_goal_share,
-      reduce="mean",
-      params={"command_name": _COMMAND},
     ),
   }
   cfg.terminations.update(
@@ -303,15 +274,6 @@ def build_env_cfg(
       fields=("found", "force"),
       reduce="maxforce",
       num_slots=1,
-    ),
-    # `netforce`: the exact quantity is the *total* vertical load the table
-    # carries, not the largest of the T's several footprint contacts.
-    ContactSensorCfg(
-      name=_OBJECT_TABLE_SENSOR,
-      primary=ContactMatch(mode="body", pattern="push_t", entity=object_name),
-      secondary=ContactMatch(mode="geom", pattern="table_top", entity="table"),
-      fields=("found", "force"),
-      reduce="netforce",
     ),
   )
   cfg.episode_length_s = EPISODE_LENGTH_S

@@ -233,20 +233,6 @@ _PRESETS: dict[str, ScenePreset] = {
     table=_AMBIENTCG_TABLE,
     wide_lighting=True,
   ),
-  "real_texture_red": ScenePreset(
-    "real_texture_red",
-    table=_AMBIENTCG_TABLE,
-    colour_dr=False,
-    wide_lighting=True,
-  ),
-  # The object stays a real-looking bordeaux instead of any colour in the cube,
-  # measured off the rig at #68392c under matched exposure.
-  "real_texture_bordeaux": ScenePreset(
-    "real_texture_bordeaux",
-    table=_AMBIENTCG_TABLE,
-    wide_lighting=True,
-    object_colour_range=((0.30, 0.52), (0.14, 0.30), (0.10, 0.26)),
-  ),
   # One fixed table texture and no texture DR at all -- the rig's tabletop, laid
   # down once. Object and goal keep colour DR inside their measured ranges, and
   # the lighting stays randomized.

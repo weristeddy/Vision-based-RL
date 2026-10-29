@@ -238,7 +238,6 @@ def test_push_t_success_threshold_latches_metrics() -> None:
       "position_error",
       "yaw_error",
       "overlap",
-      "at_goal",
       "episode_success",
     )
   }
@@ -489,20 +488,12 @@ def _push_t_reward_env(target_pos, target_yaw, object_pos, object_yaw, weight=0.
 
 
 def test_push_t_table_touch_is_binary_over_the_whole_robot() -> None:
-  from vbrl.tasks.push_t.mdp import max_contact_force, table_touch
+  from vbrl.tasks.push_t.mdp import table_touch
 
-  force = torch.tensor([[[[n, 0.0, 0.0]]] for n in (0.0, 0.5, 200.0)])
-  sensor = SimpleNamespace(
-    data=SimpleNamespace(
-      found=torch.tensor([[0.0], [1.0], [1.0]]), force=None, force_history=force
-    )
-  )
+  sensor = SimpleNamespace(data=SimpleNamespace(found=torch.tensor([[0.0], [1.0], [2.0]])))
   env = SimpleNamespace(scene={"robot_table_contact": sensor})
   assert torch.equal(
     table_touch(env, "robot_table_contact"), torch.tensor([0.0, 1.0, 1.0])
-  )
-  assert torch.allclose(
-    max_contact_force(env, "robot_table_contact"), torch.tensor([0.0, 0.5, 200.0])
   )
 
 
@@ -528,27 +519,6 @@ def test_push_t_at_goal_static_rewards_a_still_arm_only_at_the_goal() -> None:
   assert torch.allclose(at_goal_static(env, "push_t_goal", cfg), expected)
 
 
-
-
-def test_push_t_peak_object_press_subtracts_the_weight() -> None:
-  from vbrl.tasks.push_t.mdp import peak_object_press
-
-  W = 0.497
-  sensor = SimpleNamespace(
-    data=SimpleNamespace(
-      force=torch.tensor(
-        [
-          [[0.0, 0.0, -W]],
-          [[200.0, -150.0, -W]],
-          [[3.0, 0.0, -(W + 2.0)]],
-          [[8.0, 0.0, -(W + 30.0)]],
-        ]
-      ),
-    )
-  )
-  env = SimpleNamespace(scene={"object_table_contact": sensor})
-  press = peak_object_press(env, "object_table_contact", weight_n=W)
-  assert press.tolist() == pytest.approx([0.0, 0.0, 2.0, 30.0])
 
 
 def test_push_t_max_contact_force_splits_top_from_side() -> None:
@@ -582,26 +552,6 @@ def test_push_t_max_contact_force_splits_top_from_side() -> None:
     env, "ee_object_contact", vertical=False
   ).tolist() == [4.0, 9.0, 0.0]
 
-
-def test_push_t_top_contact_counts_only_vertical_contact_normals() -> None:
-  from vbrl.tasks.push_t.mdp import top_contact_share
-
-  sensor = SimpleNamespace(
-    data=SimpleNamespace(
-      found=torch.tensor([[1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 0.0]]),
-      normal=torch.tensor(
-        [
-          [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-          [[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
-          [[0.0, 0.6, 0.8], [0.0, 0.0, 1.0]],
-          [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
-        ]
-      ),
-    )
-  )
-  env = SimpleNamespace(scene={"ee_object_contact": sensor})
-  share = top_contact_share(env, "ee_object_contact")
-  assert share.tolist() == [0.0, 1.0, 1.0, 0.0]
 
 def test_push_t_observations_are_maniskill_poses_in_the_base_frame() -> None:
   from mjlab.managers.scene_entity_config import SceneEntityCfg
@@ -801,7 +751,6 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   from vbrl.tasks.push_t.push_t_env_cfg import (
     ACTION_RATE_WEIGHT,
     ACTION_SCALE,
-    OBJECT_WEIGHT_N,
     TABLE_TOUCH_WEIGHT,
   )
 
@@ -809,26 +758,16 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   definition = get_robot("trossen_realistic")
 
   sensors = {sensor.name: sensor for sensor in cfg.scene.sensors}
-  assert sensors["object_table_contact"].reduce == "netforce"
-  assert "force" in sensors["object_table_contact"].fields
+  assert {"ee_object_contact", "robot_table_contact"} <= set(sensors)
+  assert "object_table_contact" not in sensors
 
   assert set(cfg.scene.entities) == {"robot", "table", "object"}
   assert cfg.episode_length_s == 10.0
   assert cfg.sim.mujoco.timestep == 0.005
   assert cfg.decimation == 10
   assert cfg.scale_rewards_by_dt is False
-  assert set(cfg.metrics) == {
-    "peak_table_force",
-    "peak_top_face_force",
-    "peak_side_face_force",
-    "peak_object_press",
-    "top_contact_share",
-    "at_goal_share",
-  }
-  assert cfg.metrics["peak_table_force"].reduce == "max"
-  assert cfg.metrics["top_contact_share"].reduce == "mean"
-  # episode_success latches; this reports how long the goal was held.
-  assert cfg.metrics["at_goal_share"].reduce == "mean"
+  assert set(cfg.metrics) == {"peak_top_face_force", "peak_side_face_force"}
+  assert {term.reduce for term in cfg.metrics.values()} == {"max"}
 
   action = cfg.actions["joint_pos"]
   assert isinstance(action, TargetRelativeJointPositionActionCfg)
@@ -877,14 +816,11 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   assert "object_contact_force" not in cfg.rewards
   assert cfg.rewards["table_touch"].weight == TABLE_TOUCH_WEIGHT
   assert pytest.approx(-1.0) == TABLE_TOUCH_WEIGHT
-  assert OBJECT_WEIGHT_N == pytest.approx(0.497)
-  assert cfg.metrics["peak_object_press"].params["weight_n"] == OBJECT_WEIGHT_N
 
   assert cfg.rewards["table_touch"].params["sensor_name"] == "robot_table_contact"
   table = sensors["robot_table_contact"]
   assert (table.primary.mode, table.primary.pattern) == ("subtree", "base_link")
   assert table.secondary.entity == "table"
-  assert cfg.metrics["peak_table_force"].params["sensor_name"] == "robot_table_contact"
 
   assert cfg.curriculum == {}
 

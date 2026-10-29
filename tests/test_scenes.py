@@ -14,9 +14,8 @@ from vbrl.scenes.presets import (  # noqa: E402
 )
 
 ALL_SCENES = (
-  "default", "procedural", "real_texture", "real_texture_red",
-  "real_texture_bordeaux", "real_table", "real_texture_wood", "wood", "plaster",
-  "peacock",
+  "default", "procedural", "real_texture", "real_table", "real_texture_wood",
+  "wood", "plaster", "peacock",
 )
 # Every training preset randomizes the sun's colour on top of its pose. The
 # matched-evaluation branch deliberately does not; see `_events` in the builder.

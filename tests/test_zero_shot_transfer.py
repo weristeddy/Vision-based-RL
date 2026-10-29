@@ -416,8 +416,6 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
   from mjlab.tasks.registry import load_env_cfg
 
   import vbrl.tasks  # noqa: F401
-  from vbrl.tasks.push_t.mdp.rewards import max_contact_force
-
   cfg = load_env_cfg(STATE_TASK_ID, play=True)
   cfg.scene.num_envs = 128
   cfg.commands["push_t_goal"].near_object_start = True
@@ -429,7 +427,7 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
     mode = command._start_mode.clone()
     held = robot.data.joint_pos[:, :6].clone()
     env.step(torch.zeros(128, env.action_manager.total_action_dim, device=DEVICE))
-    touching = max_contact_force(env, "ee_object_contact") > 0.0
+    touching = (env.scene["ee_object_contact"].data.found > 0).any(-1)
     for _ in range(9):
       env.step(torch.zeros(128, env.action_manager.total_action_dim, device=DEVICE))
     pads = robot.data.geom_pos_w[:, robot.find_geoms("gripper_(left|right)_pad")[0]]
