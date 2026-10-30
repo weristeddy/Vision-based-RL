@@ -19,11 +19,13 @@ _NETWORK = {
 # Above std ~1 the +/-1 clip hides further noise, so nothing pulls a weakly used
 # joint's std back down and the entropy bonus drove one to 1e6 in visual runs.
 # The ceiling sits above init_std so a used joint never touches the hard clamp.
+# The floor: before the first push the noise penalties alone drove std to 0.09
+# (pha09ngg), too little to find one; learning runs settled at 0.40-0.49 after.
 _GAUSSIAN = {
   "class_name": "GaussianDistribution",
   "init_std": 1.0,
   "std_type": "log",
-  "std_range": (0.0, 1.5),
+  "std_range": (0.3, 1.5),
 }
 
 

@@ -113,6 +113,7 @@ def test_push_t_visual_ppo_trains_exactly_like_the_teacher() -> None:
   assert ppo.max_iterations == state.max_iterations
   assert ppo.obs_groups == {"actor": ("actor", "camera"), "critic": ("critic",)}
   assert ppo.actor.distribution_cfg == state.actor.distribution_cfg
+  assert state.actor.distribution_cfg["std_range"] == (0.3, 1.5)
   assert ppo.critic == state.critic
 
   state_env, ppo_env = load_env_cfg(STATE_TASK_ID), load_env_cfg(task_id)
