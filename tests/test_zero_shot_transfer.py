@@ -434,7 +434,7 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
     height = pads.mean(1)[:, 2] - env.scene.env_origins[:, 2]
 
     assert set(mode.tolist()) == set(range(len(command.cfg.start_levels) + 1))
-    for level, (expected, _, _) in enumerate(command.cfg.start_levels):
+    for level, (expected, _, _, _) in enumerate(command.cfg.start_levels):
       placed = mode == level + 1
       assert (height[placed] - expected).abs().max() < 3e-3, level
     assert not touching[mode > 0].any()

@@ -63,22 +63,20 @@ class PushTCommand(LiftingCommand):
 
     self._robot = env.scene["robot"]
     yaws = np.linspace(0.0, np.pi, self.cfg.start_yaws, endpoint=False)
-    tilt = self.cfg.start_tilt
-    rotations = [gripper_rotation(y, t) for y in yaws for t in (0.0, tilt, -tilt)]
     seed = self._robot.data.default_joint_pos[0, :6].cpu().numpy()
     limits = self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy()
     xs, ys = np.arange(0.13, 0.58, 0.01), np.arange(-0.27, 0.28, 0.01)
-    tables = [
-      placement_table(env.sim.mj_model, seed, limits, xs, ys, rotations, height)
-      for height, _, _ in self.cfg.start_levels
-    ]
-    grid = tables[0][0]
-    placements = np.stack([np.nan_to_num(t[1]) for t in tables])
+    self._placements, self._placement_valid = [], []
+    for height, _, _, tilt in self.cfg.start_levels:
+      tilts = sorted({0.0, tilt, -tilt})
+      rotations = [gripper_rotation(y, t) for y in yaws for t in tilts]
+      grid, joint_pos, valid = placement_table(
+        env.sim.mj_model, seed, limits, xs, ys, rotations, height
+      )
+      joint_pos = torch.tensor(np.nan_to_num(joint_pos), dtype=torch.float)
+      self._placements.append(joint_pos.to(self.device))
+      self._placement_valid.append(torch.tensor(valid, device=self.device))
     self._pad_xy = torch.tensor(grid, dtype=torch.float, device=self.device)
-    self._placements = torch.tensor(placements, dtype=torch.float, device=self.device)
-    self._placement_valid = torch.tensor(
-      np.stack([t[2] for t in tables]), device=self.device
-    )
     self._start_mode = torch.full((self.num_envs,), -1, device=self.device)
     self._mode_success = torch.full(
       (len(self.cfg.start_levels) + 1,), 0.5, device=self.device
@@ -166,7 +164,7 @@ class PushTCommand(LiftingCommand):
     local = torch.stack((cos * dx + sin * dy, cos * dy - sin * dx), dim=-1)
     gap = footprint_signed_distance(local, self.cfg.footprint_parts)
     joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
-    for level, (_, low, high) in enumerate(self.cfg.start_levels):
+    for level, (_, low, high, _) in enumerate(self.cfg.start_levels):
       valid = self._placement_valid[level]
       candidates = (gap >= low) & (gap <= high) & valid.any(1)
       chosen = (mode == level + 1) & candidates.any(1)
@@ -175,7 +173,7 @@ class PushTCommand(LiftingCommand):
         continue
       point = torch.multinomial(candidates[chosen].float(), 1).squeeze(1)
       rotation = torch.multinomial(valid[point].float(), 1).squeeze(1)
-      joint_pos[chosen, :6] = self._placements[level, point, rotation]
+      joint_pos[chosen, :6] = self._placements[level][point, rotation]
     self._start_mode[env_ids] = mode
     ids = env_ids[mode > 0]
     if len(ids) == 0:
@@ -306,17 +304,17 @@ class PushTCommandCfg(LiftingCommandCfg):
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
   near_object_start: bool = False
-  # (pad height over the table, signed distance to the outline low, high), one
-  # start type each besides home: pads beside the T at mid-height, 3 mm over the
-  # top face, 3 cm over it. None starts in contact: at 2 cm beside the T a 25 deg
-  # tilt leaned the hand onto the top face in 15 of 131 starts.
-  start_levels: tuple[tuple[float, float, float], ...] = (
-    (HALF_HEIGHT, 0.03, 0.05),
-    (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03),
-    (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05),
+  # (pad height over the table, signed distance to the outline low, high, gripper
+  # tilt), one start type each besides home: pads beside the T at mid-height,
+  # 3 mm over the top face, 3 cm over it. None starts in contact: 2 cm beside the
+  # T a 25 deg tilt leaned the hand onto the top face in 15 of 131 starts, so only
+  # the starts over the T tilt.
+  start_levels: tuple[tuple[float, float, float, float], ...] = (
+    (HALF_HEIGHT, 0.02, 0.04, 0.0),
+    (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
+    (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
   )
   start_yaws: int = 4
-  start_tilt: float = math.radians(25.0)
   start_sampling_floor: float = 0.05
   start_success_rate: float = 0.01
 
