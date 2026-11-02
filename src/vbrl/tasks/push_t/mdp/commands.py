@@ -305,14 +305,10 @@ class PushTCommandCfg(LiftingCommandCfg):
   goal_marker_name: str | None = None
   near_object_start: bool = False
   # (pad height over the table, signed distance to the outline low, high, gripper
-  # tilt), one start type each besides home: pads beside the T at mid-height,
-  # 3 mm over the top face, 3 cm over it. None starts in contact: 2 cm beside the
-  # T a 25 deg tilt leaned the hand onto the top face in 15 of 131 starts, so only
-  # the starts over the T tilt.
+  # tilt), one start type each besides home. The default is the teacher's: pads
+  # at mid-height 2-4 cm beside the T, upright, never in contact.
   start_levels: tuple[tuple[float, float, float, float], ...] = (
     (HALF_HEIGHT, 0.02, 0.04, 0.0),
-    (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
-    (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
   )
   start_yaws: int = 4
   start_sampling_floor: float = 0.05

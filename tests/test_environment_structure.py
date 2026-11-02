@@ -125,6 +125,7 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
     trossen_realistic_push_t_rgb_env_cfg,
     trossen_realistic_push_t_state_env_cfg,
   )
+  from vbrl.tasks.push_t.push_t_env_cfg import OVER_T_START_LEVELS
 
   state = trossen_realistic_push_t_state_env_cfg()
   rgb = trossen_realistic_push_t_rgb_env_cfg(scene="real_table")
@@ -146,6 +147,8 @@ def test_push_t_state_and_rgb_share_physics_but_not_actor_observations() -> None
   assert state_goal.object_pose_range == rgb_goal.object_pose_range
   assert state_goal.success_threshold == rgb_goal.success_threshold
   assert state_goal.near_object_start and rgb_goal.near_object_start
+  assert len(state_goal.start_levels) == 1
+  assert rgb_goal.start_levels == (*state_goal.start_levels, *OVER_T_START_LEVELS)
   assert state.curriculum == rgb.curriculum == {}
   assert state.rewards == rgb.rewards
   assert set(state.terminations) - set(rgb.terminations) == {"top_face_contact"}

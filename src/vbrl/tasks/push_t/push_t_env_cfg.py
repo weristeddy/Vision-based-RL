@@ -41,6 +41,15 @@ JOINT_VEL_WEIGHT = -0.05
 AT_GOAL_STATIC_WEIGHT = 0.5
 
 
+# Students also start 3 mm and 3 cm over the top face, tilted, so DAgger labels the
+# states a student reaches when it lands on the T. The teacher's RL does not: with
+# the top_face_contact termination those starts taught it to avoid the T, and 5 of
+# 5 runs found no side push for thousands of iterations.
+OVER_T_START_LEVELS = (
+  (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
+  (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
+)
+
 WORKSPACE_X = (0.2, 0.5)
 WORKSPACE_Y = (-0.2, 0.2)
 
@@ -294,6 +303,8 @@ def build_env_cfg(
     cfg.observations["actor"].terms.pop("obj_pose")
   if not play:
     cfg.commands[_COMMAND].near_object_start = True
+  if distill and not play:
+    cfg.commands[_COMMAND].start_levels += OVER_T_START_LEVELS
   if not (distill or play):
     cfg.terminations["top_face_contact"] = TerminationTermCfg(
       func=mdp.top_face_contact,
@@ -305,4 +316,4 @@ def build_env_cfg(
   return cfg
 
 
-__all__ = ["build_env_cfg"]
+__all__ = ["OVER_T_START_LEVELS", "build_env_cfg"]

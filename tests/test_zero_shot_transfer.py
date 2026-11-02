@@ -416,9 +416,12 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
   from mjlab.tasks.registry import load_env_cfg
 
   import vbrl.tasks  # noqa: F401
+  from vbrl.tasks.push_t.push_t_env_cfg import OVER_T_START_LEVELS
+
   cfg = load_env_cfg(STATE_TASK_ID, play=True)
   cfg.scene.num_envs = 128
   cfg.commands["push_t_goal"].near_object_start = True
+  cfg.commands["push_t_goal"].start_levels += OVER_T_START_LEVELS
   env = ManagerBasedRlEnv(cfg, device=DEVICE)
   try:
     env.reset()
