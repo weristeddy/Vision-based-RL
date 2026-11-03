@@ -79,7 +79,7 @@ class PushTCommand(LiftingCommand):
     self._pad_xy = torch.tensor(grid, dtype=torch.float, device=self.device)
     self._start_mode = torch.full((self.num_envs,), -1, device=self.device)
     self._mode_success = torch.full(
-      (len(self.cfg.start_levels) + 2,), 0.5, device=self.device
+      (len(self.cfg.start_levels) + 1,), 0.5, device=self.device
     )
 
   @property
@@ -152,31 +152,23 @@ class PushTCommand(LiftingCommand):
     keep = (1.0 - self.cfg.start_success_rate) ** count
     self._mode_success = keep * self._mode_success + (1.0 - keep) * mean
 
-  def _sample_modes(self, n: int) -> torch.Tensor:
+  def _place_arm(
+    self, env_ids: torch.Tensor, object_pos: torch.Tensor, object_yaw: torch.Tensor
+  ) -> None:
     p = self._mode_success
     weights = self.cfg.start_sampling_floor + torch.sqrt(p * (1.0 - p))
-    return torch.multinomial(weights, n, replacement=True)
-
-  def _place_arm(
-    self,
-    env_ids: torch.Tensor,
-    mode: torch.Tensor,
-    object_pos: torch.Tensor,
-    object_yaw: torch.Tensor,
-  ) -> None:
+    mode = torch.multinomial(weights, len(env_ids), replacement=True)
     base = self._robot.data.default_root_state[env_ids, :2]
     dx, dy = (self._pad_xy - (object_pos[:, :2] - base)[:, None]).unbind(-1)
     cos, sin = torch.cos(object_yaw)[:, None], torch.sin(object_yaw)[:, None]
     local = torch.stack((cos * dx + sin * dy, cos * dy - sin * dx), dim=-1)
     gap = footprint_signed_distance(local, self.cfg.footprint_parts)
     joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
-    levels = len(self.cfg.start_levels)
-    for start in range(1, levels + 2):
-      level = start - 1 if start <= levels else 0
-      _, low, high, _ = self.cfg.start_levels[level]
+    for level, (_, low, high, _) in enumerate(self.cfg.start_levels):
       valid = self._placement_valid[level]
       candidates = (gap >= low) & (gap <= high) & valid.any(1)
-      chosen = (mode == start) & candidates.any(1)
+      chosen = (mode == level + 1) & candidates.any(1)
+      mode[(mode == level + 1) & ~chosen] = 0
       if not chosen.any():
         continue
       point = torch.multinomial(candidates[chosen].float(), 1).squeeze(1)
@@ -237,17 +229,6 @@ class PushTCommand(LiftingCommand):
       device=self.device,
     )
     self.target_yaw[env_ids] = target_yaw
-    if self.cfg.near_object_start:
-      mode = self._sample_modes(n)
-      near = mode == len(self.cfg.start_levels) + 1
-      radius, yaw = self.cfg.near_goal_start
-      distance = radius * torch.rand(n, device=self.device).sqrt()
-      direction = 2.0 * math.pi * torch.rand(n, device=self.device)
-      offset = torch.stack((direction.cos(), direction.sin()), -1) * distance[:, None]
-      object_pos[near, :2] = target_pos[near, :2] + offset[near]
-      object_yaw[near] = target_yaw[near] + sample_uniform(
-        -yaw, yaw, (int(near.sum()),), device=self.device
-      )
     zeros = torch.zeros(n, device=self.device)
     pose = torch.cat(
       (
@@ -261,7 +242,7 @@ class PushTCommand(LiftingCommand):
       torch.zeros(n, 6, device=self.device), env_ids=env_ids
     )
     if self.cfg.near_object_start:
-      self._place_arm(env_ids, mode, object_pos, object_yaw)
+      self._place_arm(env_ids, object_pos, object_yaw)
     if self._goal_marker is not None:
       marker_pos = self.target_pos[env_ids].clone()
       marker_pos[:, 2] = origins[:, 2]
@@ -331,10 +312,6 @@ class PushTCommandCfg(LiftingCommandCfg):
     (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
     (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
   )
-  # One more type: the T within this radius and yaw of the goal, the arm beside it.
-  # Uniform poses put the T that close in about 1 of 250 episodes, so the teacher
-  # saw its first success only after 3,700-4,900 iterations.
-  near_goal_start: tuple[float, float] = (0.03, math.radians(30.0))
   start_yaws: int = 4
   start_sampling_floor: float = 0.05
   start_success_rate: float = 0.01

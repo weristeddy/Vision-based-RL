@@ -414,10 +414,8 @@ def test_the_arm_can_actually_push_the_object() -> None:
 def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> None:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
-  from mjlab.utils.lab_api.math import wrap_to_pi
 
   import vbrl.tasks  # noqa: F401
-  from vbrl.tasks.push_t.geometry import yaw_from_quat
 
   cfg = load_env_cfg(STATE_TASK_ID, play=True)
   cfg.scene.num_envs = 128
@@ -425,12 +423,9 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
   env = ManagerBasedRlEnv(cfg, device=DEVICE)
   try:
     env.reset()
-    robot, obj = env.scene["robot"], env.scene["object"]
+    robot = env.scene["robot"]
     command = env.command_manager.get_term("push_t_goal")
     mode = command._start_mode.clone()
-    near_goal = mode == len(command.cfg.start_levels) + 1
-    offset = (obj.data.root_link_pos_w - command.target_pos)[:, :2].norm(dim=-1)
-    twist = wrap_to_pi(yaw_from_quat(obj.data.root_link_quat_w) - command.target_yaw)
     held = robot.data.joint_pos[:, :6].clone()
     env.step(torch.zeros(128, env.action_manager.total_action_dim, device=DEVICE))
     touching = (env.scene["ee_object_contact"].data.found > 0).any(-1)
@@ -439,13 +434,10 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
     pads = robot.data.geom_pos_w[:, robot.find_geoms("gripper_(left|right)_pad")[0]]
     height = pads.mean(1)[:, 2] - env.scene.env_origins[:, 2]
 
-    assert set(mode.tolist()) == set(range(len(command.cfg.start_levels) + 2))
-    levels = (*command.cfg.start_levels, command.cfg.start_levels[0])
-    for start, (expected, _, _, _) in enumerate(levels, start=1):
-      assert (height[mode == start] - expected).abs().max() < 3e-3, start
-    radius, yaw = command.cfg.near_goal_start
-    assert offset[near_goal].max() <= radius + 1e-4
-    assert twist[near_goal].abs().max() <= yaw + 1e-4
+    assert set(mode.tolist()) == set(range(len(command.cfg.start_levels) + 1))
+    for level, (expected, _, _, _) in enumerate(command.cfg.start_levels):
+      placed = mode == level + 1
+      assert (height[placed] - expected).abs().max() < 3e-3, level
     assert not touching[mode > 0].any()
     assert (robot.data.joint_pos[:, :6] - held).abs().max() < 1e-3
   finally:
