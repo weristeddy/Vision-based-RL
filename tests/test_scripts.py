@@ -153,6 +153,7 @@ def test_after_training_the_run_is_evaluated_published_and_trimmed(
     assert (tmp_path / "final_evaluation.csv").exists()
     assert {"eval/iteration": 200, "eval/success": 0.25} in run.rows
     assert run.summary["final/real_texture_wood/success"] == 0.5
+    assert any("final/success" in row for row in run.rows)
 
 
 def test_vbrl_list_prints_every_registry_from_its_own_table(capsys) -> None:

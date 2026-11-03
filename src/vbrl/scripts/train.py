@@ -114,6 +114,12 @@ def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
   run.define_metric("eval/*", step_metric="eval/iteration")
   for row in curve:
     run.log({f"eval/{key}": value for key, value in row.items()})
+  if final:
+    rows = [list(row.values()) for row in final]
+    table = wandb.Table(columns=list(final[0]), data=rows)
+    run.log({"final/scenes": table})
+    for metric in ("success", "overlap", "yaw_error"):
+      run.log({f"final/{metric}": wandb.plot.bar(table, "scene", metric, title=metric)})
   for row in final:
     scene = row.pop("scene")
     run.summary.update({f"final/{scene}/{key}": value for key, value in row.items()})
@@ -179,6 +185,7 @@ def main() -> None:
   )
   apply_overrides(args)
   os.environ.setdefault("WANDB_RUN_ID", wandb.util.generate_id())
+  os.environ.setdefault("WANDB_RUN_GROUP", args.agent.run_name)
   upload = args.agent.upload_model
   args.agent.upload_model = False
   log_dir = _launch(chosen_task, args)
