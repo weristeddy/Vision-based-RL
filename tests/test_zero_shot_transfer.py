@@ -434,10 +434,11 @@ def test_near_object_starts_place_the_pads_at_each_level_without_contact() -> No
     pads = robot.data.geom_pos_w[:, robot.find_geoms("gripper_(left|right)_pad")[0]]
     height = pads.mean(1)[:, 2] - env.scene.env_origins[:, 2]
 
-    assert set(mode.tolist()) == set(range(len(command.cfg.start_levels) + 1))
-    for level, (expected, _, _, _) in enumerate(command.cfg.start_levels):
-      placed = mode == level + 1
-      assert (height[placed] - expected).abs().max() < 3e-3, level
+    assert set(mode.tolist()) == set(range(len(command.cfg.start_types) + 1))
+    for start, levels in enumerate(command.cfg.start_types, start=1):
+      expected = torch.tensor([level[0] for level in levels], device=DEVICE)
+      error = (height[mode == start, None] - expected).abs().min(1).values
+      assert error.max() < 3e-3, start
     assert not touching[mode > 0].any()
     assert (robot.data.joint_pos[:, :6] - held).abs().max() < 1e-3
   finally:

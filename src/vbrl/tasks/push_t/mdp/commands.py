@@ -66,8 +66,12 @@ class PushTCommand(LiftingCommand):
     seed = self._robot.data.default_joint_pos[0, :6].cpu().numpy()
     limits = self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy()
     xs, ys = np.arange(0.13, 0.58, 0.01), np.arange(-0.27, 0.28, 0.01)
+    self._levels = [level for levels in self.cfg.start_types for level in levels]
+    sizes = torch.tensor([len(levels) for levels in self.cfg.start_types])
+    self._type_sizes = sizes.to(self.device)
+    self._type_first_level = (sizes.cumsum(0) - sizes).to(self.device)
     self._placements, self._placement_valid = [], []
-    for height, _, _, tilt in self.cfg.start_levels:
+    for height, _, _, tilt in self._levels:
       tilts = sorted({0.0, tilt, -tilt})
       rotations = [gripper_rotation(y, t) for y in yaws for t in tilts]
       grid, joint_pos, valid = placement_table(
@@ -79,7 +83,7 @@ class PushTCommand(LiftingCommand):
     self._pad_xy = torch.tensor(grid, dtype=torch.float, device=self.device)
     self._start_mode = torch.full((self.num_envs,), -1, device=self.device)
     self._mode_success = torch.full(
-      (len(self.cfg.start_levels) + 1,), 0.5, device=self.device
+      (len(self.cfg.start_types) + 1,), 0.5, device=self.device
     )
 
   @property
@@ -158,17 +162,21 @@ class PushTCommand(LiftingCommand):
     p = self._mode_success
     weights = self.cfg.start_sampling_floor + torch.sqrt(p * (1.0 - p))
     mode = torch.multinomial(weights, len(env_ids), replacement=True)
+    pick = torch.rand(len(env_ids), device=self.device) * self._type_sizes[mode - 1]
+    level_ids = torch.where(
+      mode > 0, self._type_first_level[mode - 1] + pick.long(), -1
+    )
     base = self._robot.data.default_root_state[env_ids, :2]
     dx, dy = (self._pad_xy - (object_pos[:, :2] - base)[:, None]).unbind(-1)
     cos, sin = torch.cos(object_yaw)[:, None], torch.sin(object_yaw)[:, None]
     local = torch.stack((cos * dx + sin * dy, cos * dy - sin * dx), dim=-1)
     gap = footprint_signed_distance(local, self.cfg.footprint_parts)
     joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
-    for level, (_, low, high, _) in enumerate(self.cfg.start_levels):
+    for level, (_, low, high, _) in enumerate(self._levels):
       valid = self._placement_valid[level]
       candidates = (gap >= low) & (gap <= high) & valid.any(1)
-      chosen = (mode == level + 1) & candidates.any(1)
-      mode[(mode == level + 1) & ~chosen] = 0
+      chosen = (level_ids == level) & candidates.any(1)
+      mode[(level_ids == level) & ~chosen] = 0
       if not chosen.any():
         continue
       point = torch.multinomial(candidates[chosen].float(), 1).squeeze(1)
@@ -304,13 +312,16 @@ class PushTCommandCfg(LiftingCommandCfg):
   goal_half_height: float = HALF_HEIGHT
   goal_marker_name: str | None = None
   near_object_start: bool = False
-  # (pad height over the table, signed distance to the outline low, high, gripper
-  # tilt), one start type each besides home: pads at mid-height 2-4 cm beside the
-  # T upright, 3 mm and 3 cm over its top face tilted. Never in contact.
-  start_levels: tuple[tuple[float, float, float, float], ...] = (
-    (HALF_HEIGHT, 0.02, 0.04, 0.0),
-    (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
-    (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
+  # Start types besides home, each a set of levels drawn uniformly: (pad height
+  # over the table, signed distance to the outline low, high, gripper tilt). Pads
+  # at mid-height 2-4 cm beside the T upright; 3 mm or 3 cm over its top face
+  # tilted. Never in contact.
+  start_types: tuple[tuple[tuple[float, float, float, float], ...], ...] = (
+    ((HALF_HEIGHT, 0.02, 0.04, 0.0),),
+    (
+      (2 * HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
+      (2 * HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
+    ),
   )
   start_yaws: int = 4
   start_sampling_floor: float = 0.05
