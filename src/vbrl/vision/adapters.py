@@ -5,32 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class FlattenAdapter(nn.Module):
-  def __init__(
-    self,
-    input_channels: int,
-    grid_size: int,
-    output_dim: int = 256,
-  ) -> None:
-    super().__init__()
-    if min(input_channels, grid_size, output_dim) <= 0:
-      raise ValueError("All FlattenAdapter dimensions must be positive.")
-    self.input_channels = input_channels
-    self.grid_size = grid_size
-    self.output_dim = output_dim
-    self.flatten = nn.Flatten(start_dim=1)
-    self.proj = nn.Linear(input_channels * grid_size**2, output_dim)
-    self.output_norm = nn.LayerNorm(output_dim)
-
-  def forward(self, features: torch.Tensor) -> torch.Tensor:
-    expected = (self.input_channels, self.grid_size, self.grid_size)
-    if features.ndim != 4 or tuple(features.shape[1:]) != expected:
-      raise ValueError(
-        f"Expected [B,{','.join(map(str, expected))}], got {tuple(features.shape)}."
-      )
-    return self.output_norm(self.proj(self.flatten(features)))
-
-
 class FlattenReluAdapter(nn.Module):
   def __init__(
     self,

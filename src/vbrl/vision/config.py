@@ -17,7 +17,6 @@ AdapterName: TypeAlias = Literal[
   "global",
   "global_normalized",
   "linear",
-  "flatten",
   "flatten_relu",
   "local_grid",
   "spatial_softmax",

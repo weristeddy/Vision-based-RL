@@ -19,7 +19,7 @@ BACKBONES = (
   "r3m_resnet50", "r3m_resnet50_layer3",
 )
 ADAPTER_NAMES = (
-  "global", "global_normalized", "linear", "flatten", "flatten_relu", "local_grid",
+  "global", "global_normalized", "linear", "flatten_relu", "local_grid",
   "spatial_softmax", "afa", "afa_full",
 )
 
@@ -101,7 +101,7 @@ def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -
   scratch_seen = set()
   for token in CURRENT_ARCHITECTURES:
     config = ARCHITECTURES[token]
-    if config.adapter in ("local_grid", "flatten", "flatten_relu"):
+    if config.adapter in ("local_grid", "flatten_relu"):
       assert config.target_grid_size == NATIVE_GRIDS[config.encoder], token
 
     if config.weights != "scratch":
@@ -110,13 +110,12 @@ def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -
     encoder = build_encoder(config, input_dim=(224, 224))
     backbone = sum(p.numel() for p in encoder.backbone.parameters())
     adapter = sum(p.numel() for p in encoder.adapter.parameters())
-    if config.adapter in ("flatten", "flatten_relu"):
+    if config.adapter == "flatten_relu":
       # The deliberate exception: the plain Nature-CNN head, whose dense layer would sit
       # in the policy MLP instead if this row had no adapter at all.
       channels = ENCODERS[config.encoder].channels
       flat = channels * config.target_grid_size**2
-      trailing = 1 if config.adapter == "flatten_relu" else 3
-      assert adapter == flat * config.output_dim + trailing * config.output_dim, token
+      assert adapter == flat * config.output_dim + config.output_dim, token
     else:
       assert adapter < backbone, (token, adapter, backbone)
 

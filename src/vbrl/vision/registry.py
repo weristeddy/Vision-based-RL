@@ -7,7 +7,6 @@ import torch.nn as nn
 
 from .adapters import (
   AFAAdapter,
-  FlattenAdapter,
   FlattenReluAdapter,
   L2Normalize,
   LocalGridAdapter,
@@ -106,22 +105,6 @@ def _linear_adapter(
     )
   )
   return nn.Sequential(*layers), config.output_dim
-
-
-def _flatten_adapter(
-  config: VisionConfig,
-  _: AdapterSpec,
-  channels: int,
-  spatial: bool,
-) -> tuple[nn.Module, int]:
-  if not spatial:  # pragma: no cover - guarded by capability declarations.
-    raise ValueError("Flatten requires spatial features.")
-  adapter = FlattenAdapter(
-    channels,
-    grid_size=config.target_grid_size,
-    output_dim=config.output_dim,
-  )
-  return adapter, adapter.output_dim
 
 
 def _flatten_relu_adapter(
@@ -231,11 +214,8 @@ ADAPTERS: dict[AdapterName, AdapterSpec] = {
     "global_normalized", "global", _global_normalized_adapter
   ),
   "linear": AdapterSpec("linear", "global", _linear_adapter),
-  # Asks for the native map, not `local_grid`, precisely because it must not be
-  # resampled: "no adapter" means the encoder's own output reaches the policy.
-  "flatten": AdapterSpec("flatten", "spatial", _flatten_adapter),
-  # ManiSkill3's head: the same projection as `flatten`, rectified instead of
-  # normalised. A separate row because the module tree is checkpoint format.
+  # ManiSkill3's head on the native map, not `local_grid`, precisely because it must
+  # not be resampled.
   "flatten_relu": AdapterSpec("flatten_relu", "spatial", _flatten_relu_adapter),
   "local_grid": AdapterSpec("local_grid", "local_grid", _local_grid_adapter),
   "spatial_softmax": AdapterSpec(

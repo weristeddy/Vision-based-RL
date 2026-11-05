@@ -48,7 +48,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 43
+  assert len(task_ids) == 48
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     if hasattr(agent, "student"):

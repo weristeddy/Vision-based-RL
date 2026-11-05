@@ -36,12 +36,9 @@ def vision_cfg(
 # The key is the exact token used in a task ID. A row here is a menu entry, not a
 # registration: an ID exists only where a `register_mjlab_task` line creates it, so rows.
 ARCHITECTURES: dict[str, VisionConfig] = {
-  "NatureCnn-Flatten": vision_cfg("nature_cnn", "flatten", target_grid_size=24),
   "NatureCnn-SpatialSoftmax": vision_cfg("nature_cnn", "spatial_softmax"),
-  "CompactVit-Flatten": vision_cfg("compact_vit", "flatten", target_grid_size=14),
   "CompactVit-SpatialSoftmax": vision_cfg("compact_vit", "spatial_softmax"),
-  # ManiSkill3's exact head for the two trainable trunks: the same projection as
-  # `-Flatten`, rectified rather than layer-normed.
+  # ManiSkill3's exact head for the two trainable trunks.
   "NatureCnn-FlattenRelu": vision_cfg(
     "nature_cnn", "flatten_relu", target_grid_size=24
   ),
@@ -94,8 +91,8 @@ ARCHITECTURES: dict[str, VisionConfig] = {
 }
 
 
-# The 21 rows above the superseded block: what a new registration crosses.
-CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:21]
+# The 19 rows above the superseded block: what a new registration crosses.
+CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:19]
 
 
 __all__ = [
