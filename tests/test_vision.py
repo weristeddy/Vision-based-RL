@@ -19,7 +19,7 @@ BACKBONES = (
   "r3m_resnet50", "r3m_resnet50_layer3",
 )
 ADAPTER_NAMES = (
-  "global", "global_normalized", "linear", "flatten_relu", "local_grid",
+  "global", "global_normalized", "linear", "flatten_relu", "svea", "local_grid",
   "spatial_softmax", "afa", "afa_full",
 )
 

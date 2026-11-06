@@ -53,5 +53,5 @@ _distill("Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen", "DinoV2ViTS14-Glob
 _distill("Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen", "R3MResNet50-AfaFull32", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen", "R3MResNet50-Global", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen", "NatureCnn-FlattenRelu", "real_texture_wood")
-_distill("Mjlab-PushT-WoodTable-CompactVit-FlattenRelu-Trossen", "CompactVit-FlattenRelu", "real_texture_wood")
+_distill("Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen", "CompactVit-Svea", "real_texture_wood")
 _ppo("Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_table")

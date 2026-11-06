@@ -45,6 +45,8 @@ ARCHITECTURES: dict[str, VisionConfig] = {
   "CompactVit-FlattenRelu": vision_cfg(
     "compact_vit", "flatten_relu", target_grid_size=14
   ),
+  # SVEA's ViT head: the CLS token through Linear, LayerNorm and Tanh.
+  "CompactVit-Svea": vision_cfg("compact_vit", "svea"),
   "DinoV2ViTS14-Linear": vision_cfg("dinov2_vits14", "linear"),
   "DinoV2ViTS14-LocalGrid16": vision_cfg(
     "dinov2_vits14", "local_grid", target_grid_size=16
@@ -91,8 +93,8 @@ ARCHITECTURES: dict[str, VisionConfig] = {
 }
 
 
-# The 19 rows above the superseded block: what a new registration crosses.
-CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:19]
+# The 20 rows above the superseded block: what a new registration crosses.
+CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:20]
 
 
 __all__ = [

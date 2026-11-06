@@ -1061,9 +1061,11 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
-    "Mjlab-PushT-WoodTable-CompactVit-FlattenRelu-Trossen": [
-      "adapter.proj.bias:(256,)",
-      "adapter.proj.weight:(256, 25088)",
+    "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen": [
+      "adapter.0.bias:(256,)",
+      "adapter.0.weight:(256, 128)",
+      "adapter.1.bias:(256,)",
+      "adapter.1.weight:(256,)",
       "backbone.blocks.0.attn.in_proj_weight:(384, 128)",
       "backbone.blocks.0.attn.out_proj.weight:(128, 128)",
       "backbone.blocks.0.mlp.0.bias:(128,)",

@@ -56,7 +56,7 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen",
     "Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen",
     "Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen",
-    "Mjlab-PushT-WoodTable-CompactVit-FlattenRelu-Trossen",
+    "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen",
     "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen",
   )
 )

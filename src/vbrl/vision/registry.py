@@ -107,6 +107,21 @@ def _linear_adapter(
   return nn.Sequential(*layers), config.output_dim
 
 
+def _svea_adapter(
+  config: VisionConfig,
+  _: AdapterSpec,
+  channels: int,
+  spatial: bool,
+) -> tuple[nn.Module, int]:
+  pool = (nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)) if spatial else ()
+  return nn.Sequential(
+    *pool,
+    nn.Linear(channels, config.output_dim),
+    nn.LayerNorm(config.output_dim),
+    nn.Tanh(),
+  ), config.output_dim
+
+
 def _flatten_relu_adapter(
   config: VisionConfig,
   _: AdapterSpec,
@@ -189,7 +204,7 @@ ENCODERS: dict[EncoderName, EncoderSpec] = {
     scratch.build_nature_cnn, to_unit_interval, scratch.nature_extractor,
   ),
   "compact_vit": EncoderSpec(
-    "compact_vit", 128, "scratch", True, _ALL_FEATURES, None,
+    "compact_vit", 128, "scratch", True, _SPATIAL_FEATURES, None,
     scratch.build_compact_vit, to_unit_interval, scratch.compact_vit_extractor,
   ),
   "dinov2_vits14": EncoderSpec(
@@ -217,6 +232,8 @@ ADAPTERS: dict[AdapterName, AdapterSpec] = {
   # ManiSkill3's head on the native map, not `local_grid`, precisely because it must
   # not be resampled.
   "flatten_relu": AdapterSpec("flatten_relu", "spatial", _flatten_relu_adapter),
+  # SVEA's RLProjection on the global feature; for CompactViT, its CLS token.
+  "svea": AdapterSpec("svea", "global", _svea_adapter),
   "local_grid": AdapterSpec("local_grid", "local_grid", _local_grid_adapter),
   "spatial_softmax": AdapterSpec(
     "spatial_softmax", "spatial", _spatial_softmax_adapter, 256

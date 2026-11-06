@@ -115,11 +115,16 @@ def nature_extractor(_request: str, _grid: int):
   return nature_features
 
 
-def compact_vit_extractor(_request: str, _grid: int):
-  return compact_vit_features
+def compact_vit_cls(backbone: nn.Module, images: torch.Tensor) -> torch.Tensor:
+  return cast(CompactViTBackbone, backbone).forward_features(images)[:, 0]
+
+
+def compact_vit_extractor(request: str, _grid: int):
+  return compact_vit_cls if request == "global" else compact_vit_features
 
 
 __all__ = [
+  "compact_vit_cls",
   "compact_vit_extractor",
   "nature_extractor",
   "CompactViTBackbone",
