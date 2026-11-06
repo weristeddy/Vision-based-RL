@@ -81,7 +81,7 @@ Every run writes a deployable ONNX beside its checkpoint automatically.
 ```bash
 vbrl-evaluate configs/evaluation/ood_4096.yaml
 vbrl-analyze  configs/analysis/lift_cube_rgb/trossen/default.yaml
-vbrl-deploy   configs/deployment/push_t_real_table_dinov2_afafull6.yaml --dry-run
+vbrl-deploy   configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --dry-run
 ```
 
 ## Push-T
@@ -105,8 +105,8 @@ The recipe lives in code, not flags: 20 Hz, action scale 0.025 (wrist roll 0.02)
 onto the previous target, the Trossen SDK's 50 ms goal ramp modelled in sim,
 10 s episodes. The teacher additionally starts part of its episodes with the pads
 beside the T and ends an episode when the gripper presses on the T's top face. It reproduces the
-deployed policies: teacher `w924eo8a`, students `ed70t2t7` (real table) and
-`k1kqta8a` (wood).
+deployed policies: teacher `auxcyfuo`, wood students `rzf11em2` (DINOv2 + AFA)
+and `z5b9xznd` (Nature CNN).
 
 ```bash
 # The teacher: four ranks x 8,192 envs.
@@ -140,7 +140,7 @@ Run a policy from a manifest under [`configs/deployment/`](configs/deployment/).
 Every run homes the arm first and parks it afterwards:
 
 ```bash
-vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml
+vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml
 vbrl-deploy configs/deployment/lift_cube.yaml --dry-run       # no motion, sanity check
 vbrl-deploy configs/deployment/lift_cube.yaml --max-steps 250
 vbrl-deploy configs/deployment/lift_cube.yaml --log run.npz   # per-step trace

@@ -13,18 +13,18 @@ removes it. The alternative is `source .venv/bin/activate` once, after which
 
 ## Push-T
 
-Two DAgger students of the state teacher `w924eo8a`, both DINOv2-S with AFA at
-full width (6 heads), external D405 (`camera_serial` 260322270027):
+DAgger students of the state teacher `auxcyfuo`, trained on AmbientCG wood
+tabletops, external D405 (`camera_serial` 260322270027):
 
 | manifest | task ID | W&B |
 | --- | --- | --- |
-| `push_t_real_table_dinov2_afafull6` | `Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen` | `ed70t2t7` |
-| `push_t_wood_table_dinov2_afafull6` | `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | `k1kqta8a` |
+| `push_t_wood_table_dinov2_afafull6_auxcyfuo` | `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | `rzf11em2` |
+| `push_t_wood_table_nature_cnn_flattenrelu` | `Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen` | `z5b9xznd` |
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/real_table_1.npz
-uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/wood_table_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/wood_table_dino_1.npz
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_nature_cnn_flattenrelu.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_nature_cnn_flattenrelu.yaml --max-steps 400 --no-keyboard-goal --log artifacts/deployment/wood_table_cnn_1.npz
 ```
 
 The policies trained at 20 Hz with the Trossen SDK's 50 ms linear goal ramp
@@ -70,9 +70,9 @@ it). The policies have no local `.pt`, only the exported ONNX, so the weights
 come from W&B and the task ID supplies the architecture:
 
 ```bash
-uv run --no-sync vbrl-play Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen \
-  --wandb-run-path eduard-nicolae-robot-learning/mjlab/ed70t2t7 \
-  --wandb-checkpoint-name model_4999.pt --num-envs 4
+uv run --no-sync vbrl-play Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen \
+  --wandb-run-path eduard-nicolae-robot-learning/mjlab/rzf11em2 \
+  --wandb-checkpoint-name model_7999.pt --num-envs 4
 ```
 
 The task ID fixes the action scale and the ramp, so the replay matches training.
@@ -107,9 +107,9 @@ leave it off to keep the viewer up.
 ## Before and after a run
 
 ```bash
-uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --dry-run
-uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --home
-uv run --no-sync vbrl-deploy configs/deployment/push_t_real_table_dinov2_afafull6.yaml --park
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --dry-run
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --home
+uv run --no-sync vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --park
 ```
 
 `--dry-run` homes the arm, reads the sensors and evaluates the policy without
