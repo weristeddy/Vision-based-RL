@@ -14,7 +14,7 @@ usage() {
   command cat <<'EOF'
 Usage:
   bash cluster/evaluate.sh --profile testing -- \
-    configs/evaluation/ood_4096.yaml
+    <evaluation>.yaml
 
 Launcher options (before --):
   --profile NAME       a100, b200, or testing (default: testing)

@@ -59,7 +59,7 @@ class PushTCommand(LiftingCommand):
       self._init_start_bank(env)
 
   def _init_start_bank(self, env: ManagerBasedRlEnv) -> None:
-    from ..arm_placement import gripper_rotation, placement_table
+    from vbrl.tasks.utils.arm_placement import gripper_rotation, placement_table
 
     self._robot = env.scene["robot"]
     yaws = np.linspace(0.0, np.pi, self.cfg.start_yaws, endpoint=False)

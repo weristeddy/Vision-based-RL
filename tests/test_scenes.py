@@ -43,7 +43,7 @@ def _apply(scene: str, *, object_name="cube", eval_dr="fixed"):
   return apply_scene(
     cfg,
     scene=scene,
-    robot=get_robot("trossen"),
+    robot=get_robot("trossen_measured"),
     camera_view="wrist",
     object_xml=_object_xml(object_name),
     object_name=object_name,
@@ -138,7 +138,7 @@ def test_a_task_without_a_camera_gets_no_visual_randomization() -> None:
   apply_scene(
     cfg,
     scene="real_texture",
-    robot=get_robot("trossen"),
+    robot=get_robot("trossen_measured"),
     camera_view=None,
     object_xml=_object_xml("cube"),
     object_name="cube",

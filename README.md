@@ -38,10 +38,10 @@ Train the state-based Push-T task (fast, no camera):
 vbrl-train Mjlab-PushT-State-Trossen --agent.max-iterations 50
 ```
 
-Train a visual Lift-Cube policy, and record a video while it runs:
+Train the Lift-Cube teacher, and record a video while it runs:
 
 ```bash
-vbrl-train Mjlab-LiftCube-RealTexture-DinoV2ViTS14-Afa6-Trossen \
+vbrl-train Mjlab-LiftCube-State-Trossen \
   --env.scene.num-envs 512 --agent.max-iterations 100 --video True
 ```
 
@@ -79,14 +79,28 @@ Every run writes a deployable ONNX beside its checkpoint automatically.
 [`configs/`](configs/) — copy one and edit it.
 
 ```bash
-vbrl-evaluate configs/evaluation/ood_4096.yaml
-vbrl-analyze  configs/analysis/lift_cube_rgb/trossen/default.yaml
+vbrl-evaluate <evaluation>.yaml
+vbrl-analyze  <analysis>.yaml
 vbrl-deploy   configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --dry-run
 ```
 
+## Lift-Cube
+
+Seven task IDs on Push-T's arm and control: the measured arm at 20 Hz, a
+target-relative action (arm 0.025, wrist roll 0.02, gripper 0.002) with the SDK's
+50 ms ramp, `action_rate_l2` -0.01 and `joint_vel_l2` -0.05. Rewards, the 20 s
+episode and the goal resampled every 8-12 s, which puts the cube back on the table,
+are MJLab's. A state teacher trains with PPO; the students are DAgger students of it
+with the wrist camera on AmbientCG wood tabletops.
+
+| task ID | |
+| --- | --- |
+| `Mjlab-LiftCube-State-Trossen` | PPO teacher, 8,000 iterations |
+| `Mjlab-LiftCube-WoodTable-<Arch>-Trossen` | students: DINOv2 and R3M with AFA or Global, Nature CNN, CompactViT |
+
 ## Push-T
 
-Seven task IDs, one recipe. A state policy trains with PPO on privileged object
+Twelve task IDs, one recipe. A state policy trains with PPO on privileged object
 poses; the visual policies are DAgger students of that one teacher (student acts,
 teacher labels, MSE on the mean), plus one visual policy trained by PPO on the
 teacher's exact recipe for comparison.
@@ -113,7 +127,7 @@ and `z5b9xznd` (Nature CNN).
 bash cluster/submit.sh --profile a100 -- \
   Mjlab-PushT-State-Trossen --env.scene.num-envs 8192
 
-# A student: four ranks x 1,024 envs, 5,000 iterations, teacher from its W&B run.
+# A student: four ranks x 1,024 envs, 8,000 iterations, teacher from its W&B run.
 bash cluster/submit.sh --profile a100 -- \
   Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen \
   --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run>
@@ -183,19 +197,19 @@ passes everything after `--` through unchanged:
 
 ```bash
 # Four GPUs; --env.scene.num-envs and --gpu-ids are set by the profile.
-bash cluster/submit.sh --profile a100 -- \
-  Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Afa6-TrossenRealistic
+bash cluster/submit.sh --profile a100 -- Mjlab-LiftCube-State-Trossen
 
 # One GPU; you own --env.scene.num-envs. ~1.6x the wall clock, a quarter of the GPUs.
 bash cluster/submit.sh --profile a100-single -- \
   Mjlab-PushT-State-Trossen --env.scene.num-envs 4096
 
-# One job per architecture in a variant.
-bash cluster/submit_sweep.sh --variant Sim2Real --profile b200-single --dry-run
+# One job per architecture in a variant; --arch narrows it to one task.
+bash cluster/submit_sweep.sh --variant WoodTable --arch LiftCube --dry-run \
+  -- --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run>
 
 # Viewing and evaluation.
 bash cluster/view.sh     --profile testing -- Mjlab-PushT-State-Trossen --agent random
-bash cluster/evaluate.sh --profile testing -- configs/evaluation/ood_4096.yaml
+bash cluster/evaluate.sh --profile testing -- <evaluation>.yaml
 ```
 
 Run any command inside the image directly with:

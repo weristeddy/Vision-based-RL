@@ -40,9 +40,9 @@ ARM_JOINTS = ("joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "joint_5")
 
 
 def poses(scale: float = 1.0) -> list[dict[str, Any]]:
-  from vbrl.asset_zoo.robots.trossen_wxai import make_wxai
+  from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
 
-  home = make_wxai().home_joint_pos
+  home = make_wxai_measured().home_joint_pos
   gripper = home["right_carriage_joint"]
   out = []
   for index, delta in enumerate(DELTAS):

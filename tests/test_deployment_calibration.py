@@ -19,9 +19,9 @@ from vbrl.deployment.calibration import (  # noqa: E402
 def test_the_mujoco_conversion_reproduces_the_xml() -> None:
   import mujoco
 
-  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_REALISTIC_XML
+  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML
 
-  model = mujoco.MjModel.from_xml_path(str(WXAI_REALISTIC_XML))
+  model = mujoco.MjModel.from_xml_path(str(WXAI_MEASURED_XML))
   data = mujoco.MjData(model)
   mujoco.mj_kinematics(model, data)
   mujoco.mj_camlight(model, data)
@@ -45,10 +45,10 @@ def test_the_mujoco_conversion_reproduces_the_xml() -> None:
 def test_the_robot_xmls_carry_the_measured_factory_optics() -> None:
   import mujoco
 
-  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_REALISTIC_XML, WXAI_XML
+  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML
 
   expected = {"cam": 54.489, "external_cam": 54.284}
-  for path in (WXAI_XML, WXAI_REALISTIC_XML):
+  for path in (WXAI_MEASURED_XML,):
     model = mujoco.MjModel.from_xml_path(str(path))
     names = {
       mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_CAMERA, i): i
@@ -172,10 +172,10 @@ def test_goal_pose_offset_places_the_origin_not_the_tag_midpoint() -> None:
 def test_goal_pose_reads_the_calibrated_external_camera_from_the_mjcf() -> None:
   import numpy as np
 
-  from vbrl.asset_zoo.robots import make_wxai_realistic
+  from vbrl.asset_zoo.robots import make_wxai_measured
   from vbrl.deployment.goal_pose import external_camera_pose
 
-  pose = external_camera_pose(make_wxai_realistic().xml_path)
+  pose = external_camera_pose(make_wxai_measured().xml_path)
   assert pose.shape == (4, 4)
   rotation = pose[:3, :3]
   assert np.allclose(rotation @ rotation.T, np.eye(3), atol=1e-6)

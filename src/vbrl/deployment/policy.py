@@ -158,7 +158,7 @@ class Policy:
     if "qpos" in self.metadata.observation_terms:
       terms["qpos"] = position
       terms["qvel"] = terms["joint_vel"]
-      terms["target_qpos"] = self._target[:6]
+      terms["target_qpos"] = self._target[: self.metadata.action_dim]
     if "tcp_pose" in self.metadata.observation_terms:
       terms["tcp_pose"] = np.concatenate(self._kinematics.ee_pose(position))
     if "goal_position" in self.metadata.observation_terms:
@@ -225,7 +225,7 @@ class Policy:
   def warm_up(
     self, *, joint_pos: Any, joint_vel: Any, image: Any, runs: int = 5
   ) -> None:
-    self._target = self._mirror_gripper(joint_pos)[: len(ARM_JOINTS)].copy()
+    self._target = self._mirror_gripper(joint_pos).copy()
     observation = self.observe(joint_pos=joint_pos, joint_vel=joint_vel, image=image)
     for _ in range(runs):
       self._infer(observation)

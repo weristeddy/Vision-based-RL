@@ -7,7 +7,7 @@ pytest.importorskip("mjlab")
 
 @pytest.mark.parametrize(
   "robot_name",
-  ["trossen", "trossen_realistic"],
+  ["trossen_measured"],
 )
 def test_robot_definitions_are_colocated_and_fresh(robot_name: str) -> None:
   from vbrl.asset_zoo.robots import ROBOTS, get_robot
@@ -26,7 +26,7 @@ def test_robot_definitions_are_colocated_and_fresh(robot_name: str) -> None:
 
 @pytest.mark.parametrize(
   "robot_name",
-  ["trossen", "trossen_realistic"],
+  ["trossen_measured"],
 )
 def test_arm_only_contract_has_six_actions_and_keeps_gripper_actuated(
   robot_name: str,
@@ -59,7 +59,7 @@ def test_arm_only_contract_has_six_actions_and_keeps_gripper_actuated(
 
 @pytest.mark.parametrize(
   "robot_name",
-  ["trossen", "trossen_realistic"],
+  ["trossen_measured"],
 )
 def test_fixed_closed_gripper_does_not_change_default_robot_state(
   robot_name: str,
@@ -100,17 +100,12 @@ def test_action_scales_preserve_the_trained_policy_contract() -> None:
     "joint_5": 0.25,
     "left_carriage_joint": 0.01,
   }
-  assert dict(get_robot("trossen").action_scale) == trossen
-  assert dict(get_robot("trossen_realistic").action_scale) == trossen
+  assert dict(get_robot("trossen_measured").action_scale) == trossen
 
 
 @pytest.mark.parametrize(
   ("robot_name", "action_delay", "expected"),
   [
-    ("trossen", False, (0, 0, 0)),
-    ("trossen", True, (0, 1, 0)),
-    ("trossen_realistic", False, (0, 0, 0)),
-    ("trossen_realistic", True, (0, 1, 0)),
     ("trossen_measured", False, (0, 0, 0)),
     ("trossen_measured", True, (5, 11, 10)),
   ],

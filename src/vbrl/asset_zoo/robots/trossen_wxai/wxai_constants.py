@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -10,14 +9,11 @@ from vbrl.asset_zoo.robots.definition import (
 )
 
 XMLS_DIR = Path(__file__).resolve().parent / "xmls"
-WXAI_XML = XMLS_DIR / "wxai.xml"
-WXAI_REALISTIC_XML = XMLS_DIR / "wxai_realistic.xml"
 WXAI_MEASURED_XML = XMLS_DIR / "wxai_measured.xml"
 
 # The arm bolts to a 190 x 80 x 5 mm plate on the tabletop, measured off the real rig
 # (nothing about it is published).
 MOUNT_PLATE_THICKNESS_M = 0.005
-FINGER_PAD_PATTERN = r"(left|right)_finger_pad_[0-2]_collision"
 GRIPPER_PAD_PATTERN = r"gripper_(left|right)_pad"
 
 
@@ -68,8 +64,8 @@ MEASURED_DELAY_UPDATE_PERIOD = 10
 
 def _articulation(
   enable_delay: bool,
-  lag: tuple[int, int] = (0, 1),
-  update_period: int = 0,
+  lag: tuple[int, int] = MEASURED_DELAY_LAG,
+  update_period: int = MEASURED_DELAY_UPDATE_PERIOD,
 ):
   from mjlab.actuator import XmlActuatorCfg
   from mjlab.entity import EntityArticulationInfoCfg
@@ -92,7 +88,7 @@ def _articulation(
 def _definition(
   name: str,
   xml_path: Path,
-  fingertip_geom_pattern: str = FINGER_PAD_PATTERN,
+  fingertip_geom_pattern: str = GRIPPER_PAD_PATTERN,
   articulation_factory: Any = _articulation,
 ) -> RobotDefinition:
   return RobotDefinition(
@@ -120,32 +116,11 @@ def _definition(
   )
 
 
-def make_wxai() -> RobotDefinition:
-  return _definition("trossen", WXAI_XML)
-
-
-def make_wxai_realistic() -> RobotDefinition:
-  return _definition("trossen_realistic", WXAI_REALISTIC_XML)
-
-
 def make_wxai_measured() -> RobotDefinition:
-  return _definition(
-    "trossen_measured",
-    WXAI_MEASURED_XML,
-    GRIPPER_PAD_PATTERN,
-    partial(
-      _articulation,
-      lag=MEASURED_DELAY_LAG,
-      update_period=MEASURED_DELAY_UPDATE_PERIOD,
-    ),
-  )
+  return _definition("trossen_measured", WXAI_MEASURED_XML)
 
 
 __all__ = [
   "WXAI_MEASURED_XML",
-  "WXAI_REALISTIC_XML",
-  "WXAI_XML",
-  "make_wxai",
   "make_wxai_measured",
-  "make_wxai_realistic",
 ]

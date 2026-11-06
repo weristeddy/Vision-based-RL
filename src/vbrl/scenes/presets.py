@@ -22,7 +22,9 @@ TABLE_VISUAL_MESH_NAME = "table_top_visual_mesh"
 # Measured off the real tabletop: 1.015 m along the robot's reach by 0.975 m across.
 TABLE_HALF_EXTENTS = (0.5075, 0.4875, 0.02)
 TABLE_CENTER = (0.4125, 0.0, -0.02)
-CAMERA_POSITION_DR_RANGE_M = 0.025
+# Per camera model: the external camera's calibration error against a wrist mount's
+# tolerance. At 25 mm the wrist camera lands inside the D405 housing.
+CAMERA_POSITION_DR_RANGE_M = {"external_cam": 0.025, "cam": 0.005}
 CAMERA_ROTATION_DR_RANGE_RAD = 0.03
 
 PROCEDURAL_VARIANTS_PER_KIND = 32

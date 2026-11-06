@@ -12,40 +12,15 @@ import pytest
 pytest.importorskip("mjlab")
 
 
-# Restated independently of vision/architectures.py, so a mistake in that table cannot
-# silently agree with itself here.
-POOLED_ARCHITECTURES = (
-  "NatureCnn-LocalGrid7",
-  "NatureCnn-SpatialSoftmax",
-  "CompactVit-LocalGrid8",
-  "CompactVit-SpatialSoftmax",
-  "DinoV2ViTS14-Linear",
-  "DinoV2ViTS14-LocalGrid7",
-  "DinoV2ViTS14-SpatialSoftmax",
-  "DinoV2ViTS14-Afa6",
-  "R3MResNet50-Linear",
-  "R3MResNet50-LocalGrid7",
-  "R3MResNet50-SpatialSoftmax",
-  "R3MResNet50-Afa32",
-)
-COLLISION_CAM_ARCHITECTURES = tuple(
-  "NatureCnn-LocalGrid16" if arch == "NatureCnn-LocalGrid7" else arch
-  for arch in POOLED_ARCHITECTURES
-)
-# The retained grid, unchanged: this generation moves the camera and nothing
-# else, so substituting rows would change the adapter at the same time.
-SIM2REAL_ARCHITECTURES = COLLISION_CAM_ARCHITECTURES
 EXPECTED_TASK_IDS = frozenset(
   (
-    *(
-      f"Mjlab-LiftCube-CollisionCam-{arch}-Trossen"
-      for arch in COLLISION_CAM_ARCHITECTURES
-    ),
-    *(f"Mjlab-LiftCube-RealTexture-{arch}-Trossen" for arch in POOLED_ARCHITECTURES),
-    *(
-      f"Mjlab-LiftCube-Sim2Real-{arch}-TrossenRealistic"
-      for arch in SIM2REAL_ARCHITECTURES
-    ),
+    "Mjlab-LiftCube-State-Trossen",
+    "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-LiftCube-WoodTable-R3MResNet50-AfaFull32-Trossen",
+    "Mjlab-LiftCube-WoodTable-R3MResNet50-Global-Trossen",
+    "Mjlab-LiftCube-WoodTable-NatureCnn-FlattenRelu-Trossen",
+    "Mjlab-LiftCube-WoodTable-CompactVit-Svea-Trossen",
     "Mjlab-PushT-State-Trossen",
     "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen",
@@ -62,11 +37,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_48_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_19_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 48
+  assert len(EXPECTED_TASK_IDS) == 19
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -147,7 +122,7 @@ def test_every_visual_id_names_a_row_of_the_architecture_table() -> None:
 def test_registration_is_task_local_and_static() -> None:
   root = Path("src/vbrl/tasks")
   for package in (
-    root / "lift_cube/config/trossen",
+    root / "lift_cube/config/trossen_realistic",
     root / "push_t/config/trossen_realistic",
   ):
     assert (package / "__init__.py").is_file()

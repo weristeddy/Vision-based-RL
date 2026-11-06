@@ -20,12 +20,13 @@ _LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
 
 TASK_IDS = (
   "Mjlab-PushT-State-Trossen",
-  "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
+  "Mjlab-LiftCube-State-Trossen",
+  "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
   "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
 )
-VISUAL_TASK_ID = "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen"
 STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
 PUSH_T_PPO_TASK_ID = "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen"
+LIFT_STATE_TASK_ID = "Mjlab-LiftCube-State-Trossen"
 
 NUM_ENVS = 8
 IMAGE_SIZE = (224, 224)
@@ -267,7 +268,9 @@ def _float_state(module) -> dict:
 @pytest.mark.gpu
 @requires_cuda
 @requires_weights
-@pytest.mark.parametrize("task_id", (STATE_TASK_ID, VISUAL_TASK_ID, PUSH_T_PPO_TASK_ID))
+@pytest.mark.parametrize(
+  "task_id", (STATE_TASK_ID, LIFT_STATE_TASK_ID, PUSH_T_PPO_TASK_ID)
+)
 def test_one_learning_iteration_updates_the_policy(
   task_id: str, tmp_path: Path
 ) -> None:
@@ -301,7 +304,7 @@ def test_one_learning_iteration_updates_the_policy(
 @requires_cuda
 @requires_weights
 def test_a_checkpoint_resumes_into_a_fresh_runner(tmp_path: Path) -> None:
-  with _training_stack(VISUAL_TASK_ID, tmp_path) as (make_runner, _):
+  with _training_stack(PUSH_T_PPO_TASK_ID, tmp_path) as (make_runner, _):
     trained = make_runner()
     trained.learn(num_learning_iterations=1, init_at_random_ep_len=True)
     checkpoint = sorted(tmp_path.glob("model_*.pt"))[-1]
@@ -322,7 +325,7 @@ def test_a_checkpoint_resumes_into_a_fresh_runner(tmp_path: Path) -> None:
 @requires_cuda
 @requires_weights
 def test_frozen_visual_features_are_cached_during_rollout(tmp_path: Path) -> None:
-  with _training_stack(VISUAL_TASK_ID, tmp_path) as (make_runner, _):
+  with _training_stack(PUSH_T_PPO_TASK_ID, tmp_path) as (make_runner, _):
     runner = make_runner()
     runner.learn(num_learning_iterations=1, init_at_random_ep_len=True)
     algorithm = runner.alg

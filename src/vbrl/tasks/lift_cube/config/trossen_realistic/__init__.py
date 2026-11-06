@@ -1,75 +1,41 @@
 from mjlab.tasks.registry import register_mjlab_task
 
-from vbrl.training.runner import VbrlOnPolicyRunner
+from vbrl.training.runner import VbrlDistillationRunner, VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
 
-from ..trossen.rl_cfg import trossen_lift_cube_ppo_runner_cfg
-from .env_cfgs import trossen_realistic_lift_cube_env_cfg
-
-_REAL_TEXTURE_ENV = trossen_realistic_lift_cube_env_cfg(scene="real_texture")
-_REAL_TEXTURE_PLAY_ENV = trossen_realistic_lift_cube_env_cfg(
-  scene="real_texture", play=True
+from .env_cfgs import (
+  trossen_realistic_lift_cube_rgb_env_cfg,
+  trossen_realistic_lift_cube_state_env_cfg,
+)
+from .rl_cfg import (
+  STATE_TASK_ID,
+  trossen_realistic_lift_cube_rgb_distillation_runner_cfg,
+  trossen_realistic_lift_cube_state_ppo_runner_cfg,
 )
 
 
-def _sim2real(task_id: str, architecture: str) -> None:
+def _distill(task_id: str, architecture: str, scene: str) -> None:
   register_mjlab_task(
     task_id,
-    _REAL_TEXTURE_ENV,
-    _REAL_TEXTURE_PLAY_ENV,
-    trossen_lift_cube_ppo_runner_cfg(task_id, ARCHITECTURES[architecture]),
-    VbrlOnPolicyRunner,
+    trossen_realistic_lift_cube_rgb_env_cfg(scene=scene),
+    trossen_realistic_lift_cube_rgb_env_cfg(scene=scene, play=True),
+    trossen_realistic_lift_cube_rgb_distillation_runner_cfg(
+      task_id, ARCHITECTURES[architecture]
+    ),
+    VbrlDistillationRunner,
   )
 
 
-# Exactly the grid the 12 retained real-texture runs used, superseded rows included:
-# this generation changes the camera and nothing else.
-
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-NatureCnn-LocalGrid16-TrossenRealistic",
-  "NatureCnn-LocalGrid16",
+register_mjlab_task(
+  STATE_TASK_ID,
+  trossen_realistic_lift_cube_state_env_cfg(),
+  trossen_realistic_lift_cube_state_env_cfg(play=True),
+  trossen_realistic_lift_cube_state_ppo_runner_cfg(),
+  VbrlOnPolicyRunner,
 )
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-NatureCnn-SpatialSoftmax-TrossenRealistic",
-  "NatureCnn-SpatialSoftmax",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-CompactVit-LocalGrid8-TrossenRealistic",
-  "CompactVit-LocalGrid8",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-CompactVit-SpatialSoftmax-TrossenRealistic",
-  "CompactVit-SpatialSoftmax",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Linear-TrossenRealistic",
-  "DinoV2ViTS14-Linear",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-LocalGrid7-TrossenRealistic",
-  "DinoV2ViTS14-LocalGrid7",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic",
-  "DinoV2ViTS14-SpatialSoftmax",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-Afa6-TrossenRealistic",
-  "DinoV2ViTS14-Afa6",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-R3MResNet50-Linear-TrossenRealistic",
-  "R3MResNet50-Linear",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-R3MResNet50-LocalGrid7-TrossenRealistic",
-  "R3MResNet50-LocalGrid7",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-R3MResNet50-SpatialSoftmax-TrossenRealistic",
-  "R3MResNet50-SpatialSoftmax",
-)
-_sim2real(
-  "Mjlab-LiftCube-Sim2Real-R3MResNet50-Afa32-TrossenRealistic",
-  "R3MResNet50-Afa32",
-)
+_distill("Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_texture_wood")
+_distill("Mjlab-LiftCube-WoodTable-DinoV2ViTS14-Global-Trossen", "DinoV2ViTS14-Global", "real_texture_wood")
+_distill("Mjlab-LiftCube-WoodTable-R3MResNet50-AfaFull32-Trossen", "R3MResNet50-AfaFull32", "real_texture_wood")
+_distill("Mjlab-LiftCube-WoodTable-R3MResNet50-Global-Trossen", "R3MResNet50-Global", "real_texture_wood")
+_distill("Mjlab-LiftCube-WoodTable-NatureCnn-FlattenRelu-Trossen", "NatureCnn-FlattenRelu", "real_texture_wood")
+_distill("Mjlab-LiftCube-WoodTable-CompactVit-Svea-Trossen", "CompactVit-Svea", "real_texture_wood")

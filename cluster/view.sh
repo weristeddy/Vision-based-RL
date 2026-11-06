@@ -17,12 +17,12 @@ usage() {
   command cat <<'EOF'
 Usage:
   bash cluster/view.sh --profile testing -- \
-    Mjlab-PushT-State-TrossenRealistic --agent zero
+    Mjlab-PushT-State-Trossen --agent zero
 
   bash cluster/view.sh --profile testing -- \
-    Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen \
+    Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen \
     --agent trained \
-    --checkpoint-file ckpts/lift_cube/dinov2_vits14_local_grid7_real.pt \
+    --wandb-run-path <entity>/mjlab/<run> \
     --scene wood
 
 Launcher options (before --):

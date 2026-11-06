@@ -32,16 +32,16 @@ def look_direction(pose_cv: Any) -> Any:
 def wrist_camera_pose(joint_pos: Any | None = None) -> Any:
   import mujoco
 
-  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_XML, make_wxai
+  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML, make_wxai_measured
 
-  robot = make_wxai()
-  model = mujoco.MjModel.from_xml_path(str(WXAI_XML))
+  robot = make_wxai_measured()
+  model = mujoco.MjModel.from_xml_path(str(WXAI_MEASURED_XML))
   data = mujoco.MjData(model)
   if joint_pos is None:
     for joint, angle in robot.home_joint_pos.items():
       index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint)
       if index < 0:
-        raise RuntimeError(f"No joint {joint!r} in {WXAI_XML}.")
+        raise RuntimeError(f"No joint {joint!r} in {WXAI_MEASURED_XML}.")
       data.qpos[model.jnt_qposadr[index]] = angle
   else:
     angles = np.asarray(joint_pos, dtype=np.float64).reshape(-1)
@@ -54,7 +54,7 @@ def wrist_camera_pose(joint_pos: Any | None = None) -> Any:
   name = robot.resolve_camera("wrist").model_name
   index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, name)
   if index < 0:
-    raise RuntimeError(f"No camera {name!r} in {WXAI_XML}.")
+    raise RuntimeError(f"No camera {name!r} in {WXAI_MEASURED_XML}.")
   in_mujoco = transform(data.cam_xmat[index].reshape(3, 3), data.cam_xpos[index])
   return in_mujoco @ transform(CV_TO_MUJOCO, np.zeros(3))
 
@@ -62,15 +62,15 @@ def wrist_camera_pose(joint_pos: Any | None = None) -> Any:
 def wrist_camera_at_home() -> Any:
   import mujoco
 
-  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_XML, make_wxai
+  from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML, make_wxai_measured
 
-  robot = make_wxai()
-  model = mujoco.MjModel.from_xml_path(str(WXAI_XML))
+  robot = make_wxai_measured()
+  model = mujoco.MjModel.from_xml_path(str(WXAI_MEASURED_XML))
   data = mujoco.MjData(model)
   for joint, angle in robot.home_joint_pos.items():
     index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint)
     if index < 0:
-      raise RuntimeError(f"No joint {joint!r} in {WXAI_XML}.")
+      raise RuntimeError(f"No joint {joint!r} in {WXAI_MEASURED_XML}.")
     data.qpos[model.jnt_qposadr[index]] = angle
   mujoco.mj_kinematics(model, data)
   mujoco.mj_camlight(model, data)  # mj_kinematics alone does not place cameras
@@ -78,7 +78,7 @@ def wrist_camera_at_home() -> Any:
   name = robot.resolve_camera("wrist").model_name
   index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, name)
   if index < 0:
-    raise RuntimeError(f"No camera {name!r} in {WXAI_XML}.")
+    raise RuntimeError(f"No camera {name!r} in {WXAI_MEASURED_XML}.")
   in_mujoco = transform(data.cam_xmat[index].reshape(3, 3), data.cam_xpos[index])
   return in_mujoco @ transform(CV_TO_MUJOCO, np.zeros(3))
 

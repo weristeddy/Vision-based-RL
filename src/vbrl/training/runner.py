@@ -36,7 +36,7 @@ def policy_metadata(
   )
   from mjlab.envs.mdp.actions.actions import BaseAction
 
-  from vbrl.tasks.push_t.mdp.actions import TargetRelativeJointPositionActionCfg
+  from vbrl.tasks.utils.actions import TargetRelativeJointPositionActionCfg
 
   base = env.unwrapped if hasattr(env, "unwrapped") else env
   exporter_utils.JointPositionAction = BaseAction

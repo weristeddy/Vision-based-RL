@@ -388,6 +388,7 @@ def randomize_light_intensity(
 
 def _camera_events(camera_model: str) -> dict[str, EventTermCfg]:
   asset_cfg = SceneEntityCfg("robot", camera_names=(camera_model,))
+  position_range = CAMERA_POSITION_DR_RANGE_M[camera_model]
   return {
     "camera_position": EventTermCfg(
       func=dr.cam_pos,
@@ -396,10 +397,7 @@ def _camera_events(camera_model: str) -> dict[str, EventTermCfg]:
         "asset_cfg": asset_cfg,
         "operation": "add",
         "distribution": "uniform",
-        "ranges": {
-          axis: (-CAMERA_POSITION_DR_RANGE_M, CAMERA_POSITION_DR_RANGE_M)
-          for axis in range(3)
-        },
+        "ranges": dict.fromkeys(range(3), (-position_range, position_range)),
       },
     ),
     "camera_orientation": EventTermCfg(

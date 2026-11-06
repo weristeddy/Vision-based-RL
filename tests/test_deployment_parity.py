@@ -10,7 +10,7 @@ pytest.importorskip("mjlab")
 if not torch.cuda.is_available():
   pytest.skip("deployment parity needs CUDA", allow_module_level=True)
 
-TASK = "Mjlab-LiftCube-Sim2Real-DinoV2ViTS14-SpatialSoftmax-TrossenRealistic"
+TASK = "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
 
 
 class _Meta:
@@ -75,8 +75,12 @@ def test_the_contract_read_from_metadata_matches_the_simulator(
   np.testing.assert_allclose(
     metadata.action_scale, action._scale[0].cpu().numpy(), atol=1e-6
   )
+  assert metadata.action_type == "target"
   np.testing.assert_allclose(
-    metadata.action_offset, action._offset[0].cpu().numpy(), atol=1e-6
+    metadata.target_limits[0], action.low[0].cpu().numpy(), atol=1e-6
+  )
+  np.testing.assert_allclose(
+    metadata.target_limits[1], action.high[0].cpu().numpy(), atol=1e-6
   )
   assert metadata.observation_terms == tuple(unwrapped.observation_manager.active_terms["actor"])
 
@@ -95,7 +99,8 @@ def test_deployment_observation_matches_the_simulator(simulation) -> None:
   goal = command.target_pos[0].cpu().numpy() - base
 
   policy = Policy(_Session(simulation), goal=tuple(goal))
-  policy._last_action = unwrapped.action_manager.action[0].cpu().numpy()
+  target = unwrapped.action_manager.get_term("joint_pos").target[0].cpu().numpy()
+  policy._target = np.concatenate([target, target[-1:]])
 
   observation = policy.observe(
     joint_pos=robot.data.joint_pos[0].cpu().numpy(),

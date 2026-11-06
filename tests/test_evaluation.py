@@ -17,7 +17,7 @@ from vbrl.runtime import CheckpointRef
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_ID = (
-  "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen"
+  "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
 )
 
 
@@ -153,34 +153,6 @@ def test_load_config_rejects_invalid_or_duplicated_model_metadata(
   path = _write_config(tmp_path / "evaluation.yaml", **changes)
   with pytest.raises(ValueError, match=message):
     suite.load_config(path)
-
-
-def test_committed_thesis_evaluations_pin_local_structural_references() -> None:
-  from mjlab.tasks.registry import list_tasks
-
-  import vbrl.tasks  # noqa: F401
-
-  registered = set(list_tasks())
-  references: set[tuple[str, str]] = set()
-  for path in sorted((ROOT / "configs/evaluation").glob("*.yaml")):
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert raw["models"]
-    for model in raw["models"]:
-      assert set(model) == {"name", "task_id", "checkpoint_file"}
-      assert model["task_id"] in registered
-      assert model["checkpoint_file"].startswith("ckpts/")
-      references.add((model["task_id"], model["checkpoint_file"]))
-    assert len({model["name"] for model in raw["models"]}) == len(raw["models"])
-    loaded = suite.load_config(path)
-    assert len(loaded.models) == len(raw["models"])
-
-  lift = {
-    reference
-    for reference in references
-    if reference[0].startswith("Mjlab-LiftCube-")
-  }
-  assert len({checkpoint for _, checkpoint in lift}) == 24
-  assert lift == references
 
 
 class _CommandManager:

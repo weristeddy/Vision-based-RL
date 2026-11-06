@@ -5,12 +5,12 @@ from typing import Any
 
 import numpy as np
 
-from vbrl.asset_zoo.robots.trossen_wxai import make_wxai
+from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
 
 # The pose the arm rests at unpowered, so the only pose from which releasing
 # torque is safe: idle is not gravity-compensated.
 REST_POSE = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-UPRIGHT_POSE = tuple(make_wxai().home_joint_pos[f"joint_{i}"] for i in range(6))
+UPRIGHT_POSE = tuple(make_wxai_measured().home_joint_pos[f"joint_{i}"] for i in range(6))
 LIMIT_MARGIN = 0.02
 GRIPPER_MARGIN = 0.002
 D405_MASS = 0.11718

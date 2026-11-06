@@ -9,12 +9,12 @@ class Kinematics:
   def __init__(self) -> None:
     import mujoco
 
-    from vbrl.asset_zoo.robots.trossen_wxai import WXAI_XML, make_wxai
+    from vbrl.asset_zoo.robots.trossen_wxai import WXAI_MEASURED_XML, make_wxai_measured
 
-    self._model = mujoco.MjModel.from_xml_path(str(WXAI_XML))
+    self._model = mujoco.MjModel.from_xml_path(str(WXAI_MEASURED_XML))
     self._data = mujoco.MjData(self._model)
     self._ee_site = mujoco.mj_name2id(
-      self._model, mujoco.mjtObj.mjOBJ_SITE, make_wxai().ee_site
+      self._model, mujoco.mjtObj.mjOBJ_SITE, make_wxai_measured().ee_site
     )
 
   def ee_pose(self, joint_pos: Any) -> tuple[Any, Any]:

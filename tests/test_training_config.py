@@ -1,34 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-yaml = pytest.importorskip("yaml")
 pytest.importorskip("mjlab")
-
-
-SWEEPS = sorted((Path(__file__).resolve().parents[1] / "configs" / "sweeps").glob("*.yaml"))
-NATIVE_SWEEP_KEYS = {
-  "agent.seed",
-  "agent.max-iterations",
-  "agent.save-interval",
-  "agent.algorithm.learning-rate",
-  "agent.algorithm.schedule",
-  "agent.algorithm.num-learning-epochs",
-  "agent.algorithm.num-mini-batches",
-  "agent.algorithm.entropy-coef",
-  "agent.algorithm.desired-kl",
-  "agent.algorithm.max-grad-norm",
-  "agent.algorithm.gradient-accumulation-steps",
-  "env.scene.num-envs",
-  "video-interval",
-  "video-length",
-}
-
-
-def _sweeps() -> dict[str, dict]:
-  return {p.name: yaml.safe_load(p.read_text(encoding="utf-8")) for p in SWEEPS}
 
 
 def _task_ids() -> set[str]:
@@ -86,7 +60,7 @@ def test_push_t_students_distill_with_the_teachers_network() -> None:
   assert state.algorithm.learning_rate == 0.0001
   assert state.max_iterations == 8000
   assert isinstance(student.algorithm, VisualDistillationCfg)
-  assert student.max_iterations == 5000
+  assert student.max_iterations == 8000
   assert student.obs_groups == {"student": ("actor", "camera"), "teacher": ("teacher",)}
   assert student.teacher.hidden_dims == state.actor.hidden_dims == (256, 256, 128)
   assert student.teacher.activation == state.actor.activation == "relu"
@@ -121,51 +95,3 @@ def test_push_t_visual_ppo_trains_exactly_like_the_teacher() -> None:
   assert ppo_env.actions == state_env.actions
   assert ppo_env.commands["push_t_goal"].near_object_start is True
   assert "teacher" not in ppo_env.observations
-
-
-def test_every_sweep_fixes_one_registered_task_and_varies_native_keys_only() -> None:
-  task_ids = _task_ids()
-
-  for name, sweep in _sweeps().items():
-    command = sweep["command"]
-    assert sweep["program"] == "vbrl.scripts.train"
-    assert command[:4] == ["${env}", "python", "-m", "${program}"]
-    assert command[-1] == "${args_no_boolean_flags}"
-    assert len([t for t in command if str(t) in task_ids]) == 1, name
-    assert set(sweep.get("parameters", {})) <= NATIVE_SWEEP_KEYS, name
-
-    for index, value in enumerate(command[:-1]):
-      if value in {"--video", "--headless"}:
-        assert command[index + 1] in {"True", "False"}, name
-    for spec in sweep.get("parameters", {}).values():
-      assert not isinstance(spec.get("value"), bool)
-      assert not any(isinstance(v, bool) for v in spec.get("values", []))
-
-
-def test_every_sweep_flag_path_parses_against_the_train_cli() -> None:
-  import mjlab
-  import tyro
-
-  from vbrl.scripts.train import TrainConfig
-
-  task_ids = _task_ids()
-  for name, sweep in _sweeps().items():
-    command = sweep["command"]
-    task_id = next(str(t) for t in command if str(t) in task_ids)
-    args = [str(v) for v in command[command.index(task_id) + 1 : -1]]
-    for key, spec in sweep.get("parameters", {}).items():
-      if "value" in spec:
-        value = spec["value"]
-      elif "values" in spec:
-        value = spec["values"][0]
-      else:
-        value = spec["min"]
-      args.extend((f"--{key}", str(value)))
-
-    parsed = tyro.cli(
-      TrainConfig,
-      args=args,
-      default=TrainConfig.from_task(task_id),
-      config=mjlab.TYRO_FLAGS,
-    )
-    assert parsed.env.scene.num_envs == 1024, name

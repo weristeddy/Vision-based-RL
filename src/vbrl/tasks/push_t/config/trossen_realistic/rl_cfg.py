@@ -10,7 +10,7 @@ from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
 _EVALUATION_SCENES = ("real_table", "real_texture_wood")
-_DISTILLATION_MAX_ITERATIONS = 5000
+_DISTILLATION_MAX_ITERATIONS = 8000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
   "activation": "relu",

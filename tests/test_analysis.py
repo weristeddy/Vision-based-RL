@@ -27,7 +27,7 @@ from vbrl.analysis.probe import load_probe, ridge_probe, save_probe
 from vbrl.runtime import CheckpointRef
 from vbrl.scripts.analyze import Context
 
-TASK_ID = "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen"
+TASK_ID = "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
 
 
 class _DummyEnv:

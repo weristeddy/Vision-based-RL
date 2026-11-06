@@ -5,14 +5,8 @@ import pytest
 pytest.importorskip("mjlab")
 
 
-LIFT_ACTOR = ("joint_pos", "joint_vel", "actions", "goal_position")
-LIFT_CRITIC = (
-  "joint_pos",
-  "joint_vel",
-  "ee_to_cube",
-  "cube_to_goal",
-  "actions",
-)
+LIFT_STATE = ("qpos", "qvel", "target_qpos", "tcp_pose", "goal_position", "obj_pose")
+LIFT_CRITIC = (*LIFT_STATE, "ee_to_cube", "cube_to_goal")
 PUSH_T_STATE = (
   "qpos",
   "qvel",
@@ -35,29 +29,44 @@ def _camera(cfg, name: str):
   return next(sensor for sensor in cfg.scene.sensors if sensor.name == name)
 
 
-def test_lift_collision_and_visual_versions_preserve_distinct_cameras() -> None:
-  from vbrl.tasks.lift_cube.config.trossen.env_cfgs import (
-    trossen_lift_cube_env_cfg,
+def test_lift_state_and_rgb_share_control_and_the_student_sees_the_wrist() -> None:
+  from vbrl.tasks.lift_cube.config.trossen_realistic.env_cfgs import (
+    trossen_realistic_lift_cube_rgb_env_cfg,
+    trossen_realistic_lift_cube_state_env_cfg,
   )
 
-  collision = trossen_lift_cube_env_cfg(camera_geometry="collision")
-  visual = trossen_lift_cube_env_cfg(camera_geometry="visual")
+  state = trossen_realistic_lift_cube_state_env_cfg()
+  rgb = trossen_realistic_lift_cube_rgb_env_cfg(scene="real_texture_wood")
 
-  for cfg in (collision, visual):
+  for cfg in (state, rgb):
     assert set(cfg.scene.entities) == {"robot", "table", "cube"}
-    assert tuple(cfg.observations["actor"].terms) == LIFT_ACTOR
     assert tuple(cfg.observations["critic"].terms) == LIFT_CRITIC
-    assert tuple(cfg.observations["camera"].terms) == ("cam_rgb",)
-    camera = _camera(cfg, "cam")
-    assert camera.camera_name == "robot/cam"
-    assert (camera.width, camera.height) == (224, 224)
+    assert cfg.decimation == 10
+  assert tuple(state.observations["actor"].terms) == LIFT_STATE
+  assert tuple(rgb.observations["actor"].terms) == LIFT_STATE[:-1]
+  assert tuple(rgb.observations["teacher"].terms) == LIFT_STATE
+  assert "camera" not in state.observations
+  assert tuple(rgb.observations["camera"].terms) == ("cam_rgb",)
+  assert state.actions == rgb.actions
+  action = state.actions["joint_pos"]
+  assert action.actuator_names[-1] == "left_carriage_joint"
+  assert action.scale["left_carriage_joint"] == 0.002
+  assert (action.scale["joint_0"], action.wrist_roll_scale, action.ramp_s) == (
+    0.025,
+    0.02,
+    0.05,
+  )
+  assert state.rewards == rgb.rewards
+  assert state.rewards["joint_vel_l2"].weight == -0.05
+  assert state.rewards["action_rate_l2"].weight == -0.01
 
-  assert _camera(collision, "cam").enabled_geom_groups == (0, 3)
-  assert _camera(visual, "cam").enabled_geom_groups == (0, 2)
-  # Recorded video must draw the same geometry generation the policy is fed, plus the
-  # floor in group 1, which is scenery for whoever is watching -- and now the D405 body.
-  assert collision.viewer.geom_group == (1, 1, 0, 1, 0, 0)
-  assert visual.viewer.geom_group == (1, 1, 1, 0, 0, 0)
+  camera = _camera(rgb, "cam")
+  assert camera.camera_name == "robot/cam"
+  assert camera.enabled_geom_groups == (0, 2)
+  assert (camera.width, camera.height) == (224, 224)
+  assert rgb.viewer.geom_group == (1, 1, 1, 0, 0, 0)
+  wrist = rgb.events["camera_position"].params["ranges"]
+  assert wrist == dict.fromkeys(range(3), (-0.005, 0.005))
 
 
 def test_every_task_lays_its_envs_out_on_a_grid() -> None:
@@ -92,24 +101,13 @@ def test_every_task_lays_its_envs_out_on_a_grid() -> None:
         assert ORIGIN_PLANE_GROUP not in sensor.enabled_geom_groups, task_id
 
 
-def test_the_visual_camera_is_the_default() -> None:
-  from vbrl.tasks.lift_cube.config.trossen.env_cfgs import (
-    trossen_lift_cube_env_cfg,
-  )
-
-  default = trossen_lift_cube_env_cfg()
-
-  assert _camera(default, "cam").enabled_geom_groups == (0, 2)
-  assert default.viewer.geom_group == (1, 1, 1, 0, 0, 0)
-
-
 def test_any_scene_can_be_registered_against_a_task() -> None:
-  from vbrl.tasks.lift_cube.config.trossen.env_cfgs import (
-    trossen_lift_cube_env_cfg,
+  from vbrl.tasks.lift_cube.config.trossen_realistic.env_cfgs import (
+    trossen_realistic_lift_cube_rgb_env_cfg,
   )
 
-  real = trossen_lift_cube_env_cfg(scene="real_texture")
-  procedural = trossen_lift_cube_env_cfg(scene="procedural")
+  real = trossen_realistic_lift_cube_rgb_env_cfg(scene="real_texture")
+  procedural = trossen_realistic_lift_cube_rgb_env_cfg(scene="procedural")
 
   assert "table_material" in real.events
   assert "table_material" in procedural.events
@@ -188,18 +186,18 @@ def test_rgb_camera_term_preserves_native_uint8_bchw() -> None:
 @pytest.mark.parametrize(
   ("factory", "kwargs"),
   (
-    ("trossen_lift_cube_env_cfg", {"camera_geometry": "collision"}),
-    ("trossen_lift_cube_env_cfg", {"camera_geometry": "visual"}),
+    ("trossen_realistic_lift_cube_state_env_cfg", {}),
+    ("trossen_realistic_lift_cube_rgb_env_cfg", {"scene": "real_texture_wood"}),
     ("trossen_realistic_push_t_state_env_cfg", {}),
     ("trossen_realistic_push_t_rgb_env_cfg", {"scene": "real_table"}),
   ),
-  ids=("lift-collision", "lift-visual", "push-t-state", "push-t-rgb"),
+  ids=("lift-state", "lift-rgb", "push-t-state", "push-t-rgb"),
 )
 def test_task_local_play_factories_are_small_clean_copies(
   factory: str, kwargs: dict
 ) -> None:
-  if factory.startswith("trossen_lift_cube"):
-    from vbrl.tasks.lift_cube.config.trossen import env_cfgs
+  if "lift_cube" in factory:
+    from vbrl.tasks.lift_cube.config.trossen_realistic import env_cfgs
   else:
     from vbrl.tasks.push_t.config.trossen_realistic import env_cfgs
 
@@ -219,8 +217,8 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
   import vbrl.tasks  # noqa: F401
 
   for task_id in (
-    "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen",
-    "Mjlab-LiftCube-RealTexture-DinoV2ViTS14-LocalGrid7-Trossen",
+    "Mjlab-LiftCube-State-Trossen",
+    "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushT-State-Trossen",
     "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
   ):

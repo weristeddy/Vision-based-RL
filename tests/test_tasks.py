@@ -48,7 +48,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 48
+  assert len(task_ids) == 19
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     if hasattr(agent, "student"):
@@ -193,7 +193,7 @@ def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
 def test_gripper_rotation_tilts_the_pointing_axis_about_the_finger_axis() -> None:
   import numpy as np
 
-  from vbrl.tasks.push_t.arm_placement import gripper_rotation
+  from vbrl.tasks.utils.arm_placement import gripper_rotation
 
   rotation = gripper_rotation(0.7, math.radians(25.0))
 
@@ -658,7 +658,7 @@ def test_push_t_invalid_state_terminations_cover_table_and_velocity() -> None:
 def test_push_t_gaussian_joint_reset_preserves_selection_and_clamping(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  from vbrl.tasks.push_t.mdp import events
+  from vbrl.tasks.utils import events
 
   written: dict[str, object] = {}
   asset = SimpleNamespace(
@@ -755,7 +755,7 @@ def test_push_t_config_pins_the_trained_contract() -> None:
   )
 
   cfg = _push_t()
-  definition = get_robot("trossen_realistic")
+  definition = get_robot("trossen_measured")
 
   sensors = {sensor.name: sensor for sensor in cfg.scene.sensors}
   assert {"ee_object_contact", "robot_table_contact"} <= set(sensors)

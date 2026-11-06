@@ -11,7 +11,7 @@ from unittest.mock import ANY
 import pytest
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
-TASK_ID = "Mjlab-LiftCube-CollisionCam-DinoV2ViTS14-LocalGrid7-Trossen"
+TASK_ID = "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
 
 
 def test_scene_and_path_imports_stay_free_of_a_simulator(tmp_path: Path) -> None:
