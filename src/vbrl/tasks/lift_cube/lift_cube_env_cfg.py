@@ -154,6 +154,9 @@ def build_env_cfg(
     )
   cfg.episode_length_s = EPISODE_LENGTH_S
   cfg.decimation = DECIMATION
+  # As Push-T. Scaled by dt = 0.05 the rewards shrank against the entropy bonus,
+  # which drove gbm0jo0h's action std to 460.
+  cfg.scale_rewards_by_dt = False
   cfg.viewer.origin_type = ViewerConfig.OriginType.ASSET_ROOT
   cfg.viewer.entity_name = "robot"
   cfg.viewer.max_extra_envs = 0

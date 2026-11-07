@@ -15,10 +15,13 @@ _NETWORK = {
   "activation": "elu",
   "obs_normalization": True,
 }
+# Push-T's action bounds. Without them gbm0jo0h ended with a std of 460 and mean
+# actions of |a| ~1,400: every joint stepped at the +/-1 clip, bang-bang.
 _GAUSSIAN = {
   "class_name": "GaussianDistribution",
   "init_std": 1.0,
-  "std_type": "scalar",
+  "std_type": "log",
+  "std_range": (0.0, 1.5),
 }
 
 
@@ -55,6 +58,8 @@ def trossen_realistic_lift_cube_state_ppo_runner_cfg() -> VbrlOnPolicyRunnerCfg:
       optimizer="adam",
       share_cnn_encoders=False,
       early_stop_kl=False,
+      bound_loss_coef=1.0,
+      action_head_init_scale=0.01,
     ),
   )
 

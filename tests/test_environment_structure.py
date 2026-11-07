@@ -57,6 +57,7 @@ def test_lift_state_and_rgb_share_control_and_the_student_sees_the_wrist() -> No
     0.05,
   )
   assert state.rewards == rgb.rewards
+  assert state.scale_rewards_by_dt is rgb.scale_rewards_by_dt is False
   assert state.rewards["joint_vel_l2"].weight == -0.05
   assert state.rewards["action_rate_l2"].weight == -0.01
 

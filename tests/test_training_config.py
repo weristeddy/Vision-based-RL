@@ -95,3 +95,15 @@ def test_push_t_visual_ppo_trains_exactly_like_the_teacher() -> None:
   assert ppo_env.actions == state_env.actions
   assert ppo_env.commands["push_t_goal"].near_object_start is True
   assert "teacher" not in ppo_env.observations
+
+
+def test_lift_cube_teacher_bounds_its_actions_like_push_t() -> None:
+  from mjlab.tasks.registry import load_rl_cfg
+
+  lift = load_rl_cfg("Mjlab-LiftCube-State-Trossen")
+  push_t = load_rl_cfg("Mjlab-PushT-State-Trossen")
+
+  assert lift.actor.distribution_cfg == push_t.actor.distribution_cfg
+  assert lift.algorithm.bound_loss_coef == push_t.algorithm.bound_loss_coef == 1.0
+  assert lift.algorithm.action_head_init_scale == 0.01
+  assert lift.clip_actions == 1.0
