@@ -56,6 +56,7 @@ def policy_metadata(
     metadata["ramp_s"] = float(action_cfg.ramp_s)
     metadata["target_low"] = term.low[0].cpu().tolist()
     metadata["target_high"] = term.high[0].cpu().tolist()
+    metadata["absolute_joints"] = list(action_cfg.absolute_names)
   # The clip is as much of the contract as the scale: without it Push-T sent
   # 0.31 rad against the 0.1 the simulator would ever apply.
   clip = getattr(term, "_clip", None)

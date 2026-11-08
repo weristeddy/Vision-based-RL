@@ -21,8 +21,6 @@ _COMMAND = "lift_height"
 DECIMATION = 10
 ACTION_SCALE = 0.025
 WRIST_ROLL_SCALE = 0.02
-# 4 mm of pad travel per 50 ms step, the 4 cm cube's width in half a second.
-GRIPPER_SCALE = 0.002
 RAMP_S = 0.05
 EPISODE_LENGTH_S = 20.0
 ACTION_RATE_WEIGHT = -0.01
@@ -73,8 +71,9 @@ def build_env_cfg(
     "joint_pos": mdp.TargetRelativeJointPositionActionCfg(
       entity_name="robot",
       actuator_names=(*arm, gripper),
-      scale={**dict.fromkeys(arm, ACTION_SCALE), gripper: GRIPPER_SCALE},
+      scale=dict.fromkeys(arm, ACTION_SCALE),
       wrist_roll_scale=WRIST_ROLL_SCALE,
+      absolute_names=(gripper,),
       ramp_s=RAMP_S,
       preserve_order=True,
     )

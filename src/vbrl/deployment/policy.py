@@ -49,6 +49,7 @@ class PolicyMetadata:
   source_run: str
   control_hz: float | None = None
   ramp_s: float | None = None
+  absolute_joints: tuple[str, ...] = ()
 
   @classmethod
   def from_onnx(cls, onnx_session: Any) -> PolicyMetadata:
@@ -94,6 +95,9 @@ class PolicyMetadata:
       source_run=meta.get("run_path", "unknown"),
       control_hz=float(meta["control_hz"]) if "control_hz" in meta else None,
       ramp_s=float(meta["ramp_s"]) if "ramp_s" in meta else None,
+      absolute_joints=tuple(
+        filter(None, meta.get("absolute_joints", "").split(","))
+      ),
     )
 
   @property
@@ -218,6 +222,10 @@ class Policy:
     targets[:n] = base[:n] + delta
     if self.metadata.target_limits is not None:
       low, high = self.metadata.target_limits
+      for name in self.metadata.absolute_joints:
+        i = ARM_JOINTS.index(name)
+        fraction = (np.clip(action[i], -1.0, 1.0) + 1.0) / 2.0
+        targets[i] = low[i] + fraction * (high[i] - low[i])
       targets[:n] = np.clip(targets[:n], low[:n], high[:n])
     self._target = targets
     return targets

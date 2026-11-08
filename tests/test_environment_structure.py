@@ -50,7 +50,8 @@ def test_lift_state_and_rgb_share_control_and_the_student_sees_the_wrist() -> No
   assert state.actions == rgb.actions
   action = state.actions["joint_pos"]
   assert action.actuator_names[-1] == "left_carriage_joint"
-  assert action.scale["left_carriage_joint"] == 0.002
+  assert action.absolute_names == ("left_carriage_joint",)
+  assert "left_carriage_joint" not in action.scale
   assert (action.scale["joint_0"], action.wrist_roll_scale, action.ramp_s) == (
     0.025,
     0.02,

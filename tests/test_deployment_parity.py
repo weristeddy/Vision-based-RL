@@ -76,6 +76,7 @@ def test_the_contract_read_from_metadata_matches_the_simulator(
     metadata.action_scale, action._scale[0].cpu().numpy(), atol=1e-6
   )
   assert metadata.action_type == "target"
+  assert metadata.absolute_joints == ("left_carriage_joint",)
   np.testing.assert_allclose(
     metadata.target_limits[0], action.low[0].cpu().numpy(), atol=1e-6
   )
@@ -83,6 +84,24 @@ def test_the_contract_read_from_metadata_matches_the_simulator(
     metadata.target_limits[1], action.high[0].cpu().numpy(), atol=1e-6
   )
   assert metadata.observation_terms == tuple(unwrapped.observation_manager.active_terms["actor"])
+
+
+def test_joint_targets_match_the_simulated_action_term(simulation) -> None:
+  from vbrl.deployment.policy import Policy
+
+  term = simulation.unwrapped.action_manager.get_term("joint_pos")
+  policy = Policy(_Session(simulation), goal=(0.35, 0.0, 0.35))
+  policy._target = term.target[0].cpu().numpy().copy()
+  for gripper in (-1.0, 0.3, 1.0):
+    action = torch.tensor(
+      [[0.5, -0.5, 1.0, -1.0, 0.2, -0.3, gripper]], device=term.device
+    )
+    term.process_actions(action)
+    targets = policy.joint_targets(action[0].cpu().numpy())
+    np.testing.assert_allclose(
+      targets, term.target[0].cpu().numpy(), atol=1e-6, rtol=0
+    )
+  term.reset()
 
 
 def test_deployment_observation_matches_the_simulator(simulation) -> None:

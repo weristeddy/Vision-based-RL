@@ -87,8 +87,8 @@ vbrl-deploy   configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml
 ## Lift-Cube
 
 Seven task IDs on Push-T's arm and control: the measured arm at 20 Hz, a
-target-relative action (arm 0.025, wrist roll 0.02, gripper 0.002) with the SDK's
-50 ms ramp, `action_rate_l2` -0.01 and `joint_vel_l2` -0.05. Rewards, the 20 s
+target-relative arm action (0.025, wrist roll 0.02) and an absolute gripper
+(ManiSkill's WidowX AI controller) with the SDK's 50 ms ramp, `action_rate_l2` -0.01 and `joint_vel_l2` -0.05. Rewards, the 20 s
 episode and the goal resampled every 8-12 s, which puts the cube back on the table,
 are MJLab's. A state teacher trains with PPO; the students are DAgger students of it
 with the wrist camera on AmbientCG wood tabletops.

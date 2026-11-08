@@ -21,6 +21,9 @@ class TargetRelativeJointPositionAction(BaseAction):
     self._scale[:, self._target_names.index("joint_5")] = cfg.wrist_roll_scale
     limits = self._entity.data.soft_joint_pos_limits[:, self._target_ids]
     self.low, self.high = limits[..., 0], limits[..., 1]
+    self._absolute = torch.tensor(
+      [name in cfg.absolute_names for name in self._target_names], device=self.device
+    )
     self._target = self._entity.data.joint_pos[:, self._target_ids].clone()
     self._setpoint = self._target.clone()
     self._ramp = torch.zeros_like(self._target)
@@ -50,8 +53,11 @@ class TargetRelativeJointPositionAction(BaseAction):
 
   def process_actions(self, actions: torch.Tensor) -> None:
     super().process_actions(actions)
+    fraction = (self._raw_actions.clamp(-1.0, 1.0) + 1.0) / 2.0
+    absolute = self.low + fraction * (self.high - self.low)
+    relative = self._target + self._processed_actions
     self._target = torch.clamp(
-      self._target + self._processed_actions, self.low, self.high
+      torch.where(self._absolute, absolute, relative), self.low, self.high
     )
     self._ramp = (self._target - self._setpoint) / self._ramp_substeps
 
@@ -69,6 +75,9 @@ class TargetRelativeJointPositionAction(BaseAction):
 class TargetRelativeJointPositionActionCfg(BaseActionCfg):
   ramp_s: float
   wrist_roll_scale: float
+  # Mapped from [-1, 1] onto the soft limits, as ManiSkill drives the WidowX AI
+  # gripper: grasping becomes one action, not a random walk of small steps.
+  absolute_names: tuple[str, ...] = ()
 
   def __post_init__(self) -> None:
     self.transmission_type = TransmissionType.JOINT
