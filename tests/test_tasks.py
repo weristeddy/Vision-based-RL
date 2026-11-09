@@ -205,7 +205,7 @@ def test_gripper_rotation_tilts_the_pointing_axis_about_the_finger_axis() -> Non
 
 
 def test_ee_tilt_is_zero_pointing_down_and_one_horizontal() -> None:
-  from vbrl.tasks.push_t.mdp.rewards import ee_tilt
+  from vbrl.tasks.utils.rewards import ee_tilt
 
   half = math.sqrt(0.5)
   quats = torch.tensor([[half, 0.0, half, 0.0], [1.0, 0.0, 0.0, 0.0]])

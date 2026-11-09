@@ -25,6 +25,7 @@ RAMP_S = 0.05
 EPISODE_LENGTH_S = 20.0
 ACTION_RATE_WEIGHT = -0.01
 JOINT_VEL_WEIGHT = -0.05
+EE_VERTICAL_WEIGHT = 0.0
 OBJECT_REST_HEIGHT = 0.02
 
 
@@ -110,6 +111,9 @@ def build_env_cfg(
       params={
         "asset_cfg": SceneEntityCfg("robot", joint_names=arm)
       },
+    ),
+    "ee_vertical": RewardTermCfg(
+      func=mdp.ee_tilt, weight=EE_VERTICAL_WEIGHT, params={"asset_cfg": robot_ee}
     ),
     "joint_pos_limits": RewardTermCfg(
       func=mdp.joint_pos_limits,

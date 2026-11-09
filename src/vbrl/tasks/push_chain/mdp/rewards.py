@@ -7,11 +7,7 @@ from mjlab.entity import Entity
 from mjlab.managers import SceneEntityCfg
 from mjlab.utils.lab_api.math import wrap_to_pi
 
-from vbrl.tasks.push_t.mdp.rewards import (
-  ee_tilt,
-  max_contact_force_on_face,
-  table_touch,
-)
+from vbrl.tasks.push_t.mdp.rewards import max_contact_force_on_face, table_touch
 
 from ..geometry import HINGE_LIMIT, chain_signed_distance
 from .commands import PushChainCommand, push_chain_command
@@ -84,7 +80,6 @@ __all__ = [
   "MIDDLE_LINK_WEIGHT",
   "at_goal_static",
   "chain_dense_reward",
-  "ee_tilt",
   "goal_orderings",
   "max_contact_force_on_face",
   "ordering_values",
