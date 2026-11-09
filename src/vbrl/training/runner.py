@@ -15,14 +15,15 @@ class VbrlOnPolicyRunnerCfg(RslRlOnPolicyRunnerCfg):
 
 
 class GoalYawNormalization(EmpiricalNormalization):
-  def __init__(self, shape: int, yaw_start: int) -> None:
+  def __init__(self, shape: int, yaw_start: int, yaw_count: int = 1) -> None:
     super().__init__(shape)
     self.yaw_start = yaw_start
+    self.yaw_count = yaw_count
 
   def forward(self, x):
     normalized = (x - self._mean) / (self._std + self.eps)
-    start = self.yaw_start
-    normalized[:, start : start + 2] = x[:, start : start + 2]
+    for start in range(self.yaw_start, self.yaw_start + 5 * self.yaw_count, 5):
+      normalized[:, start : start + 2] = x[:, start : start + 2]
     return normalized
 
 
@@ -87,8 +88,11 @@ class VbrlOnPolicyRunner(MjlabOnPolicyRunner):
       names = observations.active_terms[group]
       if "target_pose" in names and model.obs_normalization:
         dims = observations.group_obs_term_dim[group]
-        yaw_start = sum(dim[0] for dim in dims[: names.index("target_pose")]) + 3
-        model.obs_normalizer = GoalYawNormalization(model.obs_dim, yaw_start).to(device)
+        index = names.index("target_pose")
+        yaw_start = sum(dim[0] for dim in dims[:index]) + 3
+        model.obs_normalizer = GoalYawNormalization(
+          model.obs_dim, yaw_start, dims[index][0] // 5
+        ).to(device)
 
   def save(self, path: str, infos: Any = None) -> None:
     super().save(path, infos)

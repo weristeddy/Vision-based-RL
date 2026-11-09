@@ -556,14 +556,16 @@ def apply_scene(
   )
 
 
-_NON_OBJECT_ENTITIES = frozenset({"robot", "table", "goal_marker"})
+_NON_OBJECT_ENTITIES = frozenset({"robot", "table"})
 
 
 def _task_object(entities) -> str:
   names = [
     name
     for name, entity in entities.items()
-    if name not in _NON_OBJECT_ENTITIES and entity.spec_fn is not None
+    if name not in _NON_OBJECT_ENTITIES
+    and not name.startswith("goal_marker")
+    and entity.spec_fn is not None
   ]
   if not names:
     raise ValueError("Scene replacement requires a task object.")
