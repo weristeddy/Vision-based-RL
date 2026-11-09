@@ -33,15 +33,22 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen",
     "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen",
     "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushChain-State-Trossen",
+    "Mjlab-PushChain-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushChain-WoodTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-PushChain-WoodTable-R3MResNet50-AfaFull32-Trossen",
+    "Mjlab-PushChain-WoodTable-R3MResNet50-Global-Trossen",
+    "Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen",
+    "Mjlab-PushChain-WoodTable-CompactVit-Svea-Trossen",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_19_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_26_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 19
+  assert len(EXPECTED_TASK_IDS) == 26
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -78,7 +85,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     assert external <= {"external_cam"}, f"{task_id} has {external}"
     seen_external += bool(external)
 
-  assert seen_external == 11
+  assert seen_external == 17
 
 
 def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:
@@ -124,6 +131,7 @@ def test_registration_is_task_local_and_static() -> None:
   for package in (
     root / "lift_cube/config/trossen_realistic",
     root / "push_t/config/trossen_realistic",
+    root / "push_chain/config/trossen_realistic",
   ):
     assert (package / "__init__.py").is_file()
     assert (package / "env_cfgs.py").is_file()
