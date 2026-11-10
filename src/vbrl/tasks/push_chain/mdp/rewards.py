@@ -45,6 +45,13 @@ def ordering_values(command: PushChainCommand) -> torch.Tensor:
   return MIDDLE_LINK_WEIGHT * middle_term + HINGE_WEIGHT * hinge_term
 
 
+def best_goal(command: PushChainCommand) -> tuple[torch.Tensor, torch.Tensor]:
+  rows = torch.arange(command.num_envs, device=command.device)
+  ordering = ordering_values(command).argmax(-1)
+  goal_yaw, goal_hinges = goal_orderings(command)
+  return goal_yaw[rows, ordering], goal_hinges[rows, ordering]
+
+
 def tcp_chain_distance(
   env: ManagerBasedRlEnv, command: PushChainCommand, asset_cfg: SceneEntityCfg
 ) -> torch.Tensor:
@@ -79,6 +86,7 @@ __all__ = [
   "HINGE_WEIGHT",
   "MIDDLE_LINK_WEIGHT",
   "at_goal_static",
+  "best_goal",
   "chain_dense_reward",
   "goal_orderings",
   "max_contact_force_on_face",

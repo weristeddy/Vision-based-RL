@@ -267,6 +267,11 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
     assert set(env.metrics_manager.active_terms) == {
       "peak_top_face_force",
       "peak_side_face_force",
+      "tcp_distance",
+      "middle_position_error",
+      "middle_yaw_error",
+      "hinge0_error",
+      "hinge1_error",
     }
   finally:
     env.close()
@@ -296,3 +301,36 @@ def test_students_see_the_state_actor_as_their_teacher() -> None:
   assert "calibration_bias" not in teacher["obj_pose"].params
   assert "obj_pose" not in student.observations["actor"].terms
   assert set(student.terminations) == set(state.terminations)
+
+
+@pytest.mark.sim
+@pytest.mark.gpu
+def test_beside_starts_put_the_pads_near_the_chain_without_contact() -> None:
+  from mjlab.envs import ManagerBasedRlEnv
+  from mjlab.managers import SceneEntityCfg
+  from mjlab.tasks.registry import load_env_cfg
+
+  import vbrl.tasks  # noqa: F401
+  from vbrl.tasks.push_chain.mdp.rewards import tcp_chain_distance
+
+  if not torch.cuda.is_available():
+    pytest.skip("needs CUDA")
+  cfg = load_env_cfg(STATE_TASK_ID)
+  cfg.scene.num_envs = 64
+  env = ManagerBasedRlEnv(cfg, device="cuda:0")
+  try:
+    env.reset()
+    env.step(torch.zeros(64, env.action_manager.total_action_dim, device="cuda:0"))
+    command = env.command_manager.get_term("push_chain_goal")
+    beside = command._start_mode == 1
+    ee = SceneEntityCfg("robot", site_names=("ee_site",))
+    ee.resolve(env.scene)
+    distance = tcp_chain_distance(env, command, ee)[beside]
+    chain_force = env.scene["ee_object_contact"].data.force.norm(dim=-1).amax(-1)
+    table = env.scene["robot_table_contact"].data.found.amax(-1)
+    assert beside.any() and (~beside).any()
+    assert ((distance > 0.015) & (distance < 0.05)).all()
+    assert (chain_force[beside] < 0.05).all()
+    assert (table[beside] == 0).all()
+  finally:
+    env.close()

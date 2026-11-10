@@ -15,6 +15,7 @@ from ..geometry import (
   LINK_HALF_EXTENTS,
   LINK_HALF_HEIGHT,
   LinkOverlap,
+  chain_signed_distance,
   end_links_gap,
   gap_to_boxes,
   link_poses,
@@ -52,6 +53,36 @@ class PushChainCommand(LiftingCommand):
     for i in range(3):
       self.metrics[f"link{i}_overlap"] = torch.zeros(n, device=self.device)
     self.metrics["min_link_overlap"] = torch.zeros(n, device=self.device)
+    if cfg.near_object_start:
+      self._init_start_bank(env)
+
+  def _init_start_bank(self, env: ManagerBasedRlEnv) -> None:
+    from vbrl.tasks.utils.arm_placement import gripper_rotation, placement_table
+
+    self._robot = env.scene["robot"]
+    yaws = np.linspace(0.0, np.pi, self.cfg.start_yaws, endpoint=False)
+    seed = self._robot.data.default_joint_pos[0, :6].cpu().numpy()
+    limits = self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy()
+    xs, ys = np.arange(0.13, 0.58, 0.01), np.arange(-0.27, 0.28, 0.01)
+    self._levels = [level for levels in self.cfg.start_types for level in levels]
+    sizes = torch.tensor([len(levels) for levels in self.cfg.start_types])
+    self._type_sizes = sizes.to(self.device)
+    self._type_first_level = (sizes.cumsum(0) - sizes).to(self.device)
+    self._placements, self._placement_valid = [], []
+    for height, _, _, tilt in self._levels:
+      tilts = sorted({0.0, tilt, -tilt})
+      rotations = [gripper_rotation(y, t) for y in yaws for t in tilts]
+      grid, joint_pos, valid = placement_table(
+        env.sim.mj_model, seed, limits, xs, ys, rotations, height
+      )
+      joint_pos = torch.tensor(np.nan_to_num(joint_pos), dtype=torch.float)
+      self._placements.append(joint_pos.to(self.device))
+      self._placement_valid.append(torch.tensor(valid, device=self.device))
+    self._pad_xy = torch.tensor(grid, dtype=torch.float, device=self.device)
+    self._start_mode = torch.full((self.num_envs,), -1, device=self.device)
+    self._mode_success = torch.full(
+      (len(self.cfg.start_types) + 1,), 0.5, device=self.device
+    )
 
   def _robot_footprint(self, env: ManagerBasedRlEnv) -> torch.Tensor:
     import mujoco
@@ -146,12 +177,59 @@ class PushChainCommand(LiftingCommand):
     chosen[fallback, 3:] = 0.0
     return chosen
 
+  def _update_mode_success(self, env_ids: torch.Tensor) -> None:
+    modes = self._start_mode[env_ids]
+    done = modes >= 0
+    success = self.episode_success[env_ids][done].float()
+    levels = len(self._mode_success)
+    count = torch.bincount(modes[done], minlength=levels)
+    mean = torch.bincount(modes[done], weights=success, minlength=levels)
+    mean = mean / count.clamp_min(1)
+    keep = (1.0 - self.cfg.start_success_rate) ** count
+    self._mode_success = keep * self._mode_success + (1.0 - keep) * mean
+
+  def _place_arm(self, env_ids: torch.Tensor, links: torch.Tensor) -> None:
+    p = self._mode_success
+    weights = self.cfg.start_sampling_floor + torch.sqrt(p * (1.0 - p))
+    mode = torch.multinomial(weights, len(env_ids), replacement=True)
+    pick = torch.rand(len(env_ids), device=self.device) * self._type_sizes[mode - 1]
+    level_ids = torch.where(
+      mode > 0, self._type_first_level[mode - 1] + pick.long(), -1
+    )
+    base = self._robot.data.default_root_state[env_ids, :2]
+    pads = base[:, None] + self._pad_xy
+    gap = chain_signed_distance(pads, links[:, None], pins=True)
+    joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
+    for level, (_, low, high, _) in enumerate(self._levels):
+      valid = self._placement_valid[level]
+      candidates = (gap >= low) & (gap <= high) & valid.any(1)
+      chosen = (level_ids == level) & candidates.any(1)
+      mode[(level_ids == level) & ~chosen] = 0
+      if not chosen.any():
+        continue
+      point = torch.multinomial(candidates[chosen].float(), 1).squeeze(1)
+      rotation = torch.multinomial(valid[point].float(), 1).squeeze(1)
+      joint_pos[chosen, :6] = self._placements[level][point, rotation]
+    self._start_mode[env_ids] = mode
+    ids = env_ids[mode > 0]
+    if len(ids) == 0:
+      return
+    joint_pos = joint_pos[mode > 0]
+    velocity = torch.zeros_like(joint_pos)
+    self._robot.write_joint_state_to_sim(joint_pos, velocity, env_ids=ids)
+    self._env.action_manager.get_term("joint_pos").reset(ids)
+
   def _resample_command(self, env_ids: torch.Tensor) -> None:
+    if self.cfg.near_object_start:
+      self._update_mode_success(env_ids)
     self.episode_success[env_ids] = 0.0
     self._overlap_cache_step = None
     origins = self._env.scene.env_origins[env_ids]
-    self._write_chain(env_ids, self.sample_chains(len(env_ids)), origins)
+    chain = self.sample_chains(len(env_ids))
+    self._write_chain(env_ids, chain, origins)
     self._set_goal(env_ids, self.sample_chains(len(env_ids)), origins)
+    if self.cfg.near_object_start:
+      self._place_arm(env_ids, link_poses(chain[:, :2], chain[:, 2], chain[:, 3:]))
 
   def _write_chain(
     self, env_ids: torch.Tensor, chain: torch.Tensor, origins: torch.Tensor
@@ -233,6 +311,13 @@ class PushChainCommandCfg(LiftingCommandCfg):
   robot_clearance: float = 0.02
   sampling_attempts: int = 32
   goal_marker_names: tuple[str, ...] = ()
+  near_object_start: bool = False
+  start_types: tuple[tuple[tuple[float, float, float, float], ...], ...] = (
+    ((LINK_HALF_HEIGHT, 0.02, 0.04, 0.0),),
+  )
+  start_yaws: int = 4
+  start_sampling_floor: float = 0.05
+  start_success_rate: float = 0.01
 
   def build(self, env: ManagerBasedRlEnv) -> PushChainCommand:
     return PushChainCommand(self, env)

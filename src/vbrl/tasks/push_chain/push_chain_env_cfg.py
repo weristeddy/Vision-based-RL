@@ -150,6 +150,17 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
     ),
+    "tcp_distance": MetricsTermCfg(
+      func=mdp.tcp_distance, params={**command, "asset_cfg": robot_ee}
+    ),
+    **{
+      name: MetricsTermCfg(
+        func=mdp.goal_error, reduce="last", params={**command, "index": index}
+      )
+      for index, name in enumerate(
+        ("middle_position_error", "middle_yaw_error", "hinge0_error", "hinge1_error")
+      )
+    },
   }
   cfg.terminations.update(
     object_off_table=TerminationTermCfg(
@@ -246,6 +257,8 @@ def build_env_cfg(
 
   if rgb:
     cfg.observations["actor"].terms.pop("obj_pose")
+  if not play:
+    cfg.commands[COMMAND].near_object_start = True
   if play:
     cfg.observations["actor"].enable_corruption = False
   return cfg
