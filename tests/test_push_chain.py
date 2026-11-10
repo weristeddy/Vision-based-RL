@@ -255,7 +255,6 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
       "object_off_table",
       "invalid_object_state",
       "nan_detection",
-      "top_face_contact",
     }
     command = env.command_manager.get_term("push_chain_goal")
     assert {
@@ -296,5 +295,4 @@ def test_students_see_the_state_actor_as_their_teacher() -> None:
   assert teacher["target_pose"].params["calibration_bias"] is False
   assert "calibration_bias" not in teacher["obj_pose"].params
   assert "obj_pose" not in student.observations["actor"].terms
-  assert "top_face_contact" not in student.terminations
-  assert "top_face_contact" in state.terminations
+  assert set(student.terminations) == set(state.terminations)
