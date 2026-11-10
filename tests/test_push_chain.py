@@ -256,6 +256,12 @@ def test_landmarks_run_tip_to_tip_and_reverse_with_the_chain() -> None:
   assert errors[0, 1].item() == pytest.approx(0.0, abs=1e-6)
   assert errors[0, 0].item() > 0.05
 
+  folded = link_poses(
+    torch.zeros(1, 2), torch.zeros(1), torch.tensor(((math.pi / 2, 0.0),))
+  )
+  tip = 2.0 * 0.07 * math.sin(math.pi / 4)
+  assert landmark_errors(folded, straight)[0, 0].item() == pytest.approx(tip, abs=1e-6)
+
 
 @pytest.mark.sim
 @pytest.mark.gpu
@@ -297,7 +303,7 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
       "middle_yaw_error",
       "hinge0_error",
       "hinge1_error",
-      "mean_landmark_error_m",
+      "max_landmark_error_m",
       "tcp_distance",
     } == set(command.metrics)
     assert set(env.metrics_manager.active_terms) == {
@@ -367,7 +373,7 @@ def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
   from vbrl.tasks.push_chain.mdp.commands import GOAL_ERRORS, PushChainCommand
 
   command = object.__new__(PushChainCommand)
-  names = (*GOAL_ERRORS, "mean_landmark_error_m")
+  names = (*GOAL_ERRORS, "max_landmark_error_m")
   command.metrics = {name: torch.tensor((0.1, float("nan"))) for name in names}
   command._resample = lambda env_ids: None
   command.command_counter = torch.zeros(2)

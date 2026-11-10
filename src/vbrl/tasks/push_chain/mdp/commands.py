@@ -63,7 +63,7 @@ class PushChainCommand(LiftingCommand):
     for i in range(3):
       self.metrics[f"link{i}_overlap"] = torch.zeros(n, device=self.device)
     self.metrics["min_link_overlap"] = torch.zeros(n, device=self.device)
-    for name in (*GOAL_ERRORS, "mean_landmark_error_m", "tcp_distance"):
+    for name in (*GOAL_ERRORS, "max_landmark_error_m", "tcp_distance"):
       self.metrics[name] = torch.zeros(n, device=self.device)
     if cfg.near_object_start:
       self._init_start_bank(env)
@@ -196,7 +196,7 @@ class PushChainCommand(LiftingCommand):
     errors = self.goal_errors().abs()
     for name, error in zip(GOAL_ERRORS, errors.unbind(-1), strict=True):
       self.metrics[name] = error
-    self.metrics["mean_landmark_error_m"] = self.landmark_distance()
+    self.metrics["max_landmark_error_m"] = self.landmark_distance()
     self.metrics["tcp_distance"] = self.tcp_distance()
 
   def get_at_goal(self) -> torch.Tensor:

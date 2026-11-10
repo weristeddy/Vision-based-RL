@@ -69,8 +69,8 @@ def landmark_errors(chain: torch.Tensor, goal: torch.Tensor) -> torch.Tensor:
   current, target = chain_landmarks(chain), chain_landmarks(goal)
   return torch.stack(
     (
-      torch.linalg.vector_norm(current - target, dim=-1).mean(-1),
-      torch.linalg.vector_norm(current - target.flip(-2), dim=-1).mean(-1),
+      torch.linalg.vector_norm(current - target, dim=-1).amax(-1),
+      torch.linalg.vector_norm(current - target.flip(-2), dim=-1).amax(-1),
     ),
     dim=-1,
   )
