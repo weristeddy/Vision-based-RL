@@ -61,7 +61,12 @@ def test_lift_state_and_rgb_share_control_and_the_student_sees_the_wrist() -> No
   assert state.scale_rewards_by_dt is rgb.scale_rewards_by_dt is True
   assert state.rewards["joint_vel_l2"].weight == -0.05
   assert state.rewards["action_rate_l2"].weight == -0.01
-  assert state.rewards["ee_vertical"].weight == 0.0
+  assert "ee_vertical" not in state.rewards
+  assert state.rewards["posture"].weight == 0.0
+  assert state.rewards["posture"].params["std"] == {".*": 0.5}
+  assert state.rewards["posture"].params["asset_cfg"].joint_names == tuple(
+    f"joint_{i}" for i in range(6)
+  )
 
   camera = _camera(rgb, "cam")
   assert camera.camera_name == "robot/cam"
