@@ -44,10 +44,14 @@ NCONMAX = 128
 
 
 def _command(
-  object_name: str, rgb: bool, goal_observation_noise: tuple[float, float]
+  object_name: str,
+  ee_site: str,
+  rgb: bool,
+  goal_observation_noise: tuple[float, float],
 ) -> mdp.PushChainCommandCfg:
   return mdp.PushChainCommandCfg(
     entity_name=object_name,
+    ee_site=ee_site,
     goal_marker_names=GOAL_ENTITY_NAMES if rgb else (),
     resampling_time_range=(1.0e9, 1.0e9),
     debug_vis=True,
@@ -93,9 +97,7 @@ def build_env_cfg(
     ),
     "chain_errors": ObservationTermCfg(func=mdp.chain_errors, params={**command}),
     "link_overlaps": ObservationTermCfg(func=mdp.link_overlaps, params={**command}),
-    "tcp_to_chain": ObservationTermCfg(
-      func=mdp.tcp_to_chain, params={**command, "asset_cfg": robot_ee}
-    ),
+    "tcp_to_chain": ObservationTermCfg(func=mdp.tcp_to_chain, params={**command}),
   }
   cfg.observations["actor"].nan_policy = "sanitize"
   cfg.observations["critic"].nan_policy = "sanitize"
@@ -114,12 +116,14 @@ def build_env_cfg(
       preserve_order=True,
     )
   }
-  cfg.commands = {COMMAND: _command(object_name, rgb, goal_observation_noise)}
+  cfg.commands = {
+    COMMAND: _command(object_name, robot.ee_site, rgb, goal_observation_noise)
+  }
   cfg.rewards = {
     "chain_dense": RewardTermCfg(
       func=mdp.chain_dense_reward,
       weight=1.0,
-      params={**command, "asset_cfg": robot_ee},
+      params={**command},
     ),
     "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=ACTION_RATE_WEIGHT),
     "joint_vel_l2": RewardTermCfg(
@@ -150,17 +154,6 @@ def build_env_cfg(
       reduce="max",
       params={"sensor_name": _CONTACT_SENSOR, "vertical": False},
     ),
-    "tcp_distance": MetricsTermCfg(
-      func=mdp.tcp_distance, params={**command, "asset_cfg": robot_ee}
-    ),
-    **{
-      name: MetricsTermCfg(
-        func=mdp.goal_error, reduce="last", params={**command, "index": index}
-      )
-      for index, name in enumerate(
-        ("middle_position_error", "middle_yaw_error", "hinge0_error", "hinge1_error")
-      )
-    },
   }
   cfg.terminations.update(
     object_off_table=TerminationTermCfg(

@@ -168,7 +168,10 @@ def _fake_command(goal_xy, goal_yaw, goal_hinges, chain_xy, chain_yaw, chain_hin
 
   command = object.__new__(PushChainCommand)
   command.cfg = PushChainCommandCfg(
-    entity_name="object", success_threshold=0.9, resampling_time_range=(1e9, 1e9)
+    entity_name="object",
+    ee_site="ee_site",
+    success_threshold=0.9,
+    resampling_time_range=(1e9, 1e9),
   )
   command.target_pos = torch.cat((goal_xy, torch.full((len(goal_xy), 1), 0.015)), -1)
   command.target_yaw = goal_yaw
@@ -182,7 +185,12 @@ def _fake_command(goal_xy, goal_yaw, goal_hinges, chain_xy, chain_yaw, chain_hin
       root_link_pos_w=torch.cat((chain_xy, torch.full((len(chain_xy), 1), 0.016)), -1)
     )
   )
-  command._env = SimpleNamespace(common_step_counter=0)
+  tcp = torch.tensor((0.6, 0.3, 0.2)).expand(len(goal_xy), 3)
+  command._robot = SimpleNamespace(data=SimpleNamespace(site_pos_w=tcp[:, None]))
+  command._ee_site = 0
+  command._env = SimpleNamespace(
+    common_step_counter=0, num_envs=len(goal_xy), device="cpu"
+  )
   command._overlap = LinkOverlap(device="cpu", dtype=torch.float)
   command._overlap_cache_step = None
   command.metrics = {}
@@ -190,31 +198,26 @@ def _fake_command(goal_xy, goal_yaw, goal_hinges, chain_xy, chain_yaw, chain_hin
   return command
 
 
-def _reward(command, tcp_xyz):
+def _reward(command):
   from vbrl.tasks.push_chain.mdp.rewards import chain_dense_reward
 
-  env = SimpleNamespace(
-    scene={"robot": SimpleNamespace(data=SimpleNamespace(site_pos_w=tcp_xyz[:, None]))},
-    command_manager=SimpleNamespace(get_term=lambda name: command),
-  )
-  return chain_dense_reward(env, "goal", SimpleNamespace(name="robot", site_ids=[0]))
+  env = SimpleNamespace(command_manager=SimpleNamespace(get_term=lambda name: command))
+  return chain_dense_reward(env, "goal")
 
 
 def test_success_and_reward_accept_the_goal_in_either_order() -> None:
-  from vbrl.tasks.push_chain.mdp.rewards import ordering_values
-
   xy = torch.tensor(((0.35, 0.05), (0.3, -0.1)))
   yaw = torch.tensor((0.4, -2.0))
   hinges = torch.tensor(((0.6, -1.2), (-0.3, 0.9)))
-  tcp = torch.tensor(((0.6, 0.3, 0.2), (0.6, 0.3, 0.2)))
 
   forward = _fake_command(xy, yaw, hinges, xy, yaw, hinges)
   backward = _fake_command(xy, yaw + math.pi, -hinges.flip(-1), xy, yaw, hinges)
   for command in (forward, backward):
     assert command.get_overlap() == pytest.approx(torch.ones(2, 3))
     assert command.get_at_goal().all()
-    assert ordering_values(command).amax(-1) == pytest.approx(torch.ones(2))
-    assert _reward(command, tcp) == pytest.approx(torch.ones(2))
+    assert command.ordering_values().amax(-1) == pytest.approx(torch.ones(2))
+    assert command.goal_errors().abs().amax().item() == pytest.approx(0.0, abs=1e-5)
+    assert _reward(command) == pytest.approx(torch.ones(2))
 
   moved = torch.tensor(((0.02, 0.0), (0.0, 0.02)))
   near = _fake_command(xy, yaw, hinges, xy + moved, yaw, hinges)
@@ -223,8 +226,9 @@ def test_success_and_reward_accept_the_goal_in_either_order() -> None:
   )
   assert not near.get_at_goal().any()
   assert near.get_overlap() == pytest.approx(near_backward.get_overlap())
-  assert _reward(near, tcp) == pytest.approx(_reward(near_backward, tcp))
-  assert (_reward(near, tcp) < 0.5).all()
+  assert _reward(near) == pytest.approx(_reward(near_backward))
+  assert (_reward(near) < 0.5).all()
+  assert near.goal_errors()[:, 0] == pytest.approx(torch.full((2,), 0.02))
 
 
 @pytest.mark.sim
@@ -263,15 +267,15 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
       "link2_overlap",
       "min_link_overlap",
       "episode_success",
-    } == set(command.metrics)
-    assert set(env.metrics_manager.active_terms) == {
-      "peak_top_face_force",
-      "peak_side_face_force",
-      "tcp_distance",
       "middle_position_error",
       "middle_yaw_error",
       "hinge0_error",
       "hinge1_error",
+      "tcp_distance",
+    } == set(command.metrics)
+    assert set(env.metrics_manager.active_terms) == {
+      "peak_top_face_force",
+      "peak_side_face_force",
     }
   finally:
     env.close()
@@ -307,11 +311,9 @@ def test_students_see_the_state_actor_as_their_teacher() -> None:
 @pytest.mark.gpu
 def test_beside_starts_put_the_pads_near_the_chain_without_contact() -> None:
   from mjlab.envs import ManagerBasedRlEnv
-  from mjlab.managers import SceneEntityCfg
   from mjlab.tasks.registry import load_env_cfg
 
   import vbrl.tasks  # noqa: F401
-  from vbrl.tasks.push_chain.mdp.rewards import tcp_chain_distance
 
   if not torch.cuda.is_available():
     pytest.skip("needs CUDA")
@@ -323,9 +325,7 @@ def test_beside_starts_put_the_pads_near_the_chain_without_contact() -> None:
     env.step(torch.zeros(64, env.action_manager.total_action_dim, device="cuda:0"))
     command = env.command_manager.get_term("push_chain_goal")
     beside = command._start_mode == 1
-    ee = SceneEntityCfg("robot", site_names=("ee_site",))
-    ee.resolve(env.scene)
-    distance = tcp_chain_distance(env, command, ee)[beside]
+    distance = command.tcp_distance()[beside]
     chain_force = env.scene["ee_object_contact"].data.force.norm(dim=-1).amax(-1)
     table = env.scene["robot_table_contact"].data.found.amax(-1)
     assert beside.any() and (~beside).any()
@@ -334,3 +334,16 @@ def test_beside_starts_put_the_pads_near_the_chain_without_contact() -> None:
     assert (table[beside] == 0).all()
   finally:
     env.close()
+
+
+def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
+  from vbrl.tasks.push_chain.mdp.commands import GOAL_ERRORS, PushChainCommand
+
+  command = object.__new__(PushChainCommand)
+  command.metrics = {name: torch.tensor((0.1, float("nan"))) for name in GOAL_ERRORS}
+  command._resample = lambda env_ids: None
+  command.command_counter = torch.zeros(2)
+  command.time_left = torch.zeros(2)
+  command._pending_forward = False
+  extras = PushChainCommand.reset(command, torch.arange(2))
+  assert extras == pytest.approx(dict.fromkeys(GOAL_ERRORS, 0.1))

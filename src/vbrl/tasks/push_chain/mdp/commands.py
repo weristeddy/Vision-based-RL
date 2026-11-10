@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 from mjlab.tasks.manipulation.mdp import LiftingCommand, LiftingCommandCfg
-from mjlab.utils.lab_api.math import quat_from_euler_xyz, sample_uniform
+from mjlab.utils.lab_api.math import quat_from_euler_xyz, sample_uniform, wrap_to_pi
 
 from vbrl.tasks.push_t.geometry import yaw_from_quat
 
 from ..geometry import (
+  HINGE_LIMIT,
   LINK_HALF_EXTENTS,
   LINK_HALF_HEIGHT,
   LinkOverlap,
@@ -27,6 +28,15 @@ if TYPE_CHECKING:
 
 LINK_NAMES = ("push_chain_link0", "push_chain_link1", "push_chain_link2")
 HINGE_NAMES = ("push_chain_hinge0", "push_chain_hinge1")
+GOAL_ERRORS = (
+  "middle_position_error",
+  "middle_yaw_error",
+  "hinge0_error",
+  "hinge1_error",
+)
+DISTANCE_SCALE = 5.0
+MIDDLE_LINK_WEIGHT = 0.5
+HINGE_WEIGHT = 0.5
 
 
 class PushChainCommand(LiftingCommand):
@@ -46,6 +56,8 @@ class PushChainCommand(LiftingCommand):
     self._overlap = LinkOverlap(device=self.device, dtype=torch.float)
     self._overlap_cache = torch.zeros(n, 3, device=self.device)
     self._overlap_cache_step: int | None = None
+    self._robot = env.scene["robot"]
+    self._ee_site = self._robot.find_sites(cfg.ee_site)[0][0]
     self._robot_boxes = self._robot_footprint(env)
     self._goal_markers = [env.scene[name] for name in cfg.goal_marker_names]
     for name in ("object_height", "at_goal", "position_error"):
@@ -53,13 +65,14 @@ class PushChainCommand(LiftingCommand):
     for i in range(3):
       self.metrics[f"link{i}_overlap"] = torch.zeros(n, device=self.device)
     self.metrics["min_link_overlap"] = torch.zeros(n, device=self.device)
+    for name in (*GOAL_ERRORS, "tcp_distance"):
+      self.metrics[name] = torch.zeros(n, device=self.device)
     if cfg.near_object_start:
       self._init_start_bank(env)
 
   def _init_start_bank(self, env: ManagerBasedRlEnv) -> None:
     from vbrl.tasks.utils.arm_placement import gripper_rotation, placement_table
 
-    self._robot = env.scene["robot"]
     yaws = np.linspace(0.0, np.pi, self.cfg.start_yaws, endpoint=False)
     seed = self._robot.data.default_joint_pos[0, :6].cpu().numpy()
     limits = self._robot.data.soft_joint_pos_limits[0, :6].cpu().numpy()
@@ -89,9 +102,10 @@ class PushChainCommand(LiftingCommand):
 
     model = env.sim.mj_model
     data = mujoco.MjData(model)
-    robot = env.scene["robot"]
     for name, position in zip(
-      robot.joint_names, robot.data.default_joint_pos[0].tolist(), strict=True
+      self._robot.joint_names,
+      self._robot.data.default_joint_pos[0].tolist(),
+      strict=True,
     ):
       data.joint(f"robot/{name}").qpos = position
     mujoco.mj_kinematics(model, data)
@@ -124,6 +138,51 @@ class PushChainCommand(LiftingCommand):
   def chain_hinges(self) -> torch.Tensor:
     return self.object.data.joint_pos[:, self._hinge_ids]
 
+  def goal_orderings(self) -> tuple[torch.Tensor, torch.Tensor]:
+    yaw = torch.stack((self.target_yaw, self.target_yaw + torch.pi), dim=-1)
+    hinges = torch.stack((self.target_hinges, -self.target_hinges.flip(-1)), dim=1)
+    return yaw, hinges
+
+  def ordering_values(self) -> torch.Tensor:
+    middle = self.chain_links()[:, 1]
+    goal_yaw, goal_hinges = self.goal_orderings()
+    weight = self.cfg.orientation_weight
+    distance = torch.linalg.vector_norm(self.target_pos[:, :2] - middle[:, :2], dim=-1)
+    position = (1.0 - torch.tanh(DISTANCE_SCALE * distance)).square()
+    yaw_error = wrap_to_pi(goal_yaw - middle[:, 2:]).abs()
+    middle_term = (
+      weight * (1.0 - yaw_error / torch.pi) + (1.0 - weight) * position[:, None]
+    )
+    hinge_error = (goal_hinges - self.chain_hinges()[:, None]).abs()
+    hinge_term = (1.0 - hinge_error / (2.0 * HINGE_LIMIT)).mean(-1)
+    return MIDDLE_LINK_WEIGHT * middle_term + HINGE_WEIGHT * hinge_term
+
+  def best_goal(self) -> tuple[torch.Tensor, torch.Tensor]:
+    rows = torch.arange(self.num_envs, device=self.device)
+    ordering = self.ordering_values().argmax(-1)
+    goal_yaw, goal_hinges = self.goal_orderings()
+    return goal_yaw[rows, ordering], goal_hinges[rows, ordering]
+
+  def goal_errors(self) -> torch.Tensor:
+    goal_yaw, goal_hinges = self.best_goal()
+    middle = self.chain_links()[:, 1]
+    return torch.cat(
+      (
+        torch.linalg.vector_norm(self.target_pos[:, :2] - middle[:, :2], dim=-1)[
+          :, None
+        ],
+        wrap_to_pi(goal_yaw - middle[:, 2])[:, None],
+        goal_hinges - self.chain_hinges(),
+      ),
+      dim=-1,
+    )
+
+  def tcp_distance(self) -> torch.Tensor:
+    tcp = self._robot.data.site_pos_w[:, self._ee_site]
+    height = tcp[:, 2] - self.object.data.root_link_pos_w[:, 2]
+    outline = chain_signed_distance(tcp[:, :2], self.chain_links()).abs()
+    return torch.hypot(outline, height)
+
   def get_overlap(self, *, force_refresh: bool = False) -> torch.Tensor:
     step = int(getattr(self._env, "common_step_counter", -1))
     if force_refresh or self._overlap_cache_step != step:
@@ -150,11 +209,16 @@ class PushChainCommand(LiftingCommand):
     self.metrics["episode_success"] = self.episode_success
     return at_goal
 
-  def get_at_goal(self) -> torch.Tensor:
-    return self._record_success(self.get_overlap())
-
   def _update_metrics(self) -> None:
     self._record_success(self.get_overlap())
+    for name, error in zip(
+      GOAL_ERRORS, self.goal_errors().abs().unbind(-1), strict=True
+    ):
+      self.metrics[name] = error
+    self.metrics["tcp_distance"] = self.tcp_distance()
+
+  def get_at_goal(self) -> torch.Tensor:
+    return self._record_success(self.get_overlap())
 
   def compute_success(self) -> torch.Tensor:
     return self.get_at_goal()
@@ -311,6 +375,7 @@ class PushChainCommandCfg(LiftingCommandCfg):
   robot_clearance: float = 0.02
   sampling_attempts: int = 32
   goal_marker_names: tuple[str, ...] = ()
+  ee_site: str
   near_object_start: bool = False
   start_types: tuple[tuple[tuple[float, float, float, float], ...], ...] = (
     ((LINK_HALF_HEIGHT, 0.02, 0.04, 0.0),),
@@ -331,8 +396,12 @@ def push_chain_command(env, name: str) -> PushChainCommand:
 
 
 __all__ = [
+  "DISTANCE_SCALE",
+  "GOAL_ERRORS",
   "HINGE_NAMES",
+  "HINGE_WEIGHT",
   "LINK_NAMES",
+  "MIDDLE_LINK_WEIGHT",
   "PushChainCommand",
   "PushChainCommandCfg",
   "push_chain_command",
