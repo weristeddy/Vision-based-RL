@@ -40,6 +40,7 @@ COMMAND = "push_chain_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _TABLE_SENSOR = "robot_table_contact"
 EPISODE_LENGTH_S = 15.0
+LANDMARK_SCALE = 0.10
 NCONMAX = 128
 
 
@@ -123,7 +124,7 @@ def build_env_cfg(
     "chain_dense": RewardTermCfg(
       func=mdp.chain_dense_reward,
       weight=1.0,
-      params={**command},
+      params={**command, "distance_scale": LANDMARK_SCALE},
     ),
     "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=ACTION_RATE_WEIGHT),
     "joint_vel_l2": RewardTermCfg(
@@ -257,4 +258,4 @@ def build_env_cfg(
   return cfg
 
 
-__all__ = ["COMMAND", "EPISODE_LENGTH_S", "build_env_cfg"]
+__all__ = ["COMMAND", "EPISODE_LENGTH_S", "LANDMARK_SCALE", "build_env_cfg"]

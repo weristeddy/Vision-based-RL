@@ -46,6 +46,36 @@ def reversed_links(links: torch.Tensor) -> torch.Tensor:
   return torch.cat((flipped[..., :2], flipped[..., 2:] + math.pi), dim=-1)
 
 
+def chain_landmarks(links: torch.Tensor) -> torch.Tensor:
+  centres = links[..., :2]
+  direction = torch.stack((torch.cos(links[..., 2]), torch.sin(links[..., 2])), -1)
+  half = links.new_tensor(LINK_HALF_EXTENTS)[:, :1]
+  back, front = centres - half * direction, centres + half * direction
+  return torch.stack(
+    (
+      back[..., 0, :],
+      centres[..., 0, :],
+      (front[..., 0, :] + back[..., 1, :]) / 2.0,
+      centres[..., 1, :],
+      (front[..., 1, :] + back[..., 2, :]) / 2.0,
+      centres[..., 2, :],
+      front[..., 2, :],
+    ),
+    dim=-2,
+  )
+
+
+def landmark_errors(chain: torch.Tensor, goal: torch.Tensor) -> torch.Tensor:
+  current, target = chain_landmarks(chain), chain_landmarks(goal)
+  return torch.stack(
+    (
+      torch.linalg.vector_norm(current - target, dim=-1).mean(-1),
+      torch.linalg.vector_norm(current - target.flip(-2), dim=-1).mean(-1),
+    ),
+    dim=-1,
+  )
+
+
 def pin_positions(links: torch.Tensor) -> torch.Tensor:
   ends = links[..., ::2, :]
   return ends[..., :2] + _along(
@@ -166,9 +196,11 @@ __all__ = [
   "MIDDLE_LINK_HALF_LENGTH",
   "PIN_RADIUS",
   "REST_HEIGHT",
+  "chain_landmarks",
   "chain_signed_distance",
   "end_links_gap",
   "gap_to_boxes",
+  "landmark_errors",
   "link_poses",
   "pin_positions",
   "reversed_links",

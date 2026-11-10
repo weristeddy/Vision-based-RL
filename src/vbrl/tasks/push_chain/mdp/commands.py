@@ -12,13 +12,13 @@ from mjlab.utils.lab_api.math import quat_from_euler_xyz, sample_uniform, wrap_t
 from vbrl.tasks.push_t.geometry import yaw_from_quat
 
 from ..geometry import (
-  HINGE_LIMIT,
   LINK_HALF_EXTENTS,
   LINK_HALF_HEIGHT,
   LinkOverlap,
   chain_signed_distance,
   end_links_gap,
   gap_to_boxes,
+  landmark_errors,
   link_poses,
 )
 
@@ -35,8 +35,6 @@ GOAL_ERRORS = (
   "hinge1_error",
 )
 DISTANCE_SCALE = 5.0
-MIDDLE_LINK_WEIGHT = 0.5
-HINGE_WEIGHT = 0.5
 
 
 class PushChainCommand(LiftingCommand):
@@ -65,7 +63,7 @@ class PushChainCommand(LiftingCommand):
     for i in range(3):
       self.metrics[f"link{i}_overlap"] = torch.zeros(n, device=self.device)
     self.metrics["min_link_overlap"] = torch.zeros(n, device=self.device)
-    for name in (*GOAL_ERRORS, "tcp_distance"):
+    for name in (*GOAL_ERRORS, "mean_landmark_error_m", "tcp_distance"):
       self.metrics[name] = torch.zeros(n, device=self.device)
     if cfg.near_object_start:
       self._init_start_bank(env)
@@ -138,39 +136,23 @@ class PushChainCommand(LiftingCommand):
   def chain_hinges(self) -> torch.Tensor:
     return self.object.data.joint_pos[:, self._hinge_ids]
 
-  def goal_orderings(self) -> tuple[torch.Tensor, torch.Tensor]:
-    yaw = torch.stack((self.target_yaw, self.target_yaw + torch.pi), dim=-1)
-    hinges = torch.stack((self.target_hinges, -self.target_hinges.flip(-1)), dim=1)
-    return yaw, hinges
+  def landmark_errors(self) -> torch.Tensor:
+    return landmark_errors(self.chain_links(), self.target_links)
 
-  def ordering_values(self) -> torch.Tensor:
-    middle = self.chain_links()[:, 1]
-    goal_yaw, goal_hinges = self.goal_orderings()
-    weight = self.cfg.orientation_weight
-    distance = torch.linalg.vector_norm(self.target_pos[:, :2] - middle[:, :2], dim=-1)
-    position = (1.0 - torch.tanh(DISTANCE_SCALE * distance)).square()
-    yaw_error = wrap_to_pi(goal_yaw - middle[:, 2:]).abs()
-    middle_term = (
-      weight * (1.0 - yaw_error / torch.pi) + (1.0 - weight) * position[:, None]
-    )
-    hinge_error = (goal_hinges - self.chain_hinges()[:, None]).abs()
-    hinge_term = (1.0 - hinge_error / (2.0 * HINGE_LIMIT)).mean(-1)
-    return MIDDLE_LINK_WEIGHT * middle_term + HINGE_WEIGHT * hinge_term
-
-  def best_goal(self) -> tuple[torch.Tensor, torch.Tensor]:
-    rows = torch.arange(self.num_envs, device=self.device)
-    ordering = self.ordering_values().argmax(-1)
-    goal_yaw, goal_hinges = self.goal_orderings()
-    return goal_yaw[rows, ordering], goal_hinges[rows, ordering]
+  def landmark_distance(self) -> torch.Tensor:
+    return self.landmark_errors().amin(-1)
 
   def goal_errors(self) -> torch.Tensor:
-    goal_yaw, goal_hinges = self.best_goal()
+    reversed_goal = self.landmark_errors().argmin(-1).bool()
+    goal_yaw = torch.where(reversed_goal, self.target_yaw + torch.pi, self.target_yaw)
+    goal_hinges = torch.where(
+      reversed_goal[:, None], -self.target_hinges.flip(-1), self.target_hinges
+    )
     middle = self.chain_links()[:, 1]
+    offset = self.target_pos[:, :2] - middle[:, :2]
     return torch.cat(
       (
-        torch.linalg.vector_norm(self.target_pos[:, :2] - middle[:, :2], dim=-1)[
-          :, None
-        ],
+        torch.linalg.vector_norm(offset, dim=-1, keepdim=True),
         wrap_to_pi(goal_yaw - middle[:, 2])[:, None],
         goal_hinges - self.chain_hinges(),
       ),
@@ -211,10 +193,10 @@ class PushChainCommand(LiftingCommand):
 
   def _update_metrics(self) -> None:
     self._record_success(self.get_overlap())
-    for name, error in zip(
-      GOAL_ERRORS, self.goal_errors().abs().unbind(-1), strict=True
-    ):
+    errors = self.goal_errors().abs()
+    for name, error in zip(GOAL_ERRORS, errors.unbind(-1), strict=True):
       self.metrics[name] = error
+    self.metrics["mean_landmark_error_m"] = self.landmark_distance()
     self.metrics["tcp_distance"] = self.tcp_distance()
 
   def get_at_goal(self) -> torch.Tensor:
@@ -370,7 +352,6 @@ class PushChainCommandCfg(LiftingCommandCfg):
   observation_position_noise: float = 0.0
   observation_yaw_noise: float = 0.0
   hinge_range: float = math.radians(85.0)
-  orientation_weight: float = 0.5
   end_link_gap: float = 0.005
   robot_clearance: float = 0.02
   sampling_attempts: int = 32
@@ -399,9 +380,7 @@ __all__ = [
   "DISTANCE_SCALE",
   "GOAL_ERRORS",
   "HINGE_NAMES",
-  "HINGE_WEIGHT",
   "LINK_NAMES",
-  "MIDDLE_LINK_WEIGHT",
   "PushChainCommand",
   "PushChainCommandCfg",
   "push_chain_command",

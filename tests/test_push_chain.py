@@ -202,7 +202,7 @@ def _reward(command):
   from vbrl.tasks.push_chain.mdp.rewards import chain_dense_reward
 
   env = SimpleNamespace(command_manager=SimpleNamespace(get_term=lambda name: command))
-  return chain_dense_reward(env, "goal")
+  return chain_dense_reward(env, "goal", distance_scale=0.1)
 
 
 def test_success_and_reward_accept_the_goal_in_either_order() -> None:
@@ -215,9 +215,10 @@ def test_success_and_reward_accept_the_goal_in_either_order() -> None:
   for command in (forward, backward):
     assert command.get_overlap() == pytest.approx(torch.ones(2, 3))
     assert command.get_at_goal().all()
-    assert command.ordering_values().amax(-1) == pytest.approx(torch.ones(2))
+    assert command.landmark_distance() == pytest.approx(torch.zeros(2), abs=1e-6)
     assert command.goal_errors().abs().amax().item() == pytest.approx(0.0, abs=1e-5)
-    assert _reward(command) == pytest.approx(torch.ones(2))
+    assert ((_reward(command) > 2.0) & (_reward(command) < 2.05)).all()
+  assert _reward(forward) == pytest.approx(_reward(backward))
 
   moved = torch.tensor(((0.02, 0.0), (0.0, 0.02)))
   near = _fake_command(xy, yaw, hinges, xy + moved, yaw, hinges)
@@ -227,8 +228,33 @@ def test_success_and_reward_accept_the_goal_in_either_order() -> None:
   assert not near.get_at_goal().any()
   assert near.get_overlap() == pytest.approx(near_backward.get_overlap())
   assert _reward(near) == pytest.approx(_reward(near_backward))
-  assert (_reward(near) < 0.5).all()
+  assert near.landmark_distance() == pytest.approx(torch.full((2,), 0.02))
+  geometry = math.exp(-0.02 / 0.1)
+  assert ((_reward(near) >= geometry) & (_reward(near) < geometry + 0.05)).all()
   assert near.goal_errors()[:, 0] == pytest.approx(torch.full((2,), 0.02))
+
+
+def test_landmarks_run_tip_to_tip_and_reverse_with_the_chain() -> None:
+  from vbrl.tasks.push_chain.geometry import (
+    chain_landmarks,
+    landmark_errors,
+    link_poses,
+    reversed_links,
+  )
+
+  straight = link_poses(torch.zeros(1, 2), torch.zeros(1), torch.zeros(1, 2))
+  xs = (-0.11375, -0.07875, -0.04375, 0.0, 0.04375, 0.07875, 0.11375)
+  expected = torch.tensor([[(x, 0.0) for x in xs]])
+  assert chain_landmarks(straight) == pytest.approx(expected, abs=1e-6)
+
+  bent = link_poses(
+    torch.tensor(((0.3, 0.1),)), torch.tensor((0.7,)), torch.tensor(((0.9, -1.3),))
+  )
+  flipped = chain_landmarks(reversed_links(bent))
+  assert flipped == pytest.approx(chain_landmarks(bent).flip(-2), abs=1e-6)
+  errors = landmark_errors(bent, reversed_links(bent))
+  assert errors[0, 1].item() == pytest.approx(0.0, abs=1e-6)
+  assert errors[0, 0].item() > 0.05
 
 
 @pytest.mark.sim
@@ -271,6 +297,7 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
       "middle_yaw_error",
       "hinge0_error",
       "hinge1_error",
+      "mean_landmark_error_m",
       "tcp_distance",
     } == set(command.metrics)
     assert set(env.metrics_manager.active_terms) == {
@@ -340,10 +367,11 @@ def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
   from vbrl.tasks.push_chain.mdp.commands import GOAL_ERRORS, PushChainCommand
 
   command = object.__new__(PushChainCommand)
-  command.metrics = {name: torch.tensor((0.1, float("nan"))) for name in GOAL_ERRORS}
+  names = (*GOAL_ERRORS, "mean_landmark_error_m")
+  command.metrics = {name: torch.tensor((0.1, float("nan"))) for name in names}
   command._resample = lambda env_ids: None
   command.command_counter = torch.zeros(2)
   command.time_left = torch.zeros(2)
   command._pending_forward = False
   extras = PushChainCommand.reset(command, torch.arange(2))
-  assert extras == pytest.approx(dict.fromkeys(GOAL_ERRORS, 0.1))
+  assert extras == pytest.approx(dict.fromkeys(names, 0.1))

@@ -13,17 +13,18 @@ if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
 
-_MAX_REWARD = 3.0
 _REACH_WEIGHT = 0.05
 
 
-def chain_dense_reward(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
+def chain_dense_reward(
+  env: ManagerBasedRlEnv, command_name: str, distance_scale: float
+) -> torch.Tensor:
   command = push_chain_command(env, command_name)
-  distance = command.tcp_distance()
-  reach = torch.sqrt((1.0 - torch.tanh(DISTANCE_SCALE * distance)).clamp_min(0.0))
-  reward = command.ordering_values().amax(-1) + _REACH_WEIGHT * reach
-  reward = torch.where(command.get_at_goal(), _MAX_REWARD, reward)
-  return reward / _MAX_REWARD
+  geometry = torch.exp(-command.landmark_distance() / distance_scale)
+  reach = torch.sqrt(
+    (1.0 - torch.tanh(DISTANCE_SCALE * command.tcp_distance())).clamp_min(0.0)
+  )
+  return geometry + _REACH_WEIGHT * reach + command.get_at_goal().float()
 
 
 def at_goal_static(
