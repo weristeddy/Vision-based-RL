@@ -23,7 +23,7 @@ Usage:
   bash cluster/submit.sh --profile a100 --dependency afterany:<job-id> -- TASK_ID
   bash cluster/submit.sh --profile b200 --exclude node-a,node-b -- TASK_ID
 
-Profiles: a100, b200, testing, a100-single, b200-single
+Profiles: a100, b200, testing, a100-single, b200-single, ber-testing
 
 A four-GPU profile receives four GPUs, owns --gpu-ids, and defaults to 1,024
 environments per rank; --env.scene.num-envs sets the per-rank count. A *-single

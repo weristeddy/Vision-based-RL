@@ -33,7 +33,7 @@ Usage:
                               [--fallback] [--dry-run] [--yes]
                               [-- NATIVE OPTIONS ...]
 
-  --profile NAME   a100, b200, testing, a100-single, b200-single (default: b200)
+  --profile NAME   a100, b200, testing, a100-single, b200-single, ber-testing (default: b200)
   --variant TOKEN  the variant token in the task IDs to sweep (default: WoodTable)
   --arch LIST      comma-separated substrings; keep only task IDs matching one.
                    Filters submission, never registration: an ID has to stay
