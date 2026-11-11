@@ -87,7 +87,8 @@ if [[ -f /etc/slurm/local_job_dir.sh ]]; then
   RUNTIME_DIR="$(source /etc/slurm/local_job_dir.sh >&2; echo "${LOCAL_JOB_DIR:-}")" || true
 fi
 if [[ -z "${RUNTIME_DIR}" ]] || ! mkdir -p "${RUNTIME_DIR}" 2>/dev/null; then
-  RUNTIME_DIR="/tmp/vbrl-${SLURM_JOB_ID:-manual}"
+  echo "No LOCAL_JOB_DIR on $(hostname); /tmp is not allowed. Resubmit with --exclude $(hostname)." >&2
+  exit 1
 fi
 TORCHRUNX_DIR="${RUNTIME_DIR}/torchrunx"
 WARP_DIR="${RUNTIME_DIR}/warp"

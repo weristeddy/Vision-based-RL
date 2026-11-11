@@ -119,7 +119,11 @@ if [[ -f /etc/slurm/local_job_dir.sh ]]; then
   # shellcheck disable=SC1091
   source /etc/slurm/local_job_dir.sh
 fi
-RUNTIME_DIR="${LOCAL_JOB_DIR:-/tmp/vbrl-evaluate-${SLURM_JOB_ID:-manual}}"
+if [[ -z "${LOCAL_JOB_DIR:-}" ]] || ! mkdir -p "${LOCAL_JOB_DIR}" 2>/dev/null; then
+  echo "No LOCAL_JOB_DIR on $(hostname); /tmp is not allowed." >&2
+  exit 1
+fi
+RUNTIME_DIR="${LOCAL_JOB_DIR}"
 WARP_DIR="${RUNTIME_DIR}/warp-evaluation"
 # Warp writes NVRTC precompiled headers into $TMPDIR, not WARP_CACHE_PATH;
 # unset, that fills the container's /tmp and the kernel build dies.
