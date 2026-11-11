@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mjlab.rl import RslRlModelCfg
 
+from vbrl.tasks.lift_cube.lift_cube_env_cfg import STEPS_PER_ITERATION
 from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillationCfg
 from vbrl.training.ppo import VisualPpoCfg
@@ -28,7 +29,7 @@ _GAUSSIAN = {
 def trossen_realistic_lift_cube_state_ppo_runner_cfg() -> VbrlOnPolicyRunnerCfg:
   return VbrlOnPolicyRunnerCfg(
     seed=0,
-    num_steps_per_env=24,
+    num_steps_per_env=STEPS_PER_ITERATION,
     max_iterations=2000,
     obs_groups={"actor": ("actor",), "critic": ("critic",)},
     save_interval=100,

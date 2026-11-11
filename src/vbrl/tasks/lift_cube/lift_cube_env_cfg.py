@@ -4,6 +4,7 @@ import copy
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import (
+  CurriculumTermCfg,
   EventTermCfg,
   ObservationTermCfg,
   RewardTermCfg,
@@ -25,8 +26,12 @@ RAMP_S = 0.05
 EPISODE_LENGTH_S = 20.0
 ACTION_RATE_WEIGHT = -0.01
 JOINT_VEL_WEIGHT = -0.05
-POSTURE_WEIGHT = 0.0
+POSTURE_WEIGHT = 1.0
 POSTURE_STD = 0.5
+# After every absolute-gripper run had learned the grasp (iteration 200-400); from
+# the start, b36q4eo3 hovered at the cube near home and never grasped.
+POSTURE_START_ITERATION = 500
+STEPS_PER_ITERATION = 24
 OBJECT_REST_HEIGHT = 0.02
 
 
@@ -115,7 +120,7 @@ def build_env_cfg(
     ),
     "posture": RewardTermCfg(
       func=mdp.posture,
-      weight=POSTURE_WEIGHT,
+      weight=0.0,
       params={
         "asset_cfg": SceneEntityCfg("robot", joint_names=arm),
         "std": {".*": POSTURE_STD},
@@ -134,7 +139,20 @@ def build_env_cfg(
     ),
     nan_detection=TerminationTermCfg(func=mdp.nan_detection),
   )
-  cfg.curriculum = {}
+  cfg.curriculum = {
+    "posture_weight": CurriculumTermCfg(
+      func=mdp.reward_curriculum,
+      params={
+        "reward_name": "posture",
+        "stages": [
+          {
+            "step": POSTURE_START_ITERATION * STEPS_PER_ITERATION,
+            "weight": POSTURE_WEIGHT,
+          }
+        ],
+      },
+    )
+  }
   cfg.events["arm_joint_position_noise"] = EventTermCfg(
     func=mdp.reset_joints_with_gaussian_offset,
     mode="reset",
@@ -174,7 +192,8 @@ def build_env_cfg(
     cfg.observations["actor"].terms.pop("obj_pose")
   if play:
     cfg.observations["actor"].enable_corruption = False
+    cfg.curriculum = {}
   return cfg
 
 
-__all__ = ["OBJECT_REST_HEIGHT", "build_env_cfg"]
+__all__ = ["OBJECT_REST_HEIGHT", "STEPS_PER_ITERATION", "build_env_cfg"]
