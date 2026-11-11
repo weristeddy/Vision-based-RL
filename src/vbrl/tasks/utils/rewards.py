@@ -27,4 +27,19 @@ def ee_tilt(
   return 1.0 + quat_apply(quat, pointing)[:, 2]
 
 
-__all__ = ["ee_tilt"]
+# MJLab's reward_curriculum keeps its stages in a list, which the CLI cannot set.
+def reward_weight_from_step(
+  env: ManagerBasedRlEnv,
+  env_ids: torch.Tensor,
+  reward_name: str,
+  step: int,
+  weight: float,
+) -> dict[str, torch.Tensor]:
+  del env_ids
+  term = env.reward_manager.get_term_cfg(reward_name)
+  if env.common_step_counter >= step:
+    term.weight = weight
+  return {"weight": torch.tensor(term.weight)}
+
+
+__all__ = ["ee_tilt", "reward_weight_from_step"]

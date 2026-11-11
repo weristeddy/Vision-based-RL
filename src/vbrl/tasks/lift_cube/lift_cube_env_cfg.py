@@ -141,15 +141,11 @@ def build_env_cfg(
   )
   cfg.curriculum = {
     "posture_weight": CurriculumTermCfg(
-      func=mdp.reward_curriculum,
+      func=mdp.reward_weight_from_step,
       params={
         "reward_name": "posture",
-        "stages": [
-          {
-            "step": POSTURE_START_ITERATION * STEPS_PER_ITERATION,
-            "weight": POSTURE_WEIGHT,
-          }
-        ],
+        "step": POSTURE_START_ITERATION * STEPS_PER_ITERATION,
+        "weight": POSTURE_WEIGHT,
       },
     )
   }

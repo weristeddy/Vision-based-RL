@@ -63,9 +63,11 @@ def test_lift_state_and_rgb_share_control_and_the_student_sees_the_wrist() -> No
   assert state.rewards["action_rate_l2"].weight == -0.01
   assert "ee_vertical" not in state.rewards
   assert state.rewards["posture"].weight == 0.0
-  assert state.curriculum["posture_weight"].params["stages"] == [
-    {"step": 500 * 24, "weight": 1.0}
-  ]
+  assert state.curriculum["posture_weight"].params == {
+    "reward_name": "posture",
+    "step": 500 * 24,
+    "weight": 1.0,
+  }
   assert state.rewards["posture"].params["std"] == {".*": 0.5}
   assert state.rewards["posture"].params["asset_cfg"].joint_names == tuple(
     f"joint_{i}" for i in range(6)
