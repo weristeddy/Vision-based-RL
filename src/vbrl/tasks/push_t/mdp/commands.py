@@ -55,6 +55,7 @@ class PushTCommand(LiftingCommand):
       self.metrics.pop(name)
     self.metrics["yaw_error"] = torch.zeros(self.num_envs, device=self.device)
     self.metrics["overlap"] = torch.zeros(self.num_envs, device=self.device)
+    self.metrics["final_success"] = torch.zeros(self.num_envs, device=self.device)
     if cfg.near_object_start:
       self._init_start_bank(env)
 
@@ -133,6 +134,9 @@ class PushTCommand(LiftingCommand):
       wrap_to_pi(self.target_yaw - object_yaw)
     )
     self.metrics["overlap"] = overlap
+    # At the episode's end this is Diffusion Policy's success, the last step's
+    # coverage; episode_success, which the start bank weighs by, is its best step.
+    self.metrics["final_success"] = at_goal.to(overlap.dtype)
     self.metrics["episode_success"] = self.episode_success
     return at_goal
 

@@ -238,6 +238,7 @@ def test_push_t_success_threshold_latches_metrics() -> None:
       "position_error",
       "yaw_error",
       "overlap",
+      "final_success",
       "episode_success",
     )
   }
@@ -251,6 +252,7 @@ def test_push_t_success_threshold_latches_metrics() -> None:
   assert torch.equal(second, torch.tensor([False, True]))
   assert torch.equal(command.episode_success, torch.ones(2))
   assert torch.equal(command.metrics["episode_success"], torch.ones(2))
+  assert torch.equal(command.metrics["final_success"], torch.tensor([0.0, 1.0]))
 
 
 def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None:
