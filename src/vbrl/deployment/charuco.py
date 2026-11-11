@@ -4,15 +4,12 @@ from typing import Any
 
 import numpy as np
 
-# (7, 10), not the (10, 7) the board is described by: OpenCV's first dimension counts
-# squares across the board's own x axis, and this board's marker layout only matches.
-SQUARES = (7, 10)
-SQUARE_M = 0.040
-MARKER_M = 0.030
-# This board predates OpenCV 4.6's change to the ChArUco layout, so the marker placement
-# is the legacy one.
-LEGACY_PATTERN = True
-DICTIONARIES = ("DICT_4X4_50", "DICT_4X4_100", "DICT_4X4_250", "DICT_4X4_1000")
+# (5, 7), not the 7 x 5 the board is described by: OpenCV's first dimension counts
+# squares across the board's own x axis, and only this order interpolates corners.
+SQUARES = (5, 7)
+SQUARE_M = 0.055
+MARKER_M = 0.041
+DICTIONARIES = ("DICT_5X5_50", "DICT_5X5_100", "DICT_5X5_250", "DICT_5X5_1000")
 # solvePnP needs 4 points for a solution, but a pose from 4 near-collinear corners of a
 # planar target is worthless.
 MIN_CORNERS = 12
@@ -24,11 +21,9 @@ def make_board(dictionary: str = DICTIONARIES[0]) -> Any:
   name = getattr(cv2.aruco, dictionary, None)
   if name is None:
     raise ValueError(f"Unknown ArUco dictionary {dictionary!r}.")
-  board = cv2.aruco.CharucoBoard(
+  return cv2.aruco.CharucoBoard(
     SQUARES, SQUARE_M, MARKER_M, cv2.aruco.getPredefinedDictionary(name)
   )
-  board.setLegacyPattern(LEGACY_PATTERN)
-  return board
 
 
 def _grey(image: Any) -> Any:
@@ -62,8 +57,8 @@ def detect_dictionary(image: Any) -> dict[str, Any]:
   best = max(attempts, key=lambda a: (a["n_corners"], a["n_markers"]))
   if best["n_markers"] == 0:
     raise RuntimeError(
-      "No ArUco markers found under any DICT_4X4 size. Check the board is in "
-      "frame, lit without glare, and that it really is a 4x4 dictionary."
+      "No ArUco markers found under any DICT_5X5 size. Check the board is in "
+      "frame, lit without glare, and that it really is a 5x5 dictionary."
     )
   return best
 
@@ -145,7 +140,6 @@ def calibrate_intrinsics(
 
 __all__ = [
   "DICTIONARIES",
-  "LEGACY_PATTERN",
   "MARKER_M",
   "MIN_CORNERS",
   "SQUARES",

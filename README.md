@@ -167,21 +167,22 @@ names the ONNX graph, the arm IP, the goal and the motion limits; the policy's
 observation and action contract travel inside the ONNX metadata, so deployment
 never reads the task registry.
 
-### Calibration
+### Goal and overlap measurement
 
-Only needed when a camera moves or the printed goal marker is repositioned:
+Only needed when the printed goal marker is repositioned:
 
 ```bash
-python -m vbrl.deployment.intrinsics --save artifacts/deployment/intrinsics
-python -m vbrl.deployment.camera                      # pick camera_exposure_us
-python -m vbrl.deployment.capture_board --execute --arm-ip 192.168.1.2
-python -m vbrl.deployment.recalibrate --capture artifacts/deployment/charuco
-python -m vbrl.deployment.goal_pose frame.png --margin-mm 7.0
+python -m vbrl.deployment.push_t.measure_goal <manifest.yaml>
 ```
 
-`recalibrate` prints an MJCF `<camera>` block to paste into the robot XML.
-`goal_pose` turns a photo of the two AprilTags into the `goal:` numbers a manifest
-needs — then take the tags off, because the policy must never see them.
+`push_t.measure_goal` fits the T footprint into the hole of the green goal outline
+in one 1280x720 frame, with the T off the table, and prints the `goal:` numbers a
+manifest needs;
+`push_t.measure_overlap` fits the T after an episode and prints its overlap with
+that goal.
+`python -m vbrl.deployment.push_t.apriltag_goal frame.png` solves the goal from the two
+AprilTags instead, as a cross-check; take the tags off afterwards, because the
+policy must never see them.
 
 ## Cluster (Slurm)
 

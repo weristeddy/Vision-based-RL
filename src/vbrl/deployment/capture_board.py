@@ -12,29 +12,36 @@ from vbrl.deployment.intrinsics import open_stream
 
 WRIST_SERIAL = "412622271761"
 EXTERNAL_SERIAL = "260322270027"
-# The highest colour mode: 46 of 54 corners on the real board against 31 at 848x480.
+# The highest colour mode: the old 7 x 10 board gave 46 of 54 corners, 31 at 848x480.
 WIDTH, HEIGHT = 1280, 720
 # Wall-clock, not a frame count, so the settle does not depend on the rate.
 SETTLE_SECONDS = 3.0
 MOVE_SECONDS = 4.0
-# joint_0 swings the arm sideways; joint_3/4/5 re-aim the wrist without moving
-# it far. Kept small: 12 modest views that all see the board beat 4 that do not.
-DELTAS: tuple[dict[str, float], ...] = (
-  {},
-  {"joint_0": +0.12},
-  {"joint_0": -0.12},
-  {"joint_3": +0.15},
-  {"joint_3": -0.15},
-  {"joint_4": +0.18},
-  {"joint_4": -0.18},
-  {"joint_5": +0.30},
-  {"joint_5": -0.30},
-  {"joint_0": +0.10, "joint_4": +0.14},
-  {"joint_0": -0.10, "joint_4": -0.14},
-  {"joint_1": +0.08, "joint_3": +0.10},
-  {"joint_1": -0.08, "joint_3": -0.10},
-  {"joint_0": +0.08, "joint_5": +0.22},
-  {"joint_0": -0.08, "joint_5": -0.22},
+# Home, then 19 poses chosen for spread in shoulder, elbow and wrist (camera 24-47 cm
+# above the base) so the joint zero offsets separate. Each keeps 16+ board corners above
+# the gripper fingers, and the tool 12+ cm above the base on every path between poses.
+# Offsets from home in radians, joint_0 to joint_5.
+DELTAS: tuple[tuple[float, ...], ...] = (
+  (+0.00, +0.00, +0.00, +0.00, +0.00, +0.00),
+  (-0.23, -0.35, -0.09, -0.20, +0.04, +0.01),
+  (-0.13, -0.34, +0.29, -0.22, -0.07, +0.05),
+  (+0.18, -0.34, +0.32, -0.19, +0.32, -0.19),
+  (+0.13, -0.26, -0.01, -0.07, +0.16, -0.60),
+  (-0.09, -0.08, -0.18, +0.26, +0.07, -0.54),
+  (+0.23, -0.32, -0.34, +0.35, +0.29, -0.57),
+  (+0.02, -0.32, -0.21, -0.08, -0.25, -0.49),
+  (-0.24, -0.08, +0.31, -0.09, -0.04, -0.51),
+  (-0.11, +0.23, +0.12, -0.16, -0.21, -0.58),
+  (-0.08, +0.32, +0.35, -0.07, +0.12, -0.57),
+  (-0.25, +0.17, -0.15, +0.22, -0.31, -0.24),
+  (+0.14, -0.30, -0.32, +0.29, -0.29, +0.21),
+  (+0.21, -0.06, -0.33, +0.23, +0.12, +0.16),
+  (+0.02, -0.35, -0.33, +0.04, +0.33, +0.52),
+  (+0.25, -0.22, +0.13, -0.03, +0.19, +0.59),
+  (+0.21, +0.24, +0.27, -0.18, +0.24, +0.57),
+  (-0.16, +0.26, +0.34, -0.10, -0.35, +0.32),
+  (-0.12, -0.08, -0.09, +0.15, -0.24, +0.55),
+  (-0.07, -0.33, +0.26, -0.07, -0.32, +0.60),
 )
 ARM_JOINTS = ("joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "joint_5")
 
@@ -45,8 +52,8 @@ def poses(scale: float = 1.0) -> list[dict[str, Any]]:
   home = make_wxai_measured().home_joint_pos
   gripper = home["right_carriage_joint"]
   out = []
-  for index, delta in enumerate(DELTAS):
-    delta = {joint: value * scale for joint, value in delta.items()}
+  for index, offsets in enumerate(DELTAS):
+    delta = {j: v * scale for j, v in zip(ARM_JOINTS, offsets, strict=True) if v}
     angles = [home[joint] + delta.get(joint, 0.0) for joint in ARM_JOINTS]
     out.append(
       {

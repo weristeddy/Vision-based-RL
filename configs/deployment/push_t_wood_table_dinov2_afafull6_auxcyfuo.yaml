@@ -7,7 +7,11 @@ onnx_file: ckpts/push_t/dinov2_vits14_afafull6_wood_distill_auxcyfuo_7999.onnx
 arm_ip: 192.168.1.2
 
 goal_space: push_t_xy_yaw
-goal: [0.38442, 0.01567, 0.0124]
+# AprilTag goal, solved before 2026-11-11; kept for comparison:
+# goal: [0.38442, 0.01567, 0.0124]
+# Fitted to the taped outline's hole (measure_goal, 2026-11-11, IoU 0.977), with the
+# external camera calibrated against the arm and the measured table plane.
+goal: [0.38587, 0.01701, 0.0273]
 
 camera_serial: "260322270027"
 # Measured 2026-10-26 against 256 real_table renders: brightness 128 (sim median 127), R/G 1.38 (1.36).

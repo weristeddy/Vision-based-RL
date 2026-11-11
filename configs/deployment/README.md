@@ -120,14 +120,34 @@ Arrow keys move the goal while a run is going: up/down moves z, left/right
 moves y, 0.02 m per press, clamped to the training range. `--no-keyboard-goal`
 turns that off, and it turns itself off with no terminal on stdin.
 
-## When the goal marker moves
+## Measuring the goal and the overlap
 
-The numbers in `goal:` and the marker on the table have to agree. Seat the two
-tag25h9 markers in the notches, capture one external-camera frame, then take
-the tags off — the policy must never see them.
+Both take one 1280x720 frame at the manifest's camera settings, with the arm at
+home (`--home` in another terminal) and nothing else over the table. When the
+marker moves, take the T off the table and fit the goal: the T footprint placed
+best in the hole the green tape encloses, with the tape allowed to sit a few
+millimetres too wide or narrow all round. Paste the printed `goal:` line into the
+manifests:
 
 ```bash
-uv run --no-sync python -m vbrl.deployment.goal_pose <frame.png> --margin-mm 7.0
+uv run --no-sync python -m vbrl.deployment.push_t.measure_goal configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --annotate artifacts/deployment/goal_fit.png
+```
+
+After an episode, `measure_overlap` fits the T and prints its overlap with the
+manifest goal, the footprint overlap the simulator scores:
+
+```bash
+uv run --no-sync python -m vbrl.deployment.push_t.measure_overlap configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --save artifacts/deployment/episode.png --annotate artifacts/deployment/episode_fit.png
+```
+
+`--image <frame.png>` measures a saved frame instead of capturing one. Neither
+script prints a result when its fit falls below the IoU threshold. The AprilTags
+give an independent check of the goal: seat the two tag25h9 markers in the
+notches, capture a frame, then take them off, because the policy must never see
+them:
+
+```bash
+uv run --no-sync python -m vbrl.deployment.push_t.apriltag_goal <frame.png> --margin-mm 7.0
 ```
 
 ## Exposure

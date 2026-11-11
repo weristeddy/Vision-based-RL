@@ -17,6 +17,37 @@ def _colour_sensor(device: Any, rs: Any) -> Any:
   raise RuntimeError("No sensor on this device advertises a colour stream.")
 
 
+def _configure(sensor: Any, config: Any, rs: Any) -> None:
+  if config.camera_exposure_us is None:
+    sensor.set_option(rs.option.enable_auto_exposure, 1)
+  else:
+    # Manual, because auto meters the whole frame and a pale tabletop filling it
+    # drives the sensor to saturation -- 42% of pixels pinned at 255 on the first.
+    sensor.set_option(rs.option.enable_auto_exposure, 0)
+    sensor.set_option(rs.option.exposure, float(config.camera_exposure_us))
+  if config.camera_white_balance_k is not None:
+    # Auto white balance re-neutralizes the wood whenever the room light changes.
+    sensor.set_option(rs.option.enable_auto_white_balance, 0)
+    sensor.set_option(rs.option.white_balance, float(config.camera_white_balance_k))
+  if config.camera_gain is not None:
+    sensor.set_option(rs.option.gain, float(config.camera_gain))
+
+
+def still(config: Any, width: int, height: int) -> Any:
+  import pyrealsense2 as rs
+
+  from vbrl.deployment.intrinsics import open_stream
+
+  pipeline, fps = open_stream(config.camera_serial, width, height)
+  device = pipeline.get_active_profile().get_device()
+  _configure(_colour_sensor(device, rs), config, rs)
+  for _ in range(fps):
+    frame = pipeline.wait_for_frames(timeout_ms=5000).get_color_frame()
+  image = np.array(frame.get_data())
+  pipeline.stop()
+  return image
+
+
 class RealSenseCamera:
   def __init__(self, config: Any) -> None:
     import pyrealsense2 as rs
@@ -33,20 +64,7 @@ class RealSenseCamera:
       config.camera_fps,
     )
     profile = self._pipeline.start(stream)
-    sensor = _colour_sensor(profile.get_device(), rs)
-    if config.camera_exposure_us is None:
-      sensor.set_option(rs.option.enable_auto_exposure, 1)
-    else:
-      # Manual, because auto meters the whole frame and a pale tabletop filling it
-      # drives the sensor to saturation -- 42% of pixels pinned at 255 on the first.
-      sensor.set_option(rs.option.enable_auto_exposure, 0)
-      sensor.set_option(rs.option.exposure, float(config.camera_exposure_us))
-    if config.camera_white_balance_k is not None:
-      # Auto white balance re-neutralizes the wood whenever the room light changes.
-      sensor.set_option(rs.option.enable_auto_white_balance, 0)
-      sensor.set_option(rs.option.white_balance, float(config.camera_white_balance_k))
-    if config.camera_gain is not None:
-      sensor.set_option(rs.option.gain, float(config.camera_gain))
+    _configure(_colour_sensor(profile.get_device(), rs), config, rs)
 
     self._lock = threading.Lock()
     first = self._await_frame()
@@ -95,7 +113,7 @@ class RealSenseCamera:
         self._stamp_ms = colour.get_timestamp()
 
 
-__all__ = ["SIZE", "RealSenseCamera"]
+__all__ = ["SIZE", "RealSenseCamera", "still"]
 
 
 def _probe(argv: Any = None) -> int:

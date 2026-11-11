@@ -68,8 +68,8 @@
 
   <worldbody>
     <body gravcomp="1" name="base_link">
-      <camera name="external_cam" pos="0.812099 -0.021484 0.468208"
-              quat="0.662909 0.265531 0.247583 0.654788"
+      <camera name="external_cam" pos="0.796063 -0.012552 0.481251"
+              quat="0.657483 0.255036 0.244963 0.665331"
               mode="fixed" fovy="54.284"/>
       <geom name="mount_plate" class="visual" type="box" material="mount_black"
             size="0.095 0.04 0.0025" pos="0 0 -0.0025"/>
@@ -137,8 +137,8 @@
                   <site name="ee_site" pos="0.156 0 0" size="0.001"/>
                   <site name="camera_color_frame" pos="0.05864 0.009 0.05427"
                         quat="0.9848078 0 0.1736482 0" size="0.005"/>
-                  <camera name="cam" pos="0.05864 0.009 0.05427"
-                          quat="0.5793 0.4056 -0.4056 -0.5793"
+                  <camera name="cam" pos="0.055494 0.012849 0.053735"
+                          quat="0.581214 0.401772 -0.412852 -0.574737"
                           mode="fixed" fovy="54.489"/>
                   <geom class="visual" mesh="link_6"/>
                   <geom class="collision" mesh="link_6_collision"/>

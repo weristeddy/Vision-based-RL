@@ -123,12 +123,11 @@ def test_the_board_model_is_the_one_that_was_fitted() -> None:
   )
 
   board = cv2.aruco.CharucoBoard(
-    charuco.SQUARES,
+    charuco.SQUARES[::-1],
     charuco.SQUARE_M,
     charuco.MARKER_M,
-    cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50),
+    cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_50),
   )
-  board.setLegacyPattern(False)
   corners, ids, _, marker_ids = cv2.aruco.CharucoDetector(board).detectBoard(
     cv2.cvtColor(scene, cv2.COLOR_RGB2GRAY)
   )
@@ -148,7 +147,7 @@ def test_the_wrist_camera_sits_where_the_arm_puts_it() -> None:
 
 
 def test_goal_pose_offset_places_the_origin_not_the_tag_midpoint() -> None:
-  from vbrl.deployment.goal_pose import (
+  from vbrl.deployment.push_t.apriltag_goal import (
     CROSSBAR_INNER_EDGE_M,
     DEFAULT_MARGIN_M,
     TAG_BLACK_M,
@@ -169,16 +168,109 @@ def test_goal_pose_offset_places_the_origin_not_the_tag_midpoint() -> None:
     assert actual == pytest.approx(expected, abs=1e-9)
 
 
-def test_goal_pose_reads_the_calibrated_external_camera_from_the_mjcf() -> None:
+def test_the_external_view_reads_the_calibrated_camera_from_the_mjcf() -> None:
   import numpy as np
 
-  from vbrl.asset_zoo.robots import make_wxai_measured
-  from vbrl.deployment.goal_pose import external_camera_pose
+  from vbrl.deployment.push_t.view import ExternalView
 
-  pose = external_camera_pose(make_wxai_measured().xml_path)
+  pose = ExternalView.load(1280, 720).pose
   assert pose.shape == (4, 4)
   rotation = pose[:3, :3]
   assert np.allclose(rotation @ rotation.T, np.eye(3), atol=1e-6)
   assert float(np.linalg.det(rotation)) == pytest.approx(1.0, abs=1e-6)
   assert pose[0, 3] > 0.5 and pose[2, 3] > 0.3
   assert float(rotation @ np.array([0.0, 0.0, 1.0]) @ np.array([0, 0, 1])) < -0.3
+
+
+def test_the_hand_eye_fit_recovers_the_wrist_mount_and_both_boards() -> None:
+  from scipy.spatial.transform import Rotation
+
+  from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
+  from vbrl.deployment.capture_board import DELTAS
+  from vbrl.deployment.recalibrate import hand_eye, parent_pose
+
+  matrix = np.array([[650.0, 0.0, 640.0], [0.0, 650.0, 360.0], [0.0, 0.0, 1.0]])
+  joints = make_wxai_measured().home_joint_pos
+  home = np.array([joints[f"joint_{i}"] for i in range(6)])
+  mount = np.linalg.inv(parent_pose(home)) @ wrist_camera_at_home()
+  below = wrist_camera_at_home()[:3, 3] * [1.0, 1.0, 0.0]
+  boards = [
+    transform(Rotation.from_euler("z", yaw, degrees=True).as_matrix(), below + shift)
+    for yaw, shift in ((4, [-0.11, -0.08, 0.0]), (-3, [-0.09, -0.07, 0.0]))
+  ]
+  grid = np.arange(5) * 0.055
+  corners = np.array([[x, y, 0.0] for x in grid for y in grid[:4]])
+  generator = np.random.default_rng(0)
+  views = []
+  for index, board in enumerate(boards):
+    for delta in DELTAS:
+      parent = parent_pose(home + np.asarray(delta))
+      in_camera = np.linalg.inv(parent @ mount) @ board
+      projected, _ = cv2.projectPoints(
+        corners, cv2.Rodrigues(in_camera[:3, :3])[0], in_camera[:3, 3], matrix, None
+      )
+      noise = generator.normal(0.0, 0.2, (len(corners), 2))
+      views.append(
+        {
+          "board": index,
+          "parent": parent,
+          "object_points": corners,
+          "image_points": projected.reshape(-1, 2) + noise,
+        }
+      )
+
+  nudge = transform(
+    Rotation.from_euler("xyz", [2, -1, 1], degrees=True).as_matrix(),
+    [0.004, -0.003, 0.005],
+  )
+  fitted_mount, fitted_boards, errors = hand_eye(
+    views, matrix, np.zeros(5), mount @ nudge, [board @ nudge for board in boards]
+  )
+  assert np.sqrt(np.mean(errors**2)) < 0.3
+  np.testing.assert_allclose(fitted_mount[:3, 3], mount[:3, 3], atol=1e-3)
+  np.testing.assert_allclose(fitted_mount[:3, :3], mount[:3, :3], atol=2e-3)
+  for fitted, board in zip(fitted_boards, boards, strict=True):
+    np.testing.assert_allclose(fitted[:3, 3], board[:3, 3], atol=1e-3)
+
+
+def test_the_eye_to_hand_fit_recovers_the_external_camera_and_the_marker() -> None:
+  from scipy.spatial.transform import Rotation
+
+  from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
+  from vbrl.deployment.capture_marker import DELTAS, MARKER_M
+  from vbrl.deployment.push_t.view import ExternalView
+  from vbrl.deployment.recalibrate import eye_to_hand, parent_pose
+
+  view = ExternalView.load(1280, 720)
+  joints = make_wxai_measured().home_joint_pos
+  home = np.array([joints[f"joint_{i}"] for i in range(6)])
+  marker = transform(
+    Rotation.from_euler("y", -80, degrees=True).as_matrix(), [0.118, 0.007, -0.009]
+  )
+  half = MARKER_M / 2.0
+  square = np.array(
+    [[-half, half, 0.0], [half, half, 0.0], [half, -half, 0.0], [-half, -half, 0.0]]
+  )
+  generator = np.random.default_rng(0)
+  views = []
+  for delta in DELTAS:
+    parent = parent_pose(home + np.asarray(delta))
+    in_camera = np.linalg.inv(view.pose) @ parent @ marker
+    projected, _ = cv2.projectPoints(
+      square, cv2.Rodrigues(in_camera[:3, :3])[0], in_camera[:3, 3],
+      view.matrix, view.distortion,
+    )
+    corners = projected.reshape(-1, 2) + generator.normal(0.0, 0.2, (4, 2))
+    views.append({"parent": parent, "corners": corners})
+
+  nudge = transform(
+    Rotation.from_euler("xyz", [1.5, -1.0, 1.0], degrees=True).as_matrix(),
+    [0.02, -0.01, 0.015],
+  )
+  camera, fitted_marker, errors = eye_to_hand(
+    views, view.matrix, view.distortion, view.pose @ nudge, marker @ nudge, MARKER_M
+  )
+  assert np.sqrt(np.mean(errors**2)) < 0.3
+  np.testing.assert_allclose(camera[:3, 3], view.pose[:3, 3], atol=1.5e-3)
+  np.testing.assert_allclose(camera[:3, :3], view.pose[:3, :3], atol=2e-3)
+  np.testing.assert_allclose(fitted_marker[:3, 3], marker[:3, 3], atol=1.5e-3)
