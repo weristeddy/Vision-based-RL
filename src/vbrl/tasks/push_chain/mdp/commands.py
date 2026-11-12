@@ -21,6 +21,7 @@ from ..geometry import (
   landmark_errors,
   link_poses,
 )
+from ..goal_marker import SIDE_GEOM_NAMES, side_strips
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -58,6 +59,16 @@ class PushChainCommand(LiftingCommand):
     self._ee_site = self._robot.find_sites(cfg.ee_site)[0][0]
     self._robot_boxes = self._robot_footprint(env)
     self._goal_markers = [env.scene[name] for name in cfg.goal_marker_names]
+    if self._goal_markers:
+      env.sim.expand_model_fields(("geom_pos", "geom_size"))
+      self._side_geoms = torch.stack(
+        [
+          marker.indexing.geom_ids[
+            marker.find_geoms(SIDE_GEOM_NAMES, preserve_order=True)[0]
+          ]
+          for marker in self._goal_markers
+        ]
+      )
     for name in ("object_height", "at_goal", "position_error"):
       self.metrics.pop(name)
     for i in range(3):
@@ -328,6 +339,11 @@ class PushChainCommand(LiftingCommand):
         dim=-1,
       )
       marker.write_mocap_pose_to_sim(pose, env_ids=env_ids)
+    if self._goal_markers:
+      strips = side_strips(goal[:, 3:])
+      model, worlds = self._env.sim.model, env_ids[:, None, None]
+      model.geom_pos[worlds, self._side_geoms, 0] = strips[..., 0]
+      model.geom_size[worlds, self._side_geoms, 0] = strips[..., 1]
 
   def _update_command(self, env_ids: torch.Tensor | None) -> None:
     del env_ids

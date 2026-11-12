@@ -263,6 +263,42 @@ def test_landmarks_run_tip_to_tip_and_reverse_with_the_chain() -> None:
   assert landmark_errors(folded, straight)[0, 0].item() == pytest.approx(tip, abs=1e-6)
 
 
+def test_goal_tape_traces_the_chain_outline_at_every_bend() -> None:
+  from vbrl.tasks.push_chain.geometry import (
+    HINGE_LIMIT,
+    chain_signed_distance,
+    link_poses,
+  )
+  from vbrl.tasks.push_chain.goal_marker import _boxes, side_strips
+  from vbrl.tasks.push_t.goal_marker import GOAL_OUTLINE_THICKNESS
+
+  angles = torch.linspace(-HINGE_LIMIT, HINGE_LIMIT, 9)
+  hinges = torch.cartesian_prod(angles, angles)
+  links = link_poses(torch.zeros(len(hinges), 2), torch.zeros(len(hinges)), hinges)
+  strips = side_strips(hinges)
+  axis = torch.arange(-0.2, 0.2, 0.001)
+  points = torch.cartesian_prod(axis, axis)
+  distance = chain_signed_distance(points, links[:, None], pins=True)
+  covered = torch.zeros_like(distance, dtype=torch.bool)
+  for link in range(3):
+    relative = points - links[:, link, None, :2]
+    yaw = links[:, link, 2, None]
+    u = torch.cos(yaw) * relative[..., 0] + torch.sin(yaw) * relative[..., 1]
+    v = -torch.sin(yaw) * relative[..., 0] + torch.cos(yaw) * relative[..., 1]
+    for index, (_, centre, half) in enumerate(_boxes(link)):
+      centre, half = torch.tensor(centre).expand(len(hinges), 2), torch.tensor(half)
+      length = half[0].expand(len(hinges))
+      if index < 2:
+        centre = torch.stack((strips[:, link, index, 0], centre[:, 1]), dim=-1)
+        length = strips[:, link, index, 1]
+      covered |= ((u - centre[:, None, 0]).abs() <= length[:, None] + 1e-9) & (
+        (v - centre[:, None, 1]).abs() <= half[1] + 1e-9
+      )
+  assert not (covered & (distance < -1e-4)).any()
+  band = (distance > 1e-4) & (distance < GOAL_OUTLINE_THICKNESS - 1e-4)
+  assert covered[band].float().mean() > 0.99
+
+
 @pytest.mark.sim
 @pytest.mark.gpu
 def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
