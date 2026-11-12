@@ -234,6 +234,25 @@ def test_success_and_reward_accept_the_goal_in_either_order() -> None:
   assert near.goal_errors()[:, 0] == pytest.approx(torch.full((2,), 0.02))
 
 
+def test_chain_overlap_covers_the_whole_goal_in_either_order() -> None:
+  from vbrl.tasks.push_chain.geometry import (
+    ChainOverlap,
+    link_poses,
+    reversed_links,
+  )
+
+  overlap = ChainOverlap(device="cpu", dtype=torch.float)
+  bent = link_poses(
+    torch.tensor(((0.3, 0.1),)), torch.tensor((0.7,)), torch.tensor(((1.2, -0.9),))
+  )
+  assert overlap(bent, bent).item() == pytest.approx(1.0)
+  assert overlap(reversed_links(bent), bent).item() == pytest.approx(1.0)
+
+  straight = link_poses(torch.zeros(1, 2), torch.zeros(1), torch.zeros(1, 2))
+  shifted = link_poses(torch.tensor(((0.01, 0.0),)), torch.zeros(1), torch.zeros(1, 2))
+  assert overlap(shifted, straight).item() == pytest.approx(1 - 0.01 / 0.2275, abs=1e-3)
+
+
 def test_landmarks_run_tip_to_tip_and_reverse_with_the_chain() -> None:
   from vbrl.tasks.push_chain.geometry import (
     chain_landmarks,
@@ -341,6 +360,9 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
       "hinge1_error",
       "max_landmark_error_m",
       "tcp_distance",
+      "chain_overlap",
+      "chain_final_success",
+      "chain_success",
     } == set(command.metrics)
     assert set(env.metrics_manager.active_terms) == {
       "peak_top_face_force",

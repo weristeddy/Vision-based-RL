@@ -14,6 +14,7 @@ from vbrl.tasks.push_t.geometry import yaw_from_quat
 from ..geometry import (
   LINK_HALF_EXTENTS,
   LINK_HALF_HEIGHT,
+  ChainOverlap,
   LinkOverlap,
   chain_signed_distance,
   end_links_gap,
@@ -55,6 +56,11 @@ class PushChainCommand(LiftingCommand):
     self._overlap = LinkOverlap(device=self.device, dtype=torch.float)
     self._overlap_cache = torch.zeros(n, 3, device=self.device)
     self._overlap_cache_step: int | None = None
+    self._chain_overlap = ChainOverlap(device=self.device, dtype=torch.float)
+    self._goal_pixels, self._goal_counted = self._chain_overlap.goal_pixels(
+      self.target_links
+    )
+    self.chain_success = torch.zeros(n, device=self.device)
     self._robot = env.scene["robot"]
     self._ee_site = self._robot.find_sites(cfg.ee_site)[0][0]
     self._robot_boxes = self._robot_footprint(env)
@@ -74,7 +80,14 @@ class PushChainCommand(LiftingCommand):
     for i in range(3):
       self.metrics[f"link{i}_overlap"] = torch.zeros(n, device=self.device)
     self.metrics["min_link_overlap"] = torch.zeros(n, device=self.device)
-    for name in (*GOAL_ERRORS, "max_landmark_error_m", "tcp_distance"):
+    for name in (
+      *GOAL_ERRORS,
+      "max_landmark_error_m",
+      "tcp_distance",
+      "chain_overlap",
+      "chain_final_success",
+      "chain_success",
+    ):
       self.metrics[name] = torch.zeros(n, device=self.device)
     if cfg.near_object_start:
       self._init_start_bank(env)
@@ -209,6 +222,14 @@ class PushChainCommand(LiftingCommand):
       self.metrics[name] = error
     self.metrics["max_landmark_error_m"] = self.landmark_distance()
     self.metrics["tcp_distance"] = self.tcp_distance()
+    overlap = self._chain_overlap.coverage(
+      self.chain_links(), self._goal_pixels, self._goal_counted
+    )
+    at_goal = (overlap >= self.cfg.success_threshold).float()
+    self.chain_success = torch.maximum(self.chain_success, at_goal)
+    self.metrics["chain_overlap"] = overlap
+    self.metrics["chain_final_success"] = at_goal
+    self.metrics["chain_success"] = self.chain_success
 
   def get_at_goal(self) -> torch.Tensor:
     return self._record_success(self.get_overlap())
@@ -280,6 +301,7 @@ class PushChainCommand(LiftingCommand):
     if self.cfg.near_object_start:
       self._update_mode_success(env_ids)
     self.episode_success[env_ids] = 0.0
+    self.chain_success[env_ids] = 0.0
     self._overlap_cache_step = None
     origins = self._env.scene.env_origins[env_ids]
     chain = self.sample_chains(len(env_ids))
@@ -320,6 +342,8 @@ class PushChainCommand(LiftingCommand):
     self.target_yaw[env_ids] = goal[:, 2]
     self.target_hinges[env_ids] = goal[:, 3:]
     self.target_links[env_ids] = link_poses(xy, goal[:, 2], goal[:, 3:])
+    pixels, counted = self._chain_overlap.goal_pixels(self.target_links[env_ids])
+    self._goal_pixels[env_ids], self._goal_counted[env_ids] = pixels, counted
     shift = self.cfg.observation_position_noise
     turn = self.cfg.observation_yaw_noise
     offset = sample_uniform(-shift, shift, (n, 2), self.device)

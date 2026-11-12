@@ -20,6 +20,7 @@ LINK_HALF_EXTENTS = (
   (END_LINK_HALF_LENGTH, LINK_HALF_WIDTH),
 )
 OVERLAP_PIXEL = 0.001
+CHAIN_OVERLAP_PIXEL = 0.002
 
 
 def _along(yaw: torch.Tensor, length: torch.Tensor) -> torch.Tensor:
@@ -92,16 +93,18 @@ def _box_distance(
   return torch.linalg.vector_norm(q.clamp_min(0.0), dim=-1) + q.amax(-1).clamp_max(0.0)
 
 
+def _part_distances(points: torch.Tensor, links: torch.Tensor) -> torch.Tensor:
+  half = links.new_tensor(LINK_HALF_EXTENTS)
+  boxes = _box_distance(points.unsqueeze(-2), links[..., :2], links[..., 2], half)
+  to_pins = points.unsqueeze(-2) - pin_positions(links)
+  pins = torch.linalg.vector_norm(to_pins, dim=-1) - PIN_RADIUS
+  return torch.cat((boxes, pins), dim=-1)
+
+
 def chain_signed_distance(
   points: torch.Tensor, links: torch.Tensor, *, pins: bool = False
 ) -> torch.Tensor:
-  half = links.new_tensor(LINK_HALF_EXTENTS)
-  distance = _box_distance(points.unsqueeze(-2), links[..., :2], links[..., 2], half)
-  if pins:
-    to_pins = points.unsqueeze(-2) - pin_positions(links)
-    pin_distance = torch.linalg.vector_norm(to_pins, dim=-1) - PIN_RADIUS
-    distance = torch.cat((distance, pin_distance), dim=-1)
-  return distance.amin(-1)
+  return _part_distances(points, links)[..., : 5 if pins else 3].amin(-1)
 
 
 def _axes(yaw: torch.Tensor) -> torch.Tensor:
@@ -185,7 +188,51 @@ class LinkOverlap:
     return overlaps[torch.arange(len(chain), device=chain.device), best]
 
 
+class ChainOverlap:
+  def __init__(self, *, device: torch.device | str, dtype: torch.dtype) -> None:
+    disc = _pixels(PIN_RADIUS, PIN_RADIUS)
+    disc = disc[torch.linalg.vector_norm(disc, dim=-1) <= PIN_RADIUS]
+    parts = [_pixels(*half) for half in LINK_HALF_EXTENTS] + [disc, disc]
+    self._parts = [part.to(device=device, dtype=dtype) for part in parts]
+    order = torch.cat([torch.full((len(part),), i) for i, part in enumerate(parts)])
+    self._earlier = (torch.arange(len(parts)) < order[:, None]).to(device)
+
+  def goal_pixels(self, goal: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    pins = torch.cat((pin_positions(goal), torch.zeros_like(goal[:, :2, :1])), -1)
+    poses = torch.cat((goal, pins), dim=-2)
+    points = torch.cat(
+      [_place(part, poses[:, i]) for i, part in enumerate(self._parts)], dim=1
+    )
+    inside_goal = _part_distances(points, goal[:, None]) <= 0.0
+    return points, ~(inside_goal & self._earlier).any(-1)
+
+  def coverage(
+    self, chain: torch.Tensor, points: torch.Tensor, counted: torch.Tensor
+  ) -> torch.Tensor:
+    covered = chain_signed_distance(points, chain[:, None], pins=True) <= 0.0
+    return (counted & covered).sum(-1) / counted.sum(-1)
+
+  def __call__(self, chain: torch.Tensor, goal: torch.Tensor) -> torch.Tensor:
+    return self.coverage(chain, *self.goal_pixels(goal))
+
+
+def _pixels(half_x: float, half_y: float) -> torch.Tensor:
+  axes = (
+    torch.arange(-half + CHAIN_OVERLAP_PIXEL / 2.0, half, CHAIN_OVERLAP_PIXEL)
+    for half in (half_x, half_y)
+  )
+  return torch.cartesian_prod(*axes)
+
+
+def _place(points: torch.Tensor, pose: torch.Tensor) -> torch.Tensor:
+  cos, sin = torch.cos(pose[:, None, 2]), torch.sin(pose[:, None, 2])
+  x, y = points.unbind(-1)
+  return pose[:, None, :2] + torch.stack((cos * x - sin * y, sin * x + cos * y), -1)
+
+
 __all__ = [
+  "CHAIN_OVERLAP_PIXEL",
+  "ChainOverlap",
   "END_LINK_HALF_LENGTH",
   "HINGE_LIMIT",
   "LINK_HALF_EXTENTS",
