@@ -14,6 +14,7 @@ COUNT_SET="0"
 USE_FALLBACK="0"
 DEPENDENCY=""
 EXCLUDE=""
+SEEDS="1"
 
 usage() {
   command cat <<'EOF'
@@ -22,6 +23,7 @@ Usage:
   bash cluster/submit.sh --profile a100 --sweep-agent entity/project/sweep-id [--count N]
   bash cluster/submit.sh --profile a100 --dependency afterany:<job-id> -- TASK_ID
   bash cluster/submit.sh --profile b200 --exclude node-a,node-b -- TASK_ID
+  bash cluster/submit.sh --profile b200 --seeds 3 -- TASK_ID --label NAME
 
 Profiles: a100, b200, testing, a100-single, b200-single, ber-testing
 
@@ -33,6 +35,10 @@ GPU in-process, with no torchrunx launcher.
 The first training argument is one registered MJLab task ID; remaining arguments
 pass unchanged to the native MJLab/Tyro CLI.
 Sweep agents run one trial unless --count is provided.
+
+--seeds N trains seeds 1..N one after another in one job on the same GPUs, each
+run evaluated and uploaded as usual. It requires --label, which names the W&B
+group the seeds share; use one label per configuration.
 EOF
 }
 
@@ -69,6 +75,11 @@ while [[ $# -gt 0 ]]; do
       EXCLUDE="$2"
       shift 2
       ;;
+    --seeds)
+      [[ $# -ge 2 ]] || { echo "--seeds requires a positive integer" >&2; exit 2; }
+      SEEDS="$2"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -89,6 +100,27 @@ if [[ -n "${DEPENDENCY}" \
   && ! "${DEPENDENCY}" =~ ^(after|afterany|afterok|afternotok):[0-9]+(:[0-9]+)*$ ]]; then
   echo "Unsupported dependency expression: ${DEPENDENCY}" >&2
   exit 2
+fi
+if [[ ! "${SEEDS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "--seeds must be a positive integer; got ${SEEDS}" >&2
+  exit 2
+fi
+if [[ "${SEEDS}" != "1" ]]; then
+  [[ "${MODE}" == "train" ]] || { echo "--seeds does not apply to sweep agents." >&2; exit 2; }
+  HAS_LABEL="0"
+  for argument in "$@"; do
+    case "${argument}" in
+      --label|--label=*) HAS_LABEL="1" ;;
+      --agent.seed|--agent.seed=*)
+        echo "--seeds sets --agent.seed for each run; do not pass it." >&2
+        exit 2
+        ;;
+    esac
+  done
+  [[ "${HAS_LABEL}" == "1" ]] || {
+    echo "--seeds requires --label: it names the W&B group the seeds share." >&2
+    exit 2
+  }
 fi
 if [[ "${MODE}" == "sweep" ]]; then
   if [[ ! "${SWEEP_ID}" =~ ^[^/[:space:]]+/[^/[:space:]]+/[^/[:space:]]+$ ]]; then
@@ -144,7 +176,7 @@ SBATCH_ARGS=(
   --time="${TIME_LIMIT}"
   --partition="${SELECTED_PARTITION}"
   --output="${REPO}/artifacts/slurm/%x-%j.out"
-  --export=ALL
+  --export="ALL,VBRL_SEEDS=${SEEDS}"
   --job-name="vbrl-${MODE}"
 )
 [[ -z "${SELECTED_ACCOUNT}" ]] || SBATCH_ARGS+=(--account="${SELECTED_ACCOUNT}")

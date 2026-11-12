@@ -194,21 +194,37 @@ else
   CONTAINER_ARGS=(bash "${TRAIN_ARGS[@]}")
 fi
 
-apptainer exec --nv \
-  "${CA_ENV_ARGS[@]}" \
-  --env "MUJOCO_GL=egl" \
-  --env "PYTHONNOUSERSITE=1" \
-  --env "PYTHONUNBUFFERED=1" \
-  --env "PYTHONPATH=${CONTAINER_REPO}/src" \
-  --env "VBRL_REPO_ROOT=${CONTAINER_REPO}" \
-  --env "VBRL_MODEL_ROOT=${MODEL_ROOT}" \
-  --env "TORCHRUNX_LOG_DIR=${TORCHRUNX_DIR}" \
-  --env "WARP_CACHE_PATH=${WARP_DIR}" \
-  --env "TMPDIR=${TMP_DIR}" \
-  --env "TMP=${TMP_DIR}" \
-  --env "TEMP=${TMP_DIR}" \
-  --bind "${REPO}:${CONTAINER_REPO}" \
-  --bind "${RUNTIME_DIR}:${RUNTIME_DIR}" \
-  "${MODEL_BIND_ARGS[@]}" \
-  "${CONTAINER_PATH}" \
-  bash -lc "${CONTAINER_COMMAND}" "${CONTAINER_ARGS[@]}"
+run_container() {
+  apptainer exec --nv \
+    "${CA_ENV_ARGS[@]}" \
+    --env "MUJOCO_GL=egl" \
+    --env "PYTHONNOUSERSITE=1" \
+    --env "PYTHONUNBUFFERED=1" \
+    --env "PYTHONPATH=${CONTAINER_REPO}/src" \
+    --env "VBRL_REPO_ROOT=${CONTAINER_REPO}" \
+    --env "VBRL_MODEL_ROOT=${MODEL_ROOT}" \
+    --env "TORCHRUNX_LOG_DIR=${TORCHRUNX_DIR}" \
+    --env "WARP_CACHE_PATH=${WARP_DIR}" \
+    --env "TMPDIR=${TMP_DIR}" \
+    --env "TMP=${TMP_DIR}" \
+    --env "TEMP=${TMP_DIR}" \
+    --bind "${REPO}:${CONTAINER_REPO}" \
+    --bind "${RUNTIME_DIR}:${RUNTIME_DIR}" \
+    "${MODEL_BIND_ARGS[@]}" \
+    "${CONTAINER_PATH}" \
+    bash -lc "${CONTAINER_COMMAND}" "$@"
+}
+
+SEEDS="${VBRL_SEEDS:-1}"
+if [[ "${LAUNCH_MODE}" == "sweep" || "${SEEDS}" == "1" ]]; then
+  run_container "${CONTAINER_ARGS[@]}"
+  exit
+fi
+STATUS=0
+# mjlab seeds rank r with seed + r, so consecutive seeds would share three of
+# four ranks' random streams; spacing them 1000 apart keeps the runs independent.
+for seed in $(seq 1 "${SEEDS}"); do
+  echo "[SEEDS] seed ${seed} of ${SEEDS}: --agent.seed $((seed * 1000))"
+  run_container "${CONTAINER_ARGS[@]}" --agent.seed "$((seed * 1000))" || STATUS=$?
+done
+exit "${STATUS}"
