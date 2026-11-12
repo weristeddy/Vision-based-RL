@@ -36,9 +36,10 @@ The first training argument is one registered MJLab task ID; remaining arguments
 pass unchanged to the native MJLab/Tyro CLI.
 Sweep agents run one trial unless --count is provided.
 
---seeds N trains seeds 1..N one after another in one job on the same GPUs, each
-run evaluated and uploaded as usual. It requires --label, which names the W&B
-group the seeds share; use one label per configuration.
+--seeds N trains seeds 1..N one after another in one job on the same GPUs, on
+any profile, each run evaluated and uploaded as usual. The runs use
+--agent.seed 1000, 2000, ... and require --label, which names the W&B group the
+seeds share; use one label per configuration.
 EOF
 }
 
