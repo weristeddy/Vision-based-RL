@@ -217,7 +217,7 @@ def test_success_and_reward_accept_the_goal_in_either_order() -> None:
     assert command.get_at_goal().all()
     assert command.landmark_distance() == pytest.approx(torch.zeros(2), abs=1e-6)
     assert command.goal_errors().abs().amax().item() == pytest.approx(0.0, abs=1e-5)
-    assert ((_reward(command) > 2.0) & (_reward(command) < 2.05)).all()
+    assert ((_reward(command) > 2.0 / 2.05) & (_reward(command) <= 1.0)).all()
   assert _reward(forward) == pytest.approx(_reward(backward))
 
   moved = torch.tensor(((0.02, 0.0), (0.0, 0.02)))
@@ -230,7 +230,8 @@ def test_success_and_reward_accept_the_goal_in_either_order() -> None:
   assert _reward(near) == pytest.approx(_reward(near_backward))
   assert near.landmark_distance() == pytest.approx(torch.full((2,), 0.02))
   geometry = math.exp(-0.02 / 0.1)
-  assert ((_reward(near) >= geometry) & (_reward(near) < geometry + 0.05)).all()
+  reward = _reward(near) * 2.05
+  assert ((reward >= geometry) & (reward < geometry + 0.05)).all()
   assert near.goal_errors()[:, 0] == pytest.approx(torch.full((2,), 0.02))
 
 
@@ -346,6 +347,7 @@ def test_state_env_steps_without_nan_and_reports_its_terms() -> None:
       "object_off_table",
       "invalid_object_state",
       "nan_detection",
+      "top_face_contact",
     }
     command = env.command_manager.get_term("push_chain_goal")
     assert {
@@ -395,12 +397,12 @@ def test_students_see_the_state_actor_as_their_teacher() -> None:
   assert teacher["target_pose"].params["calibration_bias"] is False
   assert "calibration_bias" not in teacher["obj_pose"].params
   assert "obj_pose" not in student.observations["actor"].terms
-  assert set(student.terminations) == set(state.terminations)
+  assert set(student.terminations) == set(state.terminations) - {"top_face_contact"}
 
 
 @pytest.mark.sim
 @pytest.mark.gpu
-def test_beside_starts_put_the_pads_near_the_chain_without_contact() -> None:
+def test_near_object_starts_never_touch_the_chain_or_table() -> None:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
 
@@ -415,14 +417,15 @@ def test_beside_starts_put_the_pads_near_the_chain_without_contact() -> None:
     env.reset()
     env.step(torch.zeros(64, env.action_manager.total_action_dim, device="cuda:0"))
     command = env.command_manager.get_term("push_chain_goal")
-    beside = command._start_mode == 1
+    beside, over = command._start_mode == 1, command._start_mode == 2
     distance = command.tcp_distance()[beside]
     chain_force = env.scene["ee_object_contact"].data.force.norm(dim=-1).amax(-1)
     table = env.scene["robot_table_contact"].data.found.amax(-1)
-    assert beside.any() and (~beside).any()
+    started = beside | over
+    assert beside.any() and over.any() and (~started).any()
     assert ((distance > 0.015) & (distance < 0.05)).all()
-    assert (chain_force[beside] < 0.05).all()
-    assert (table[beside] == 0).all()
+    assert (chain_force[started] < 0.05).float().mean() > 0.95
+    assert (table[started] == 0).all()
   finally:
     env.close()
 

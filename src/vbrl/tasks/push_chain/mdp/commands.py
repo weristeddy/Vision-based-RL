@@ -400,6 +400,10 @@ class PushChainCommandCfg(LiftingCommandCfg):
   near_object_start: bool = False
   start_types: tuple[tuple[tuple[float, float, float, float], ...], ...] = (
     ((LINK_HALF_HEIGHT, 0.02, 0.04, 0.0),),
+    (
+      (2 * LINK_HALF_HEIGHT + 0.008 + 0.003, -1.0, 0.03, math.radians(25.0)),
+      (2 * LINK_HALF_HEIGHT + 0.008 + 0.03, -1.0, 0.05, math.radians(25.0)),
+    ),
   )
   start_yaws: int = 4
   start_sampling_floor: float = 0.05

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 _REACH_WEIGHT = 0.05
+_MAX_REWARD = 2.0 + _REACH_WEIGHT
 
 
 def chain_dense_reward(
@@ -24,7 +25,8 @@ def chain_dense_reward(
   reach = torch.sqrt(
     (1.0 - torch.tanh(DISTANCE_SCALE * command.tcp_distance())).clamp_min(0.0)
   )
-  return geometry + _REACH_WEIGHT * reach + command.get_at_goal().float()
+  reward = geometry + _REACH_WEIGHT * reach + command.get_at_goal().float()
+  return reward / _MAX_REWARD
 
 
 def at_goal_static(
