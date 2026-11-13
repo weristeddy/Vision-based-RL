@@ -71,7 +71,7 @@ def trossen_realistic_lift_cube_rgb_distillation_runner_cfg(
   return DistillationRunnerCfg(
     seed=0,
     num_steps_per_env=16,
-    max_iterations=8000,
+    max_iterations=3000,
     obs_groups={"student": ("actor", "camera"), "teacher": ("teacher",)},
     save_interval=100,
     evaluation_scenes=_EVALUATION_SCENES,

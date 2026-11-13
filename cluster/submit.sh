@@ -24,6 +24,7 @@ Usage:
   bash cluster/submit.sh --profile a100 --dependency afterany:<job-id> -- TASK_ID
   bash cluster/submit.sh --profile b200 --exclude node-a,node-b -- TASK_ID
   bash cluster/submit.sh --profile b200 --seeds 3 -- TASK_ID --label NAME
+  bash cluster/submit.sh --profile a100 --seeds 3 -- TASK_A,TASK_B --label NAME
 
 Profiles: a100, b200, testing, a100-single, b200-single, ber-testing
 
@@ -32,12 +33,14 @@ environments per rank; --env.scene.num-envs sets the per-rank count. A *-single
 profile receives one GPU and defaults to 1,024 environments. mjlab runs a single
 GPU in-process, with no torchrunx launcher.
 
-The first training argument is one registered MJLab task ID; remaining arguments
-pass unchanged to the native MJLab/Tyro CLI.
+The first training argument is a registered MJLab task ID, or several separated
+by commas, which train one after another in the same job with the same options;
+remaining arguments pass unchanged to the native MJLab/Tyro CLI.
 Sweep agents run one trial unless --count is provided.
 
 --seeds N trains seeds 1..N one after another in one job on the same GPUs, on
-any profile, each run evaluated and uploaded as usual. The runs use
+any profile, each run evaluated and uploaded as usual; with several task IDs,
+every seed of one task runs before the next task. The runs use
 --agent.seed 1000, 2000, ... and require --label, which names the W&B group the
 seeds share; use one label per configuration.
 EOF

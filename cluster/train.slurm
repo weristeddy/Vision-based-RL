@@ -191,7 +191,8 @@ else
     [[ "${USER_SET_NUM_ENVS}" == "1" ]] || TRAIN_ARGS+=(--env.scene.num-envs 1024)
   fi
   CONTAINER_COMMAND='cd /workspace/vision-based-rl; exec python -m vbrl.scripts.train "$@"'
-  CONTAINER_ARGS=(bash "${TRAIN_ARGS[@]}")
+  IFS=',' read -r -a TASK_IDS <<<"${TRAIN_ARGS[0]}"
+  TRAIN_ARGS=("${TRAIN_ARGS[@]:1}")
 fi
 
 run_container() {
@@ -215,16 +216,24 @@ run_container() {
     bash -lc "${CONTAINER_COMMAND}" "$@"
 }
 
-SEEDS="${VBRL_SEEDS:-1}"
-if [[ "${LAUNCH_MODE}" == "sweep" || "${SEEDS}" == "1" ]]; then
+if [[ "${LAUNCH_MODE}" == "sweep" ]]; then
   run_container "${CONTAINER_ARGS[@]}"
   exit
 fi
+SEEDS="${VBRL_SEEDS:-1}"
 STATUS=0
-# mjlab seeds rank r with seed + r, so consecutive seeds would share three of
-# four ranks' random streams; spacing them 1000 apart keeps the runs independent.
-for seed in $(seq 1 "${SEEDS}"); do
-  echo "[SEEDS] seed ${seed} of ${SEEDS}: --agent.seed $((seed * 1000))"
-  run_container "${CONTAINER_ARGS[@]}" --agent.seed "$((seed * 1000))" || STATUS=$?
+for task in "${TASK_IDS[@]}"; do
+  if [[ "${SEEDS}" == "1" ]]; then
+    echo "[TASKS] ${task}"
+    run_container bash "${task}" "${TRAIN_ARGS[@]}" || STATUS=$?
+    continue
+  fi
+  # mjlab seeds rank r with seed + r, so consecutive seeds would share three of
+  # four ranks' random streams; spacing them 1000 apart keeps the runs independent.
+  for seed in $(seq 1 "${SEEDS}"); do
+    echo "[TASKS] ${task}, seed ${seed} of ${SEEDS}: --agent.seed $((seed * 1000))"
+    run_container bash "${task}" "${TRAIN_ARGS[@]}" --agent.seed "$((seed * 1000))" \
+      || STATUS=$?
+  done
 done
 exit "${STATUS}"
