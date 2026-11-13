@@ -391,7 +391,7 @@ class PushChainCommand(LiftingCommand):
 class PushChainCommandCfg(LiftingCommandCfg):
   observation_position_noise: float = 0.0
   observation_yaw_noise: float = 0.0
-  hinge_range: float = math.radians(85.0)
+  hinge_range: float = math.radians(95.0)
   end_link_gap: float = 0.005
   robot_clearance: float = 0.02
   sampling_attempts: int = 32
