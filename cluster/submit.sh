@@ -171,6 +171,7 @@ if [[ "${USE_FALLBACK}" == "1" ]]; then
 fi
 
 mkdir -p "${REPO}/artifacts/slurm"
+export VBRL_SEEDS="${SEEDS}"
 SBATCH_ARGS=(
   --nodes=1
   --ntasks=1
@@ -180,7 +181,7 @@ SBATCH_ARGS=(
   --time="${TIME_LIMIT}"
   --partition="${SELECTED_PARTITION}"
   --output="${REPO}/artifacts/slurm/%x-%j.out"
-  --export="ALL,VBRL_SEEDS=${SEEDS}"
+  --export=ALL
   --job-name="vbrl-${MODE}"
 )
 [[ -z "${SELECTED_ACCOUNT}" ]] || SBATCH_ARGS+=(--account="${SELECTED_ACCOUNT}")
