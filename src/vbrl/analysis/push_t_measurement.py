@@ -18,6 +18,9 @@ T_OFFSET_STD = (0.03, 0.03, math.radians(30.0))
 # A printed sheet like the rig's, not the simulator's 2.4 mm slab.
 MARKER_TOP_M = 0.0002
 SUCCESS_THRESHOLD = 0.9
+# Solved from the two AprilTags with the camera calibration before 2026-11-11, so part
+# of its distance to the goal fit is that calibration's error, not the tags'.
+APRILTAG_GOAL = (0.38442, 0.01567, 0.0124)
 T_COLOUR, GOAL_COLOUR, REFERENCE_COLOUR = "#2a78d6", "#eb6834", "#52514e"
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
@@ -147,7 +150,9 @@ def simulate(
   return rows[:samples]
 
 
-def real_example(log: Path) -> dict[str, Any]:
+def real_example(path: Path) -> dict[str, Any]:
+  import cv2
+
   from vbrl.deployment.push_t.silhouette import (
     measure_goal,
     measure_t,
@@ -156,22 +161,24 @@ def real_example(log: Path) -> dict[str, Any]:
   )
   from vbrl.deployment.push_t.view import ExternalView
 
-  data = np.load(log)
-  frames, reference = data["frames"], tuple(float(v) for v in data["goal"])
-  view = ExternalView.load(424, 240).cropped(frames.shape[1])
-  poses = np.array([measure_t(view, frame).pose for frame in frames])
-  t, goal = measure_t(view, frames[0]), measure_goal(view, frames[0])
-  return {
-    "image": frames[0],
-    "t": t,
-    "goal": goal,
+  image = cv2.cvtColor(cv2.imread(str(path)), cv2.COLOR_BGR2RGB)
+  view = ExternalView.load(image.shape[1], image.shape[0])
+  t, goal = measure_t(view, image), measure_goal(view, image)
+  masks = {
     "t_mask": render_t(view, t.pose),
     "goal_mask": render_footprint(view, goal.pose),
-    "reference_mask": render_footprint(view, reference),
-    "reference": reference,
-    "frames": len(frames),
-    "t_std_mm": poses[:, :2].std(axis=0) * 1000.0,
-    "t_std_deg": math.degrees(np.std(np.unwrap(poses[:, 2]))),
+    "reference_mask": render_footprint(view, APRILTAG_GOAL),
+  }
+  rows, columns = np.nonzero(sum(masks.values()))
+  top, bottom = max(rows.min() - 60, 0), rows.max() + 60
+  left, right = max(columns.min() - 60, 0), columns.max() + 60
+  crop = (slice(top, bottom), slice(left, right))
+  return {
+    "image": image[crop],
+    **{name: mask[crop] for name, mask in masks.items()},
+    "t": t,
+    "goal": goal,
+    "size": (image.shape[1], image.shape[0]),
   }
 
 
@@ -275,14 +282,14 @@ def _real_panel(axis: Any, real: dict[str, Any], title: str) -> None:
     (real["t_mask"], T_COLOUR, "solid"),
   ):
     axis.contour(mask, levels=(0.5,), colors=colour, linewidths=1.0, linestyles=[style])
-  std = real["t_std_mm"]
-  offset = math.dist(real["goal"].pose[:2], real["reference"][:2]) * 1000.0
-  size = real["image"].shape[0]
-  _subtitle(axis, title, f"{size} × {size} policy crop")
+  offset = math.dist(real["goal"].pose[:2], APRILTAG_GOAL[:2]) * 1000.0
+  turn = math.degrees(math.remainder(real["goal"].pose[2] - APRILTAG_GOAL[2], math.tau))
+  width, height = real["size"]
+  _subtitle(axis, title, f"crop of a {width} × {height} frame")
   axis.text(
-    0.5, -0.11,
-    f"T at rest, {real['frames']} frames:\nσ {std[0]:.2f} / {std[1]:.2f} mm, "
-    f"{real['t_std_deg']:.2f}°\nAprilTag goal {offset:.1f} mm from goal fit",
+    0.5, -0.2,
+    f"goal fit IoU {real['goal'].iou:.3f}, T fit IoU {real['t'].iou:.3f}\n"
+    f"AprilTag goal {offset:.1f} mm, {abs(turn):.2f}° from the goal fit",
     transform=axis.transAxes, ha="center", va="top", color=MUTED, fontsize=6.5,
   )
   handles = [
@@ -415,7 +422,7 @@ def main(argv: list[str] | None = None) -> None:
   parser.add_argument("--num-envs", type=int, default=64)
   parser.add_argument("--seed", type=int, default=0)
   parser.add_argument(
-    "--real-log", type=Path, default=Path("artifacts/deployment/wood_table_cnn_1.npz")
+    "--rig-frame", type=Path, default=Path("reports/push_t/measurement/rig_frame.png")
   )
   parser.add_argument(
     "--replot", action="store_true", help="plot the existing samples.csv again"
@@ -430,7 +437,7 @@ def main(argv: list[str] | None = None) -> None:
     rows = simulate(TASKS[args.scene], args.samples, args.num_envs, args.seed)
     output.mkdir(parents=True, exist_ok=True)
     _write_csv(samples, rows)
-  real = real_example(args.real_log)
+  real = real_example(args.rig_frame)
   plot(rows, real, output)
   plot_summary(rows, real, output)
 
