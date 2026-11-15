@@ -257,6 +257,7 @@ def test_push_t_success_threshold_latches_metrics() -> None:
 
 def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None:
   from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
+  from vbrl.tasks.push_t.goal_marker import GOAL_MARKER_Z
   from vbrl.tasks.push_t.mdp.commands import PushTCommand, PushTCommandCfg
 
   cfg = PushTCommandCfg(
@@ -316,7 +317,7 @@ def test_push_t_command_sampling_uses_episode_ranges_and_zero_velocity() -> None
   assert fake_command._overlap_cache_step is None
 
   assert torch.allclose(marker["pose"][:, :2], fake_command.target_pos[:, :2])
-  assert torch.count_nonzero(marker["pose"][:, 2]) == 0
+  assert torch.allclose(marker["pose"][:, 2], torch.full((worlds,), GOAL_MARKER_Z))
   half = fake_command.target_yaw / 2.0
   assert torch.allclose(marker["pose"][:, 3], torch.cos(half), atol=1e-6)
   assert torch.allclose(marker["pose"][:, 6], torch.sin(half), atol=1e-6)

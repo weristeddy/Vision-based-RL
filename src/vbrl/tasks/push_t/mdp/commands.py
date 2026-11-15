@@ -22,6 +22,7 @@ from ..geometry import (
   FootprintRasterizer,
   footprint_signed_distance,
 )
+from ..goal_marker import GOAL_MARKER_Z
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -257,7 +258,7 @@ class PushTCommand(LiftingCommand):
       self._place_arm(env_ids, object_pos, object_yaw)
     if self._goal_marker is not None:
       marker_pos = self.target_pos[env_ids].clone()
-      marker_pos[:, 2] = origins[:, 2]
+      marker_pos[:, 2] = origins[:, 2] + GOAL_MARKER_Z
       marker_pose = torch.cat(
         (
           marker_pos,

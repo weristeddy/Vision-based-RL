@@ -18,9 +18,12 @@ GOAL_RGBA = (0.16, 0.62, 0.29, 1.0)
 # B > 0.03 keep it disjoint from REAL_TABLE_OBJECT_COLOUR_RANGE.
 GOAL_REAL_RGBA_RANGE = ((0.085, 0.16), (0.115, 0.21), (0.035, 0.07))
 GOAL_OUTLINE_THICKNESS = 0.015
-# Thin enough to read as drawn on the surface rather than as a second block, and
-# sunk so its top face sits just above the table at z=0.
 GOAL_HALF_THICKNESS = 0.0012
+# The box is sunk so its top face sits this far above the table at z=0, like the
+# rig's tape: a 2.4 mm step shifted the outline's inner edge by about 1 mm in the
+# external camera.
+GOAL_TOP_M = 0.0002
+GOAL_MARKER_Z = GOAL_TOP_M - 2.0 * GOAL_HALF_THICKNESS
 
 
 def goal_colour_event(ranges=((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))):
@@ -93,6 +96,8 @@ __all__ = [
   "GOAL_REAL_RGBA_RANGE",
   "GOAL_ENTITY_NAME",
   "GOAL_HALF_THICKNESS",
+  "GOAL_MARKER_Z",
+  "GOAL_TOP_M",
   "GOAL_MATERIAL_NAME",
   "GOAL_RGBA",
   "goal_colour_event",

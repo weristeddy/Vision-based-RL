@@ -10,6 +10,7 @@ from mjlab.tasks.manipulation.mdp import LiftingCommand, LiftingCommandCfg
 from mjlab.utils.lab_api.math import quat_from_euler_xyz, sample_uniform, wrap_to_pi
 
 from vbrl.tasks.push_t.geometry import yaw_from_quat
+from vbrl.tasks.push_t.goal_marker import GOAL_MARKER_Z
 
 from ..geometry import (
   LINK_HALF_EXTENTS,
@@ -357,7 +358,7 @@ class PushChainCommand(LiftingCommand):
       pose = torch.cat(
         (
           links[:, :2],
-          origins[:, 2:],
+          origins[:, 2:] + GOAL_MARKER_Z,
           quat_from_euler_xyz(zeros, zeros, links[:, 2]),
         ),
         dim=-1,
