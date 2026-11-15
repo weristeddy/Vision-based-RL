@@ -41,6 +41,10 @@ _CONTACT_SENSOR = "ee_object_contact"
 _TABLE_SENSOR = "robot_table_contact"
 EPISODE_LENGTH_S = 15.0
 LANDMARK_SCALE = 0.10
+# The middle link is the chain's root body, so its subtree is the whole chain; a
+# body pattern over the three links keeps only its first match.
+CHAIN_ROOT_BODY = "push_chain_link1"
+CONTACT_SLOTS = 4
 NCONMAX = 128
 
 
@@ -217,15 +221,13 @@ def build_env_cfg(
   cfg.scene.sensors += (
     ContactSensorCfg(
       name=_CONTACT_SENSOR,
-      primary=ContactMatch(
-        mode="subtree", pattern=robot.collision_body_pattern, entity="robot"
-      ),
+      primary=ContactMatch(mode="subtree", pattern="base_link", entity="robot"),
       secondary=ContactMatch(
-        mode="body", pattern=r"push_chain_link\d", entity=object_name
+        mode="subtree", pattern=CHAIN_ROOT_BODY, entity=object_name
       ),
       fields=("found", "force", "normal"),
       reduce="maxforce",
-      num_slots=1,
+      num_slots=CONTACT_SLOTS,
     ),
     ContactSensorCfg(
       name=_TABLE_SENSOR,
@@ -256,7 +258,7 @@ def build_env_cfg(
   if not (distill or play):
     cfg.terminations["top_face_contact"] = TerminationTermCfg(
       func=mdp.top_face_contact,
-      params={"sensor_name": _CONTACT_SENSOR, "min_force_n": 1.0},
+      params={"sensor_name": _CONTACT_SENSOR, "min_force_n": 0.0},
     )
   if play:
     cfg.observations["actor"].enable_corruption = False

@@ -442,3 +442,20 @@ def test_command_metrics_skip_an_env_reset_with_a_nan_state() -> None:
   command._pending_forward = False
   extras = PushChainCommand.reset(command, torch.arange(2))
   assert extras == pytest.approx(dict.fromkeys(names, 0.1))
+
+
+def test_top_face_termination_watches_the_whole_robot_and_chain() -> None:
+  from mjlab.tasks.registry import load_env_cfg
+
+  import vbrl.tasks  # noqa: F401
+  from vbrl.tasks.push_chain.push_chain_env_cfg import CHAIN_ROOT_BODY
+
+  cfg = load_env_cfg(STATE_TASK_ID)
+  sensor = next(s for s in cfg.scene.sensors if s.name == "ee_object_contact")
+  assert (sensor.primary.mode, sensor.primary.pattern) == ("subtree", "base_link")
+  assert (sensor.secondary.mode, sensor.secondary.pattern) == (
+    "subtree",
+    CHAIN_ROOT_BODY,
+  )
+  assert sensor.num_slots > 1
+  assert cfg.terminations["top_face_contact"].params["min_force_n"] == 0.0
