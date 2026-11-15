@@ -96,10 +96,15 @@ def _largest_region(mask: Any) -> Any:
   return region
 
 
-def _relative_green(view: Any, image: Any) -> tuple[Any, Any]:
+def _relative_green(
+  view: Any,
+  image: Any,
+  center: Any = WORKSPACE_CENTER,
+  half_extents: Any = WORKSPACE_HALF_EXTENTS,
+) -> tuple[Any, Any]:
   rgb = image.astype(np.float32)
   intensity = rgb.sum(axis=-1)
-  table = _rectangle(WORKSPACE_CENTER, WORKSPACE_HALF_EXTENTS)
+  table = _rectangle(center, half_extents)
   workspace = np.zeros((view.height, view.width), np.uint8)
   _fill(workspace, view.project(_placed(view, table, (0.0, 0.0, 0.0), 0.0)), 1)
   green = rgb[..., 1] / np.maximum(intensity, 1.0)

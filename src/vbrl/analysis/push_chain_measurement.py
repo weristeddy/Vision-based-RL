@@ -9,31 +9,33 @@ from typing import Any
 
 import numpy as np
 
-TASK = "Mjlab-PushChain-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
-SCENES = ("real_table", "wood")
-CHAIN_OFFSET_STD = (
-  0.03,
-  0.03,
-  math.radians(30.0),
-  math.radians(30.0),
-  math.radians(30.0),
-)
+from vbrl.asset_zoo.objects import PUSH_CHAIN_XML
+
+SCENES = {"real_table": "real_table", "wood": "real_texture_wood"}
+POSITION_STD = 0.03
+ANGLE_STD = math.radians(30.0)
 SUCCESS_THRESHOLD = 0.9
+CHAIN_COLOUR, GOAL_COLOUR = "#2a78d6", "#eb6834"
+INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
 
-def make_env(scene: str, num_envs: int, fovy: float, seed: int) -> Any:
+def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int) -> Any:
   import dataclasses
 
   from mjlab.envs import ManagerBasedRlEnv
-  from mjlab.tasks.registry import load_env_cfg
 
-  import vbrl.tasks  # noqa: F401
   from vbrl.analysis.push_t_measurement import HEIGHT, WIDTH
-  from vbrl.scenes.builder import replace_scene
+  from vbrl.deployment.push_chain.silhouette import num_links
+  from vbrl.tasks.push_chain.config.trossen_realistic.env_cfgs import (
+    trossen_realistic_push_chain_rgb_env_cfg,
+  )
 
-  cfg = load_env_cfg(TASK, play=True)
-  if scene != "wood":
-    replace_scene(cfg, scene=scene)
+  cfg = trossen_realistic_push_chain_rgb_env_cfg(
+    scene=SCENES[scene],
+    num_links=num_links(chain_xml),
+    object_xml=chain_xml,
+    play=True,
+  )
   cfg.seed = seed
   cfg.scene.num_envs = num_envs
   for name in ("camera_position", "camera_orientation"):
@@ -84,21 +86,35 @@ def _worst_landmark_mm(a: Any, b: Any) -> float:
 
 
 def _measure(
-  view: Any, clean: Any, episode: Any, goal: Any, chain: Any
+  view: Any, clean: Any, episode: Any, goal: Any, chain: Any, chain_xml: Path
 ) -> dict[str, Any]:
   import cv2
 
   from vbrl.deployment.push_chain.silhouette import measure_chain, measure_goal, overlap
 
   cv2.setNumThreads(1)
-  fitted_goal, fitted_chain = measure_goal(view, clean), measure_chain(view, episode)
+  count = len(goal) - 2
+  fitted_goal = measure_goal(view, clean, count)
+  fitted_chain = measure_chain(view, episode, chain_xml)
+  goal_pose = fitted_goal.pose[:-1]
   true_coverage, true_link = overlap(chain, goal)
-  coverage, link = overlap(fitted_chain.pose, fitted_goal.pose)
+  coverage, link = overlap(fitted_chain.pose, goal_pose)
+  names = ("x", "y", "yaw", *(f"hinge{i}" for i in range(count - 1)))
+  poses = {
+    f"{prefix}_{kind}_{name}": float(value)
+    for prefix, truth, fitted in (
+      ("goal", goal, goal_pose),
+      ("chain", chain, fitted_chain.pose),
+    )
+    for kind, pose in (("true", truth), ("fit", fitted))
+    for name, value in zip(names, pose, strict=True)
+  }
   return {
-    "goal_error_mm": _worst_landmark_mm(fitted_goal.pose, goal),
+    **poses,
+    "goal_error_mm": _worst_landmark_mm(goal_pose, goal),
     "goal_iou": fitted_goal.iou,
     "goal_reliable": fitted_goal.reliable,
-    "tape_offset_mm": fitted_goal.pose[5] * 1000.0,
+    "tape_offset_mm": fitted_goal.pose[-1] * 1000.0,
     "chain_error_mm": _worst_landmark_mm(fitted_chain.pose, chain),
     "chain_iou": fitted_chain.iou,
     "chain_reliable": fitted_chain.reliable,
@@ -110,7 +126,7 @@ def _measure(
 
 
 def simulate(
-  scene: str, samples: int, num_envs: int, seed: int, workers: int
+  scene: str, chain_xml: Path, samples: int, num_envs: int, seed: int, workers: int
 ) -> list[dict[str, Any]]:
   import multiprocessing
   from concurrent.futures import ProcessPoolExecutor
@@ -119,7 +135,7 @@ def simulate(
   from vbrl.tasks.push_chain.geometry import HINGE_LIMIT
 
   view, fovy = ideal_view()
-  env = make_env(scene, num_envs, fovy, seed)
+  env = make_env(scene, chain_xml, num_envs, fovy, seed)
   command = env.command_manager.get_term("push_chain_goal")
   generator = np.random.default_rng(seed)
   rows = []
@@ -129,12 +145,14 @@ def simulate(
       env.reset()
       goal = command.sample_chains(num_envs).cpu().numpy()
       scale = generator.uniform(0.0, 1.0, (num_envs, 1))
-      chain = goal + scale * generator.normal(0.0, CHAIN_OFFSET_STD, (num_envs, 5))
+      std = (POSITION_STD, POSITION_STD) + (ANGLE_STD,) * (goal.shape[1] - 2)
+      chain = goal + scale * generator.normal(0.0, std, goal.shape)
       chain[:, 3:] = chain[:, 3:].clip(-HINGE_LIMIT, HINGE_LIMIT)
       hidden = chain.copy()
       hidden[:, 1] += 5.0
       clean, episode = render(env, hidden, goal), render(env, chain, goal)
-      rows += pool.map(_measure, [view] * num_envs, clean, episode, goal, chain)
+      models = [chain_xml] * num_envs
+      rows += pool.map(_measure, [view] * num_envs, clean, episode, goal, chain, models)
   env.close()
   return rows[:samples]
 
@@ -164,6 +182,69 @@ def summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
   }
 
 
+def plot(rows: list[dict[str, Any]], scene: str, output: Path) -> None:
+  import matplotlib
+
+  matplotlib.use("Agg")
+  import matplotlib.pyplot as plt
+
+  figure, (errors, overlaps) = plt.subplots(1, 2, figsize=(10.0, 4.2))
+  for k, (name, colour) in enumerate((("goal", GOAL_COLOUR), ("chain", CHAIN_COLOUR))):
+    values = np.sort([r[f"{name}_error_mm"] for r in rows if r[f"{name}_reliable"]])
+    share = np.arange(1, len(values) + 1) / len(rows)
+    errors.step(values, share, where="post", color=colour, lw=2, label=name)
+    errors.text(
+      0.97,
+      0.42 - 0.08 * k,
+      f"{name}: median {np.median(values):.2f} mm, {len(values)}/{len(rows)} found",
+      transform=errors.transAxes,
+      ha="right",
+      fontsize=9,
+      color=INK,
+    )
+  errors.set_xlim(0, 5)
+  errors.set_ylim(0, 1.02)
+  errors.set_xlabel("worst-landmark error [mm]")
+  errors.set_ylabel("share of samples")
+  errors.set_title("Pose error", loc="left", fontsize=11, color=INK)
+  errors.legend(frameon=False, loc="lower right")
+
+  both = [r for r in rows if r["goal_reliable"] and r["chain_reliable"]]
+  true = np.array([r["overlap_true"] for r in both])
+  measured = np.array([r["overlap_measured"] for r in both])
+  flipped = (true >= SUCCESS_THRESHOLD) != (measured >= SUCCESS_THRESHOLD)
+  overlaps.plot([0, 1], [0, 1], color=MUTED, lw=1)
+  for axis in (overlaps.axvline, overlaps.axhline):
+    axis(SUCCESS_THRESHOLD, color=MUTED, lw=1, ls="--")
+  overlaps.scatter(true[~flipped], measured[~flipped], s=10, color=CHAIN_COLOUR)
+  overlaps.scatter(
+    true[flipped], measured[flipped], s=24, color=GOAL_COLOUR, label="success flipped"
+  )
+  error = np.abs(measured - true) * 100.0
+  overlaps.set_title("Chain overlap", loc="left", fontsize=11, color=INK)
+  overlaps.text(
+    0.97,
+    0.06,
+    f"error {error.mean():.2f} pp (median {np.median(error):.2f})\n"
+    f"success flipped in {int(flipped.sum())} of {len(both)}",
+    transform=overlaps.transAxes,
+    ha="right",
+    fontsize=9,
+    color=INK,
+  )
+  overlaps.set_xlabel("true overlap")
+  overlaps.set_ylabel("measured overlap")
+  overlaps.legend(frameon=False, loc="upper left")
+  for axis in (errors, overlaps):
+    axis.grid(color=GRID, lw=0.8)
+    axis.spines[["top", "right"]].set_visible(False)
+  figure.suptitle(f"Push-Chain rig measurement on {scene}", fontsize=12, color=INK)
+  figure.tight_layout()
+  for suffix in ("png", "pdf"):
+    figure.savefig(output / f"measurement.{suffix}", dpi=200)
+  plt.close(figure)
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
   with path.open("w", newline="") as handle:
     writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
@@ -183,9 +264,17 @@ def main(argv: list[str] | None = None) -> None:
   parser = argparse.ArgumentParser(
     description="Benchmark the Push-Chain rig measurement against simulator ground truth."
   )
-  parser.add_argument("--scene", choices=SCENES, default="real_table")
+  parser.add_argument("--scene", choices=sorted(SCENES), default="real_table")
   parser.add_argument(
-    "--output", type=Path, help="default reports/push_chain/measurement/<scene>"
+    "--chain-xml",
+    type=Path,
+    default=PUSH_CHAIN_XML,
+    help="Chain model to render and measure (default: the original three-link chain).",
+  )
+  parser.add_argument(
+    "--output",
+    type=Path,
+    help="default reports/push_chain/measurement/[<model>/]<scene>",
   )
   parser.add_argument("--samples", type=int, default=512)
   parser.add_argument("--num-envs", type=int, default=64)
@@ -196,19 +285,30 @@ def main(argv: list[str] | None = None) -> None:
   )
   args = parser.parse_args(argv)
 
-  output = args.output or Path("reports/push_chain/measurement") / args.scene
+  folder = Path("reports/push_chain/measurement")
+  if args.chain_xml != PUSH_CHAIN_XML:
+    folder = folder / args.chain_xml.stem
+  output = args.output or folder / args.scene
   samples = output / "samples.csv"
   if args.summarize:
     rows = _read_csv(samples)
   else:
-    rows = simulate(args.scene, args.samples, args.num_envs, args.seed, args.workers)
+    rows = simulate(
+      args.scene,
+      args.chain_xml,
+      args.samples,
+      args.num_envs,
+      args.seed,
+      args.workers,
+    )
     output.mkdir(parents=True, exist_ok=True)
     _write_csv(samples, rows)
   for key, value in summary(rows).items():
     print(f"{key:24s} {value}")
+  plot(rows, args.scene, output)
 
 
-__all__ = ["main", "render", "simulate", "summary"]
+__all__ = ["main", "plot", "render", "simulate", "summary"]
 
 
 if __name__ == "__main__":

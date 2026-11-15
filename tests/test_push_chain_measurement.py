@@ -72,8 +72,25 @@ def test_the_goal_fit_finds_the_chain_in_a_hole_taped_too_wide_or_narrow(
 ) -> None:
   fitted = measure_goal(view, _frame(view, None, slack))
   assert fitted.reliable
-  assert _worst_landmark(fitted.pose, GOAL) < 1e-3
-  assert fitted.pose[5] == pytest.approx(slack, abs=1e-3)
+  *goal, offset = fitted.pose
+  assert _worst_landmark(goal, GOAL) < 1e-3
+  assert offset == pytest.approx(slack, abs=1e-3)
+
+
+@pytest.mark.parametrize(
+  "chain",
+  [(0.33, -0.02, 0.7, 0.6, -0.9), (0.33, -0.04, 0.7, 0.6, -0.9, 0.4)],
+)
+def test_the_extendable_design_is_measured_from_its_xml(view, chain) -> None:
+  from vbrl.asset_zoo.objects import push_chain_xml
+
+  chain_xml = push_chain_xml(len(chain) - 2)
+  image = np.empty((view.height, view.width, 3), np.uint8)
+  image[:] = TABLE_RGB
+  image[render_chain(view, chain, chain_xml) > 0] = CHAIN_RGB
+  fitted = measure_chain(view, image, chain_xml)
+  assert fitted.reliable
+  assert _worst_landmark(fitted.pose, chain) < 2e-3
 
 
 def test_the_overlap_ignores_which_end_is_which() -> None:

@@ -41,7 +41,12 @@ def load(arguments: argparse.Namespace) -> tuple[Any, Any]:
 
 
 def report(
-  arguments: argparse.Namespace, image: Any, name: str, fit: Any, mask: Any
+  arguments: argparse.Namespace,
+  image: Any,
+  name: str,
+  values: Any,
+  fit: Any,
+  mask: Any,
 ) -> None:
   import cv2
 
@@ -52,17 +57,15 @@ def report(
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     cv2.drawContours(annotated, contours, -1, (255, 0, 255), 1)
     frame.write(arguments.annotate, annotated)
-  print(f"{name:6s} {pose(fit.pose)}  IoU {fit.iou:.3f}")
+  print(f"{name:6s} {pose(values)}  IoU {fit.iou:.3f}")
   if not fit.reliable:
     raise SystemExit("Unreliable fit: something in view, or the exposure is off.")
 
 
 def pose(values: Any) -> str:
-  x, y, yaw, first, second = values[:5]
-  angles = (math.degrees(v) for v in (yaw, first, second))
-  return "x {:.4f}  y {:+.4f}  yaw {:+7.2f}  hinges {:+7.2f} {:+7.2f} deg".format(
-    x, y, *angles
-  )
+  x, y, yaw, *hinges = values
+  angles = " ".join(f"{math.degrees(v):+7.2f}" for v in hinges)
+  return f"x {x:.4f}  y {y:+.4f}  yaw {math.degrees(yaw):+7.2f}  hinges {angles} deg"
 
 
 def read_goal(path: Path) -> list[float]:
@@ -75,7 +78,7 @@ def read_goal(path: Path) -> list[float]:
 
 def write_goal(path: Path, goal: Any) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
-  path.write_text(json.dumps({"goal": [round(float(v), 5) for v in goal[:5]]}) + "\n")
+  path.write_text(json.dumps({"goal": [round(float(v), 5) for v in goal]}) + "\n")
 
 
 __all__ = ["GOAL_FILE", "load", "parser", "pose", "read_goal", "report", "write_goal"]
