@@ -1,5 +1,6 @@
 from mjlab.tasks.registry import register_mjlab_task
 
+from vbrl.asset_zoo.objects import push_chain_xml
 from vbrl.training.runner import VbrlDistillationRunner, VbrlOnPolicyRunner
 from vbrl.vision.architectures import ARCHITECTURES
 
@@ -26,6 +27,17 @@ def _distill(task_id: str, architecture: str, scene: str) -> None:
   )
 
 
+def _state(task_id: str, num_links: int) -> None:
+  chain = {"num_links": num_links, "object_xml": push_chain_xml(num_links)}
+  register_mjlab_task(
+    task_id,
+    trossen_realistic_push_chain_state_env_cfg(**chain),
+    trossen_realistic_push_chain_state_env_cfg(**chain, play=True),
+    trossen_realistic_push_chain_state_ppo_runner_cfg(task_id),
+    VbrlOnPolicyRunner,
+  )
+
+
 register_mjlab_task(
   STATE_TASK_ID,
   trossen_realistic_push_chain_state_env_cfg(),
@@ -39,3 +51,5 @@ _distill("Mjlab-PushChain-WoodTable-R3MResNet50-AfaFull32-Trossen", "R3MResNet50
 _distill("Mjlab-PushChain-WoodTable-R3MResNet50-Global-Trossen", "R3MResNet50-Global", "real_texture_wood")
 _distill("Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen", "NatureCnn-FlattenRelu", "real_texture_wood")
 _distill("Mjlab-PushChain-WoodTable-CompactVit-Svea-Trossen", "CompactVit-Svea", "real_texture_wood")
+_state("Mjlab-PushChain3-State-Trossen", 3)
+_state("Mjlab-PushChain4-State-Trossen", 4)

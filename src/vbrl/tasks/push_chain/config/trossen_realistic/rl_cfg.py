@@ -17,7 +17,9 @@ STATE_TASK_ID = "Mjlab-PushChain-State-Trossen"
 _EVALUATION_SCENES = ("real_table", "real_texture_wood")
 
 
-def trossen_realistic_push_chain_state_ppo_runner_cfg() -> VbrlOnPolicyRunnerCfg:
+def trossen_realistic_push_chain_state_ppo_runner_cfg(
+  task_id: str = STATE_TASK_ID,
+) -> VbrlOnPolicyRunnerCfg:
   return VbrlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
@@ -25,11 +27,11 @@ def trossen_realistic_push_chain_state_ppo_runner_cfg() -> VbrlOnPolicyRunnerCfg
     obs_groups={"actor": ("actor",), "critic": ("critic",)},
     save_interval=100,
     experiment_name="push_chain_state_trossen_realistic_sim2real_dr",
-    run_name=wandb_task_tag(STATE_TASK_ID),
+    run_name=wandb_task_tag(task_id),
     logger="wandb",
     wandb_project="mjlab",
     wandb_tags=(
-      wandb_task_tag(STATE_TASK_ID),
+      wandb_task_tag(task_id),
       "push_chain",
       "state",
       "success_90",

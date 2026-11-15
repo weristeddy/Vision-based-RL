@@ -7,9 +7,14 @@ PUSH_CHAIN_XML = OBJECTS_DIR / "push_chain.xml"
 PUSH_T_XML = OBJECTS_DIR / "push_t.xml"
 
 
+def push_chain_xml(num_links: int) -> Path:
+  return OBJECTS_DIR / f"push_chain_{num_links}.xml"
+
+
 __all__ = [
   "CUBE_XML",
   "OBJECTS_DIR",
   "PUSH_CHAIN_XML",
   "PUSH_T_XML",
+  "push_chain_xml",
 ]

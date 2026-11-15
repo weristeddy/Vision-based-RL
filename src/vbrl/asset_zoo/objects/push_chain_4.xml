@@ -1,0 +1,111 @@
+<!--
+  Pushing chain with 4 links, extendable design: every middle part carries a peg
+  (top plate with rounded tip, 22.5-30 mm) at its -x end and a ring (0-22.1 mm) at its
+  +x end, so any number of identical middle parts join; one end part has only the ring,
+  the other only the peg.
+
+    link0 (ring end) - link1 (middle) - link2 (middle) - link3 (peg end)
+
+  Lengths as push_chain.xml: end parts 70 mm from the free end to the pin, middle parts
+  87.5 mm between their pins, all 30 mm wide and 30 mm high, every full-height block
+  52.5 mm long and starting 17.5 mm from its pin (joint stop about 97-99 deg).
+  Peg (D7.5) and holes (D8) are not geoms: the hinge replaces them.
+  Mass, centre of mass and full inertia are computed from the solid parts (pegs
+  included, holes removed) at 341.1 kg/m^3, the effective density of the earlier
+  end link. TODO: weigh the printed parts and scale mass and inertia.
+  Root body is the centre link (link2, free joint). Body frames sit in the middle of
+  each link's segment, at mid-height. Joint angle convention: hinge_i = yaw(link i+1) -
+  yaw(link i). Generated; keep the parts in step when editing by hand.
+-->
+<mujoco model="push_chain">
+  <compiler angle="radian" />
+
+  <default>
+    <default class="collision">
+      <geom
+        contype="1"
+        conaffinity="1"
+        group="5"
+        rgba="0 0 0 0"
+        solref="0.01 1"
+        solimp="0.95 0.99 0.0002 0.5 2"
+      />
+    </default>
+    <default class="visual">
+      <geom contype="0" conaffinity="0" mass="0" material="push_chain_red" />
+    </default>
+    <default class="hinge">
+      <!-- range +-97 deg; limit stiffer than MuJoCo's default (0.02 s), the
+           stiffest that stays stable at the 5 ms timestep -->
+      <joint
+        type="hinge"
+        limited="true"
+        range="-1.69297 1.69297"
+        damping="0.0005"
+        frictionloss="0.001"
+        armature="1e-05"
+        solreflimit="0.01 1"
+        solimplimit="0.95 0.99 0.001 0.5 2"
+      />
+    </default>
+  </default>
+
+  <asset>
+    <!-- same red as the Push-T object -->
+    <material
+      name="push_chain_red"
+      rgba="0.7607843137254902 0.07450980392156863 0.08627450980392157 1"
+    />
+  </asset>
+
+  <worldbody>
+    <body name="push_chain_link2">
+      <freejoint name="push_chain_joint" />
+      <inertial pos="0.00592 0 -2.52666e-05" mass="0.0249017" fullinertia="3.67378e-06 2.01862e-05 2.01211e-05 0 2.00422e-06 0" />
+      <geom name="push_chain_link2_plate_collision" class="collision" type="box" size="0.00875 0.015 0.00375" pos="-0.035 0 0.01125" />
+      <geom name="push_chain_link2_plate_tip_collision" class="collision" type="cylinder" size="0.015 0.00375" pos="-0.04375 0 0.01125" />
+      <geom name="push_chain_link2_body_collision" class="collision" type="box" size="0.02625 0.015 0.015" pos="0 0 0" />
+      <geom name="push_chain_link2_lower_collision" class="collision" type="box" size="0.00875 0.015 0.01105" pos="0.035 0 -0.00395" />
+      <geom name="push_chain_link2_ring_collision" class="collision" type="cylinder" size="0.015 0.01105" pos="0.04375 0 -0.00395" />
+      <geom name="push_chain_link2_plate_visual" class="visual" type="box" size="0.00875 0.015 0.00375" pos="-0.035 0 0.01125" />
+      <geom name="push_chain_link2_plate_tip_visual" class="visual" type="cylinder" size="0.015 0.0037" pos="-0.04375 0 0.01125" />
+      <geom name="push_chain_link2_body_visual" class="visual" type="box" size="0.02625 0.015 0.015" pos="0 0 0" />
+      <geom name="push_chain_link2_lower_visual" class="visual" type="box" size="0.00875 0.015 0.01105" pos="0.035 0 -0.00395" />
+      <geom name="push_chain_link2_ring_visual" class="visual" type="cylinder" size="0.015 0.011" pos="0.04375 0 -0.00395" />
+      <body name="push_chain_link1" pos="-0.0875 0 0">
+        <joint name="push_chain_hinge1" class="hinge" pos="0.04375 0 0" axis="0 0 -1" />
+        <inertial pos="0.00592 0 -2.52666e-05" mass="0.0249017" fullinertia="3.67378e-06 2.01862e-05 2.01211e-05 0 2.00422e-06 0" />
+        <geom name="push_chain_link1_plate_collision" class="collision" type="box" size="0.00875 0.015 0.00375" pos="-0.035 0 0.01125" />
+        <geom name="push_chain_link1_plate_tip_collision" class="collision" type="cylinder" size="0.015 0.00375" pos="-0.04375 0 0.01125" />
+        <geom name="push_chain_link1_body_collision" class="collision" type="box" size="0.02625 0.015 0.015" pos="0 0 0" />
+        <geom name="push_chain_link1_lower_collision" class="collision" type="box" size="0.00875 0.015 0.01105" pos="0.035 0 -0.00395" />
+        <geom name="push_chain_link1_ring_collision" class="collision" type="cylinder" size="0.015 0.01105" pos="0.04375 0 -0.00395" />
+        <geom name="push_chain_link1_plate_visual" class="visual" type="box" size="0.00875 0.015 0.00375" pos="-0.035 0 0.01125" />
+        <geom name="push_chain_link1_plate_tip_visual" class="visual" type="cylinder" size="0.015 0.0037" pos="-0.04375 0 0.01125" />
+        <geom name="push_chain_link1_body_visual" class="visual" type="box" size="0.02625 0.015 0.015" pos="0 0 0" />
+        <geom name="push_chain_link1_lower_visual" class="visual" type="box" size="0.00875 0.015 0.01105" pos="0.035 0 -0.00395" />
+        <geom name="push_chain_link1_ring_visual" class="visual" type="cylinder" size="0.015 0.011" pos="0.04375 0 -0.00395" />
+        <body name="push_chain_link0" pos="-0.07875 0 0">
+          <joint name="push_chain_hinge0" class="hinge" pos="0.035 0 0" axis="0 0 -1" />
+          <inertial pos="0.0026297 0 -0.00111252" mass="0.0223267" fullinertia="3.18248e-06 1.32364e-05 1.33572e-05 0 7.33625e-07 0" />
+          <geom name="push_chain_link0_body_collision" class="collision" type="box" size="0.02625 0.015 0.015" pos="-0.00875 0 0" />
+          <geom name="push_chain_link0_lower_collision" class="collision" type="box" size="0.00875 0.015 0.01105" pos="0.02625 0 -0.00395" />
+          <geom name="push_chain_link0_ring_collision" class="collision" type="cylinder" size="0.015 0.01105" pos="0.035 0 -0.00395" />
+          <geom name="push_chain_link0_body_visual" class="visual" type="box" size="0.02625 0.015 0.015" pos="-0.00875 0 0" />
+          <geom name="push_chain_link0_lower_visual" class="visual" type="box" size="0.00875 0.015 0.01105" pos="0.02625 0 -0.00395" />
+          <geom name="push_chain_link0_ring_visual" class="visual" type="cylinder" size="0.015 0.011" pos="0.035 0 -0.00395" />
+        </body>
+      </body>
+      <body name="push_chain_link3" pos="0.07875 0 0">
+        <joint name="push_chain_hinge2" class="hinge" pos="-0.035 0 0" axis="0 0 1" />
+        <inertial pos="0.00304416 0 0.0012952" mass="0.0186919" fullinertia="2.84971e-06 9.17414e-06 9.04721e-06 0 8.53522e-07 0" />
+        <geom name="push_chain_link3_body_collision" class="collision" type="box" size="0.02625 0.015 0.015" pos="0.00875 0 0" />
+        <geom name="push_chain_link3_plate_collision" class="collision" type="box" size="0.00875 0.015 0.00375" pos="-0.02625 0 0.01125" />
+        <geom name="push_chain_link3_plate_tip_collision" class="collision" type="cylinder" size="0.015 0.00375" pos="-0.035 0 0.01125" />
+        <geom name="push_chain_link3_body_visual" class="visual" type="box" size="0.02625 0.015 0.015" pos="0.00875 0 0" />
+        <geom name="push_chain_link3_plate_visual" class="visual" type="box" size="0.00875 0.015 0.00375" pos="-0.02625 0 0.01125" />
+        <geom name="push_chain_link3_plate_tip_visual" class="visual" type="cylinder" size="0.015 0.0037" pos="-0.035 0 0.01125" />
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

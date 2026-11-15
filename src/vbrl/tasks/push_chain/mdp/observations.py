@@ -19,7 +19,7 @@ _ROBOT = SceneEntityCfg("robot")
 
 
 def _in_base(robot: Entity, position: torch.Tensor, yaw: torch.Tensor) -> torch.Tensor:
-  quat = robot.data.root_link_quat_w[:, None].expand(-1, 3, -1)
+  quat = robot.data.root_link_quat_w[:, None].expand(-1, position.shape[1], -1)
   local = quat_apply(quat_inv(quat), position - robot.data.root_link_pos_w[:, None])
   yaw = yaw - yaw_from_quat(robot.data.root_link_quat_w)[:, None]
   pose = torch.cat((local, torch.sin(yaw)[..., None], torch.cos(yaw)[..., None]), -1)
@@ -34,7 +34,7 @@ def target_pose(
 ) -> torch.Tensor:
   command = push_chain_command(env, command_name)
   links = command.observed_links if calibration_bias else command.target_links
-  height = command.target_pos[:, None, 2:].expand(-1, 3, -1)
+  height = command.target_pos[:, None, 2:].expand(-1, links.shape[1], -1)
   position = torch.cat((links[..., :2], height), dim=-1)
   return _in_base(env.scene[asset_cfg.name], position, links[..., 2])
 
@@ -46,18 +46,10 @@ def chain_pose(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
 
 
 def chain_errors(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-  command = push_chain_command(env, command_name)
-  middle = command.chain_links()[:, 1]
-  errors = command.goal_errors()
-  yaw = errors[:, 1:2]
+  errors = push_chain_command(env, command_name).goal_errors()
+  yaw = errors[:, 2:3]
   return torch.cat(
-    (
-      command.target_pos[:, :2] - middle[:, :2],
-      torch.sin(yaw),
-      torch.cos(yaw),
-      errors[:, 2:],
-    ),
-    dim=-1,
+    (errors[:, :2], torch.sin(yaw), torch.cos(yaw), errors[:, 3:]), dim=-1
   )
 
 

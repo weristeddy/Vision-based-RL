@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
 from mjlab.managers import EventTermCfg
@@ -18,16 +20,18 @@ from vbrl.tasks.utils import add_rgb_camera
 
 
 def trossen_realistic_push_chain_state_env_cfg(
-  *, play: bool = False
+  *, num_links: int = 3, object_xml: Path = PUSH_CHAIN_XML, play: bool = False
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
-  cfg = build_env_cfg(robot=robot, object_name=_OBJECT_NAME, play=play)
+  cfg = build_env_cfg(
+    robot=robot, object_name=_OBJECT_NAME, num_links=num_links, play=play
+  )
   apply_scene(
     cfg,
     scene="default",
     robot=robot,
     camera_view=None,
-    object_xml=PUSH_CHAIN_XML,
+    object_xml=object_xml,
     object_name=_OBJECT_NAME,
   )
   cfg.scene.num_envs = 1 if play else 1024
@@ -36,12 +40,18 @@ def trossen_realistic_push_chain_state_env_cfg(
 
 
 def trossen_realistic_push_chain_rgb_env_cfg(
-  *, scene: str, distill: bool = True, play: bool = False
+  *,
+  scene: str,
+  num_links: int = 3,
+  object_xml: Path = PUSH_CHAIN_XML,
+  distill: bool = True,
+  play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
   cfg = build_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,
+    num_links=num_links,
     rgb=True,
     distill=distill,
     play=play,
@@ -60,10 +70,10 @@ def trossen_realistic_push_chain_rgb_env_cfg(
     scene=scene,
     robot=robot,
     camera_view=_CAMERA_VIEW,
-    object_xml=PUSH_CHAIN_XML,
+    object_xml=object_xml,
     object_name=_OBJECT_NAME,
   )
-  add_goal_marker(cfg)
+  add_goal_marker(cfg, num_links)
   if not play:
     cfg.events["camera_fovy"] = EventTermCfg(
       func=dr.cam_fovy,

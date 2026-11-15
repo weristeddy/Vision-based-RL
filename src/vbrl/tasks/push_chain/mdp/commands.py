@@ -13,15 +13,17 @@ from vbrl.tasks.push_t.geometry import yaw_from_quat
 from vbrl.tasks.push_t.goal_marker import GOAL_MARKER_Z
 
 from ..geometry import (
-  LINK_HALF_EXTENTS,
   LINK_HALF_HEIGHT,
   ChainOverlap,
   LinkOverlap,
+  centre_link,
+  chain_from_pose,
   chain_signed_distance,
-  end_links_gap,
   gap_to_boxes,
+  half_extents,
   landmark_errors,
-  link_poses,
+  reversed_links,
+  self_gap,
 )
 from ..goal_marker import SIDE_GEOM_NAMES, side_strips
 
@@ -29,15 +31,20 @@ if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.viewer.debug_visualizer import DebugVisualizer
 
-LINK_NAMES = ("push_chain_link0", "push_chain_link1", "push_chain_link2")
-HINGE_NAMES = ("push_chain_hinge0", "push_chain_hinge1")
-GOAL_ERRORS = (
-  "middle_position_error",
-  "middle_yaw_error",
-  "hinge0_error",
-  "hinge1_error",
-)
 DISTANCE_SCALE = 5.0
+
+
+def link_names(num_links: int) -> tuple[str, ...]:
+  return tuple(f"push_chain_link{i}" for i in range(num_links))
+
+
+def hinge_names(num_links: int) -> tuple[str, ...]:
+  return tuple(f"push_chain_hinge{i}" for i in range(num_links - 1))
+
+
+def goal_error_names(num_links: int) -> tuple[str, ...]:
+  hinges = tuple(f"hinge{i}_error" for i in range(num_links - 1))
+  return ("middle_position_error", "middle_yaw_error", *hinges)
 
 
 class PushChainCommand(LiftingCommand):
@@ -45,19 +52,18 @@ class PushChainCommand(LiftingCommand):
 
   def __init__(self, cfg: PushChainCommandCfg, env: ManagerBasedRlEnv):
     super().__init__(cfg, env)
-    n = self.num_envs
+    n, links = self.num_envs, cfg.num_links
     self.target_yaw = torch.zeros(n, device=self.device)
-    self.target_hinges = torch.zeros(n, 2, device=self.device)
-    self.target_links = torch.zeros(n, 3, 3, device=self.device)
-    self.observed_links = torch.zeros(n, 3, 3, device=self.device)
-    self.link_ids = self.object.find_bodies(LINK_NAMES, preserve_order=True)[0]
-    self._hinge_ids = torch.tensor(
-      self.object.find_joints(HINGE_NAMES, preserve_order=True)[0], device=self.device
-    )
-    self._overlap = LinkOverlap(device=self.device, dtype=torch.float)
-    self._overlap_cache = torch.zeros(n, 3, device=self.device)
+    self.target_hinges = torch.zeros(n, links - 1, device=self.device)
+    self.target_links = torch.zeros(n, links, 3, device=self.device)
+    self.observed_links = torch.zeros(n, links, 3, device=self.device)
+    self.link_ids = self.object.find_bodies(link_names(links), preserve_order=True)[0]
+    hinges = self.object.find_joints(hinge_names(links), preserve_order=True)[0]
+    self._hinge_ids = torch.tensor(hinges, device=self.device)
+    self._overlap = LinkOverlap(links, device=self.device, dtype=torch.float)
+    self._overlap_cache = torch.zeros(n, links, device=self.device)
     self._overlap_cache_step: int | None = None
-    self._chain_overlap = ChainOverlap(device=self.device, dtype=torch.float)
+    self._chain_overlap = ChainOverlap(links, device=self.device, dtype=torch.float)
     self._goal_pixels, self._goal_counted = self._chain_overlap.goal_pixels(
       self.target_links
     )
@@ -78,11 +84,11 @@ class PushChainCommand(LiftingCommand):
       )
     for name in ("object_height", "at_goal", "position_error"):
       self.metrics.pop(name)
-    for i in range(3):
+    for i in range(links):
       self.metrics[f"link{i}_overlap"] = torch.zeros(n, device=self.device)
     self.metrics["min_link_overlap"] = torch.zeros(n, device=self.device)
     for name in (
-      *GOAL_ERRORS,
+      *goal_error_names(links),
       "max_landmark_error_m",
       "tcp_distance",
       "chain_overlap",
@@ -155,7 +161,7 @@ class PushChainCommand(LiftingCommand):
   def chain_links(self) -> torch.Tensor:
     position = self.object.data.body_link_pos_w[:, self.link_ids, :2]
     quat = self.object.data.body_link_quat_w[:, self.link_ids]
-    yaw = yaw_from_quat(quat.reshape(-1, 4)).view(-1, 3, 1)
+    yaw = yaw_from_quat(quat.reshape(-1, 4)).view(-1, self.cfg.num_links, 1)
     return torch.cat((position, yaw), dim=-1)
 
   def chain_hinges(self) -> torch.Tensor:
@@ -169,16 +175,18 @@ class PushChainCommand(LiftingCommand):
 
   def goal_errors(self) -> torch.Tensor:
     reversed_goal = self.landmark_errors().argmin(-1).bool()
-    goal_yaw = torch.where(reversed_goal, self.target_yaw + torch.pi, self.target_yaw)
+    goal = torch.where(
+      reversed_goal[:, None, None], reversed_links(self.target_links), self.target_links
+    )
     goal_hinges = torch.where(
       reversed_goal[:, None], -self.target_hinges.flip(-1), self.target_hinges
     )
-    middle = self.chain_links()[:, 1]
-    offset = self.target_pos[:, :2] - middle[:, :2]
+    centre = centre_link(self.cfg.num_links)
+    target, middle = goal[:, centre], self.chain_links()[:, centre]
     return torch.cat(
       (
-        torch.linalg.vector_norm(offset, dim=-1, keepdim=True),
-        wrap_to_pi(goal_yaw - middle[:, 2])[:, None],
+        target[:, :2] - middle[:, :2],
+        wrap_to_pi(target[:, 2] - middle[:, 2])[:, None],
         goal_hinges - self.chain_hinges(),
       ),
       dim=-1,
@@ -210,7 +218,7 @@ class PushChainCommand(LiftingCommand):
     self.episode_success = torch.maximum(
       self.episode_success, at_goal.to(self.episode_success.dtype)
     )
-    for i in range(3):
+    for i in range(self.cfg.num_links):
       self.metrics[f"link{i}_overlap"] = overlap[:, i]
     self.metrics["min_link_overlap"] = lowest
     self.metrics["episode_success"] = self.episode_success
@@ -218,8 +226,12 @@ class PushChainCommand(LiftingCommand):
 
   def _update_metrics(self) -> None:
     self._record_success(self.get_overlap())
-    errors = self.goal_errors().abs()
-    for name, error in zip(GOAL_ERRORS, errors.unbind(-1), strict=True):
+    errors = self.goal_errors()
+    errors = torch.cat(
+      (torch.linalg.vector_norm(errors[:, :2], dim=-1, keepdim=True), errors[:, 2:]), -1
+    ).abs()
+    names = goal_error_names(self.cfg.num_links)
+    for name, error in zip(names, errors.unbind(-1), strict=True):
       self.metrics[name] = error
     self.metrics["max_landmark_error_m"] = self.landmark_distance()
     self.metrics["tcp_distance"] = self.tcp_distance()
@@ -241,12 +253,15 @@ class PushChainCommand(LiftingCommand):
   def sample_chains(self, n: int) -> torch.Tensor:
     r = self.cfg.object_pose_range
     assert r is not None
-    hinge = self.cfg.hinge_range
-    low = torch.tensor((r.x[0], r.y[0], r.yaw[0], -hinge, -hinge), device=self.device)
-    high = torch.tensor((r.x[1], r.y[1], r.yaw[1], hinge, hinge), device=self.device)
-    samples = sample_uniform(low, high, (n, self.cfg.sampling_attempts, 5), self.device)
-    links = link_poses(samples[..., :2], samples[..., 2], samples[..., 3:])
-    valid = (end_links_gap(links) >= self.cfg.end_link_gap) & (
+    hinges = (self.cfg.hinge_range,) * (self.cfg.num_links - 1)
+    low = torch.tensor((r.x[0], r.y[0], r.yaw[0], *(-h for h in hinges)))
+    high = torch.tensor((r.x[1], r.y[1], r.yaw[1], *hinges))
+    shape = (n, self.cfg.sampling_attempts, len(low))
+    samples = sample_uniform(
+      low.to(self.device), high.to(self.device), shape, self.device
+    )
+    links = chain_from_pose(samples)
+    valid = (self_gap(links) >= self.cfg.link_gap) & (
       gap_to_boxes(links, self._robot_boxes) >= self.cfg.robot_clearance
     )
     chosen = samples[torch.arange(n, device=self.device), valid.int().argmax(-1)]
@@ -309,17 +324,18 @@ class PushChainCommand(LiftingCommand):
     self._write_chain(env_ids, chain, origins)
     self._set_goal(env_ids, self.sample_chains(len(env_ids)), origins)
     if self.cfg.near_object_start:
-      self._place_arm(env_ids, link_poses(chain[:, :2], chain[:, 2], chain[:, 3:]))
+      self._place_arm(env_ids, chain_from_pose(chain))
 
   def _write_chain(
     self, env_ids: torch.Tensor, chain: torch.Tensor, origins: torch.Tensor
   ) -> None:
     r = self.cfg.object_pose_range
     assert r is not None
+    root = chain_from_pose(chain)[:, centre_link(self.cfg.num_links)]
     zeros = torch.zeros(len(env_ids), device=self.device)
-    position = torch.cat((chain[:, :2], torch.full_like(zeros, r.z[0])[:, None]), -1)
+    position = torch.cat((root[:, :2], torch.full_like(zeros, r.z[0])[:, None]), -1)
     pose = torch.cat(
-      (position + origins, quat_from_euler_xyz(zeros, zeros, chain[:, 2])), dim=-1
+      (position + origins, quat_from_euler_xyz(zeros, zeros, root[:, 2])), dim=-1
     )
     self.object.write_root_link_pose_to_sim(pose, env_ids=env_ids)
     self.object.write_root_link_velocity_to_sim(
@@ -336,21 +352,21 @@ class PushChainCommand(LiftingCommand):
     self, env_ids: torch.Tensor, goal: torch.Tensor, origins: torch.Tensor
   ) -> None:
     n = len(env_ids)
-    xy = goal[:, :2] + origins[:, :2]
+    goal = torch.cat((goal[:, :2] + origins[:, :2], goal[:, 2:]), dim=-1)
     self.target_pos[env_ids] = torch.cat(
-      (xy, origins[:, 2:] + LINK_HALF_HEIGHT), dim=-1
+      (goal[:, :2], origins[:, 2:] + LINK_HALF_HEIGHT), dim=-1
     )
     self.target_yaw[env_ids] = goal[:, 2]
     self.target_hinges[env_ids] = goal[:, 3:]
-    self.target_links[env_ids] = link_poses(xy, goal[:, 2], goal[:, 3:])
+    self.target_links[env_ids] = chain_from_pose(goal)
     pixels, counted = self._chain_overlap.goal_pixels(self.target_links[env_ids])
     self._goal_pixels[env_ids], self._goal_counted[env_ids] = pixels, counted
     shift = self.cfg.observation_position_noise
     turn = self.cfg.observation_yaw_noise
     offset = sample_uniform(-shift, shift, (n, 2), self.device)
-    yaw_offset = sample_uniform(-turn, turn, (n,), self.device)
-    self.observed_links[env_ids] = link_poses(
-      xy + offset, goal[:, 2] + yaw_offset, goal[:, 3:]
+    yaw_offset = sample_uniform(-turn, turn, (n, 1), self.device)
+    self.observed_links[env_ids] = chain_from_pose(
+      goal + torch.cat((offset, yaw_offset, torch.zeros_like(goal[:, 3:])), dim=-1)
     )
     zeros = torch.zeros(n, device=self.device)
     for link, marker in enumerate(self._goal_markers):
@@ -381,7 +397,7 @@ class PushChainCommand(LiftingCommand):
           cos, sin = math.cos(yaw), math.sin(yaw)
           visualizer.add_box(
             center=np.array((x, y, height)),
-            size=np.array((*LINK_HALF_EXTENTS[link], LINK_HALF_HEIGHT)),
+            size=np.array((*half_extents(self.cfg.num_links)[link], LINK_HALF_HEIGHT)),
             mat=np.array(((cos, -sin, 0.0), (sin, cos, 0.0), (0.0, 0.0, 1.0))),
             color=self.cfg.viz.target_color,
             label=f"push_chain_goal_link{link}_{index}",
@@ -390,10 +406,11 @@ class PushChainCommand(LiftingCommand):
 
 @dataclass(kw_only=True)
 class PushChainCommandCfg(LiftingCommandCfg):
+  num_links: int = 3
   observation_position_noise: float = 0.0
   observation_yaw_noise: float = 0.0
   hinge_range: float = math.radians(95.0)
-  end_link_gap: float = 0.005
+  link_gap: float = 0.005
   robot_clearance: float = 0.02
   sampling_attempts: int = 32
   goal_marker_names: tuple[str, ...] = ()
@@ -423,10 +440,10 @@ def push_chain_command(env, name: str) -> PushChainCommand:
 
 __all__ = [
   "DISTANCE_SCALE",
-  "GOAL_ERRORS",
-  "HINGE_NAMES",
-  "LINK_NAMES",
   "PushChainCommand",
   "PushChainCommandCfg",
+  "goal_error_names",
+  "hinge_names",
+  "link_names",
   "push_chain_command",
 ]

@@ -33,31 +33,34 @@ from vbrl.tasks.push_t.push_t_env_cfg import (
 from vbrl.tasks.utils import make_tabletop_env_cfg
 
 from . import mdp
-from .geometry import REST_HEIGHT
-from .goal_marker import GOAL_ENTITY_NAMES
+from .geometry import REST_HEIGHT, centre_link
+from .goal_marker import goal_entity_names
 
 COMMAND = "push_chain_goal"
 _CONTACT_SENSOR = "ee_object_contact"
 _TABLE_SENSOR = "robot_table_contact"
 EPISODE_LENGTH_S = 15.0
 LANDMARK_SCALE = 0.10
-# The middle link is the chain's root body, so its subtree is the whole chain; a
-# body pattern over the three links keeps only its first match.
-CHAIN_ROOT_BODY = "push_chain_link1"
 CONTACT_SLOTS = 4
 NCONMAX = 128
+
+
+def chain_root_body(num_links: int) -> str:
+  return f"push_chain_link{centre_link(num_links)}"
 
 
 def _command(
   object_name: str,
   ee_site: str,
+  num_links: int,
   rgb: bool,
   goal_observation_noise: tuple[float, float],
 ) -> mdp.PushChainCommandCfg:
   return mdp.PushChainCommandCfg(
     entity_name=object_name,
     ee_site=ee_site,
-    goal_marker_names=GOAL_ENTITY_NAMES if rgb else (),
+    num_links=num_links,
+    goal_marker_names=goal_entity_names(num_links) if rgb else (),
     resampling_time_range=(1.0e9, 1.0e9),
     debug_vis=True,
     success_threshold=SUCCESS_THRESHOLD,
@@ -76,6 +79,7 @@ def build_env_cfg(
   *,
   robot: RobotDefinition,
   object_name: str,
+  num_links: int = 3,
   rgb: bool = False,
   distill: bool = False,
   play: bool = False,
@@ -122,7 +126,9 @@ def build_env_cfg(
     )
   }
   cfg.commands = {
-    COMMAND: _command(object_name, robot.ee_site, rgb, goal_observation_noise)
+    COMMAND: _command(
+      object_name, robot.ee_site, num_links, rgb, goal_observation_noise
+    )
   }
   cfg.rewards = {
     "chain_dense": RewardTermCfg(
@@ -223,7 +229,10 @@ def build_env_cfg(
       name=_CONTACT_SENSOR,
       primary=ContactMatch(mode="subtree", pattern="base_link", entity="robot"),
       secondary=ContactMatch(
-        mode="subtree", pattern=CHAIN_ROOT_BODY, entity=object_name
+        # The XML's root is the centre link, so its subtree is the whole chain.
+        mode="subtree",
+        pattern=chain_root_body(num_links),
+        entity=object_name,
       ),
       fields=("found", "force", "normal"),
       reduce="maxforce",
@@ -265,4 +274,10 @@ def build_env_cfg(
   return cfg
 
 
-__all__ = ["COMMAND", "EPISODE_LENGTH_S", "LANDMARK_SCALE", "build_env_cfg"]
+__all__ = [
+  "COMMAND",
+  "EPISODE_LENGTH_S",
+  "LANDMARK_SCALE",
+  "build_env_cfg",
+  "chain_root_body",
+]

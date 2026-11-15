@@ -34,6 +34,8 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen",
     "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushChain-State-Trossen",
+    "Mjlab-PushChain3-State-Trossen",
+    "Mjlab-PushChain4-State-Trossen",
     "Mjlab-PushChain-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushChain-WoodTable-DinoV2ViTS14-Global-Trossen",
     "Mjlab-PushChain-WoodTable-R3MResNet50-AfaFull32-Trossen",
@@ -44,11 +46,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_26_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_28_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 26
+  assert len(EXPECTED_TASK_IDS) == 28
 
 
 def test_no_id_names_the_default_camera() -> None:

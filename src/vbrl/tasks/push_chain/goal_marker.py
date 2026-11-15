@@ -8,8 +8,9 @@ import torch
 
 from vbrl.tasks.push_chain.geometry import (
   HINGE_LIMIT,
-  LINK_HALF_EXTENTS,
   LINK_HALF_WIDTH,
+  half_extents,
+  half_lengths,
 )
 from vbrl.tasks.push_t.goal_marker import (
   GOAL_HALF_THICKNESS,
@@ -21,12 +22,15 @@ from vbrl.tasks.push_t.goal_marker import (
 if TYPE_CHECKING:
   import mujoco
 
-GOAL_ENTITY_NAMES = tuple(f"goal_marker_link{i}" for i in range(3))
 GOAL_MATERIAL_NAME = "push_chain_goal_green"
 SIDE_GEOM_NAMES = ("side0", "side1")
 SIDES = (-1.0, 1.0)
 _OUTER = LINK_HALF_WIDTH + GOAL_OUTLINE_THICKNESS
 MAX_EXTENSION = _OUTER * math.tan(HINGE_LIMIT / 2.0)
+
+
+def goal_entity_names(num_links: int) -> tuple[str, ...]:
+  return tuple(f"goal_marker_link{i}" for i in range(num_links))
 
 
 def _extension(hinge: torch.Tensor, side: float) -> torch.Tensor:
@@ -40,39 +44,40 @@ def _extension(hinge: torch.Tensor, side: float) -> torch.Tensor:
 
 
 def side_strips(hinges: torch.Tensor) -> torch.Tensor:
-  half = hinges.new_tensor([length for length, _ in LINK_HALF_EXTENTS])
-  free = torch.full_like(hinges[..., 0], GOAL_OUTLINE_THICKNESS)
+  half = hinges.new_tensor(half_lengths(hinges.shape[-1] + 1))
+  free = torch.full_like(hinges[..., :1], GOAL_OUTLINE_THICKNESS)
   strips = []
   for side in SIDES:
-    first, second = (_extension(hinges[..., i], side) for i in range(2))
-    back = torch.stack((free, first, second), dim=-1) + half
-    front = torch.stack((first, second, free), dim=-1) + half
+    joints = _extension(hinges, side)
+    back = torch.cat((free, joints), dim=-1) + half
+    front = torch.cat((joints, free), dim=-1) + half
     strips.append(torch.stack(((front - back) / 2.0, (front + back) / 2.0), dim=-1))
   return torch.stack(strips, dim=-2)
 
 
-def _boxes(link: int):
-  half_length, half_width = LINK_HALF_EXTENTS[link]
+def _boxes(link: int, num_links: int):
+  half_length, half_width = half_extents(num_links)[link]
   t = GOAL_OUTLINE_THICKNESS
-  longest = side_strips(torch.full((2,), HINGE_LIMIT))[link, 0].tolist()
+  longest = side_strips(torch.full((num_links - 1,), HINGE_LIMIT))[link, 0].tolist()
   sides = [
     (name, (longest[0], side * (half_width + t / 2.0)), (longest[1], t / 2.0))
     for name, side in zip(SIDE_GEOM_NAMES, SIDES, strict=True)
   ]
   caps = [
     ("cap", (side * (half_length + t / 2.0), 0.0), (t / 2.0, half_width + t))
-    for side in ((-1.0,), (), (1.0,))[link]
+    for side in (-1.0, 1.0)
+    if link == (0 if side < 0 else num_links - 1)
   ]
   return sides + caps
 
 
-def goal_marker_spec(link: int) -> mujoco.MjSpec:
+def goal_marker_spec(link: int, num_links: int) -> mujoco.MjSpec:
   import mujoco
 
   spec = mujoco.MjSpec()
   spec.add_material(name=GOAL_MATERIAL_NAME, rgba=GOAL_RGBA)
-  body = spec.worldbody.add_body(name=GOAL_ENTITY_NAMES[link], mocap=True)
-  for name, centre, half in _boxes(link):
+  body = spec.worldbody.add_body(name=goal_entity_names(num_links)[link], mocap=True)
+  for name, centre, half in _boxes(link, num_links):
     body.add_geom(
       name=name,
       type=mujoco.mjtGeom.mjGEOM_BOX,
@@ -86,27 +91,29 @@ def goal_marker_spec(link: int) -> mujoco.MjSpec:
   return spec
 
 
-def add_goal_marker(cfg) -> None:
+def add_goal_marker(cfg, num_links: int) -> None:
   from mjlab.entity import EntityCfg
   from mjlab.managers.event_manager import EventTermCfg
 
   from vbrl.tasks.push_chain.mdp.events import shared_material_rgb
 
-  for link, name in enumerate(GOAL_ENTITY_NAMES):
-    cfg.scene.entities[name] = EntityCfg(spec_fn=partial(goal_marker_spec, link))
+  names = goal_entity_names(num_links)
+  for link, name in enumerate(names):
+    spec_fn = partial(goal_marker_spec, link, num_links)
+    cfg.scene.entities[name] = EntityCfg(spec_fn=spec_fn)
   cfg.events["goal_marker_color"] = EventTermCfg(
     func=shared_material_rgb,
     mode="reset",
-    params={"entity_names": GOAL_ENTITY_NAMES, "ranges": GOAL_REAL_RGBA_RANGE},
+    params={"entity_names": names, "ranges": GOAL_REAL_RGBA_RANGE},
   )
 
 
 __all__ = [
-  "GOAL_ENTITY_NAMES",
   "GOAL_MATERIAL_NAME",
   "MAX_EXTENSION",
   "SIDE_GEOM_NAMES",
   "add_goal_marker",
+  "goal_entity_names",
   "goal_marker_spec",
   "side_strips",
 ]
