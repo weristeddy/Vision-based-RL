@@ -60,7 +60,7 @@ def _boxes(link: int):
     for name, side in zip(SIDE_GEOM_NAMES, SIDES, strict=True)
   ]
   caps = [
-    ("cap", (side * (half_length + t / 2.0), 0.0), (t / 2.0, half_width))
+    ("cap", (side * (half_length + t / 2.0), 0.0), (t / 2.0, half_width + t))
     for side in ((-1.0,), (), (1.0,))[link]
   ]
   return sides + caps
