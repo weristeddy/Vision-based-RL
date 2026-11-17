@@ -22,17 +22,12 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-LiftCube-WoodTable-NatureCnn-FlattenRelu-Trossen",
     "Mjlab-LiftCube-WoodTable-CompactVit-Svea-Trossen",
     "Mjlab-PushT-State-Trossen",
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen",
-    "Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen",
-    "Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen",
     "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen",
     "Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen",
     "Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen",
     "Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen",
     "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen",
-    "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushChain-State-Trossen",
     "Mjlab-PushChain3-State-Trossen",
     "Mjlab-PushChain4-State-Trossen",
@@ -46,11 +41,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_28_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_23_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 28
+  assert len(EXPECTED_TASK_IDS) == 23
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -87,7 +82,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     assert external <= {"external_cam"}, f"{task_id} has {external}"
     seen_external += bool(external)
 
-  assert seen_external == 17
+  assert seen_external == 12
 
 
 def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:
@@ -178,7 +173,7 @@ print(json.dumps(list(vbrl_task_ids())))
 def test_native_registry_returns_independent_environment_and_agent_copies() -> None:
   from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
-  task_id = "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen"
+  task_id = "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
   first_env, second_env = load_env_cfg(task_id), load_env_cfg(task_id)
   first_agent, second_agent = load_rl_cfg(task_id), load_rl_cfg(task_id)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mjlab.rl import RslRlModelCfg
 
+from vbrl.scenes.presets import EVALUATION_SCENES
 from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import (
   _DISTILLATION_MAX_ITERATIONS,
   _GAUSSIAN,
@@ -14,7 +15,6 @@ from vbrl.training.runner import VbrlOnPolicyRunnerCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushChain-State-Trossen"
-_EVALUATION_SCENES = ("real_table", "real_texture_wood")
 
 
 def trossen_realistic_push_chain_state_ppo_runner_cfg(
@@ -54,7 +54,7 @@ def trossen_realistic_push_chain_rgb_distillation_runner_cfg(
     max_iterations=_DISTILLATION_MAX_ITERATIONS,
     obs_groups={"student": ("actor", "camera"), "teacher": ("teacher",)},
     save_interval=100,
-    evaluation_scenes=_EVALUATION_SCENES,
+    evaluation_scenes=EVALUATION_SCENES,
     experiment_name="push_chain_rgb_distillation",
     run_name=wandb_task_tag(task_id),
     logger="wandb",

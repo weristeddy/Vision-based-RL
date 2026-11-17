@@ -5,7 +5,7 @@ Two tasks (Lift-Cube, Push-T), a Trossen WidowX AI arm, and a visual-encoder sta
 that trains either a frozen pretrained backbone or a CNN from scratch.
 
 **The task ID is the contract.** An ID such as
-`Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen` fixes the task, robot,
+`Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` fixes the task, robot,
 scene, camera, encoder, adapter, network and, for Push-T, the whole training
 recipe. Seed, env count and iteration count remain flags.
 
@@ -100,20 +100,19 @@ with the wrist camera on AmbientCG wood tabletops.
 
 ## Push-T
 
-Twelve task IDs, one recipe. A state policy trains with PPO on privileged object
+Seven task IDs, one recipe. A state policy trains with PPO on privileged object
 poses; the visual policies are DAgger students of that one teacher (student acts,
-teacher labels, MSE on the mean), plus one visual policy trained by PPO on the
-teacher's exact recipe for comparison.
+teacher labels, MSE on the mean), trained on AmbientCG wood tabletops.
 
 | task ID | |
 | --- | --- |
 | `Mjlab-PushT-State-Trossen` | PPO teacher, 8,000 iterations |
-| `Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen` | student, the rig's tabletop photo |
-| `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | student, AmbientCG wood tabletops |
-| `Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen` | student, encoder comparison |
-| `Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen` | student, encoder comparison |
-| `Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen` | student, encoder comparison |
-| `Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen` | visual PPO, the teacher's recipe from pixels |
+| `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | student, DINOv2 + AFA |
+| `Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen` | student, DINOv2 global |
+| `Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen` | student, R3M + AFA |
+| `Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen` | student, R3M global |
+| `Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen` | student, Nature CNN from scratch |
+| `Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen` | student, compact ViT from scratch |
 
 The recipe lives in code, not flags: 20 Hz, action scale 0.025 (wrist roll 0.02)
 onto the previous target, the Trossen SDK's 50 ms goal ramp modelled in sim,
@@ -129,7 +128,7 @@ bash cluster/submit.sh --profile a100 -- \
 
 # A student: four ranks x 1,024 envs, 8,000 iterations, teacher from its W&B run.
 bash cluster/submit.sh --profile a100 -- \
-  Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen \
+  Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen \
   --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run>
 ```
 

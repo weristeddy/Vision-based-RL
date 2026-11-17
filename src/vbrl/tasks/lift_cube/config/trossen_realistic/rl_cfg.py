@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mjlab.rl import RslRlModelCfg
 
+from vbrl.scenes.presets import evaluation_scenes
 from vbrl.tasks.lift_cube.lift_cube_env_cfg import STEPS_PER_ITERATION
 from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillationCfg
@@ -10,7 +11,6 @@ from vbrl.training.runner import VbrlOnPolicyRunnerCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-LiftCube-State-Trossen"
-_EVALUATION_SCENES = ("real_texture_wood", "real_texture")
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
   "activation": "elu",
@@ -74,7 +74,7 @@ def trossen_realistic_lift_cube_rgb_distillation_runner_cfg(
     max_iterations=3000,
     obs_groups={"student": ("actor", "camera"), "teacher": ("teacher",)},
     save_interval=100,
-    evaluation_scenes=_EVALUATION_SCENES,
+    evaluation_scenes=evaluation_scenes(goal_visible=False),
     experiment_name="lift_cube_rgb_distillation",
     run_name=wandb_task_tag(task_id),
     logger="wandb",

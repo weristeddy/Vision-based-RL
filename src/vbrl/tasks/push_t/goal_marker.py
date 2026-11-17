@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from vbrl.scenes.presets import REAL_TABLE_GOAL_COLOUR_RANGE
 from vbrl.tasks.push_t.geometry import FOOTPRINT_PARTS
 
 if TYPE_CHECKING:
   import mujoco
 
 GOAL_ENTITY_NAME = "goal_marker"
-GOAL_COLOUR_EVENT = "goal_color"
 GOAL_MATERIAL_NAME = "push_t_goal_green"
 GOAL_RGBA = (0.16, 0.62, 0.29, 1.0)
 # Albedo, not observed colour: the 5-95 % range that made the rendered marker match
@@ -16,7 +16,7 @@ GOAL_RGBA = (0.16, 0.62, 0.29, 1.0)
 # training light draws on 2026-10-14. The previous range came from a photo at other
 # camera settings and rendered teal, never this olive. No margin: G > 0.11 and
 # B > 0.03 keep it disjoint from REAL_TABLE_OBJECT_COLOUR_RANGE.
-GOAL_REAL_RGBA_RANGE = ((0.085, 0.16), (0.115, 0.21), (0.035, 0.07))
+GOAL_REAL_RGBA_RANGE = REAL_TABLE_GOAL_COLOUR_RANGE
 GOAL_OUTLINE_THICKNESS = 0.015
 GOAL_HALF_THICKNESS = 0.0012
 # The box is sunk so its top face sits this far above the table at z=0, like the
@@ -24,27 +24,6 @@ GOAL_HALF_THICKNESS = 0.0012
 # external camera.
 GOAL_TOP_M = 0.0002
 GOAL_MARKER_Z = GOAL_TOP_M - 2.0 * GOAL_HALF_THICKNESS
-
-
-def goal_colour_event(ranges=((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))):
-  from mjlab.envs.mdp import dr
-  from mjlab.managers.event_manager import EventTermCfg
-  from mjlab.managers.scene_entity_config import SceneEntityCfg
-
-  return EventTermCfg(
-    func=dr.mat_rgba,
-    mode="reset",
-    params={
-      "asset_cfg": SceneEntityCfg(
-        GOAL_ENTITY_NAME, material_names=(GOAL_MATERIAL_NAME,)
-      ),
-      "operation": "abs",
-      "distribution": "uniform",
-      "axes": [0, 1, 2],
-      "ranges": dict(enumerate(ranges)),
-      "shared_random": True,
-    },
-  )
 
 
 # Eight boxes forming a closed frame whose hole is exactly the T footprint.
@@ -91,7 +70,6 @@ def goal_marker_spec() -> mujoco.MjSpec:
 
 
 __all__ = [
-  "GOAL_COLOUR_EVENT",
   "GOAL_OUTLINE_THICKNESS",
   "GOAL_REAL_RGBA_RANGE",
   "GOAL_ENTITY_NAME",
@@ -100,6 +78,5 @@ __all__ = [
   "GOAL_TOP_M",
   "GOAL_MATERIAL_NAME",
   "GOAL_RGBA",
-  "goal_colour_event",
   "goal_marker_spec",
 ]

@@ -49,7 +49,7 @@ def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int)
   colour["ranges"] = {
     axis: ((lo + hi) / 2,) * 2 for axis, (lo, hi) in colour["ranges"].items()
   }
-  tape = cfg.events["goal_marker_color"].params
+  tape = cfg.events["goal_color"].params
   tape["ranges"] = tuple(((lo + hi) / 2,) * 2 for lo, hi in tape["ranges"])
   # The rig's room light casts almost no shadow.
   cfg.scene.sensors = tuple(

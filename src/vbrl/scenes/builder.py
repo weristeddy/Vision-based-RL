@@ -17,6 +17,7 @@ from .presets import (
   CAMERA_POSITION_DR_RANGE_M,
   CAMERA_ROTATION_DR_RANGE_RAD,
   FILL_LIGHT_NAME,
+  GOAL_COLOUR_EVENT,
   TABLE_CENTER,
   TABLE_GEOM_NAME,
   TABLE_HALF_EXTENTS,
@@ -361,6 +362,7 @@ def randomize_light_intensity(
   ambient: tuple[float, float],
   warmth: tuple[float, float],
   shadow_probability: float,
+  colour: tuple[float, float, float] | None = None,
 ) -> None:
   import torch
 
@@ -378,7 +380,11 @@ def randomize_light_intensity(
   ones = torch.ones_like(tilt)
   tint = torch.cat([ones + tilt, ones, ones - tilt], dim=2)
 
-  env.sim.model.light_diffuse[grid] = scalar(*diffuse) * tint
+  # A fixed colour still consumes the diffuse draw, so the episodes stay paired.
+  drawn = scalar(*diffuse) * tint
+  if colour is not None:
+    drawn = torch.tensor(colour, device=env.device).expand_as(drawn)
+  env.sim.model.light_diffuse[grid] = drawn
   env.sim.model.light_specular[grid] = scalar(*specular).expand_as(tint)
   env.sim.model.light_ambient[grid] = scalar(*ambient).expand_as(tint)
   env.sim.model.light_castshadow[grid] = (
@@ -480,6 +486,7 @@ def _events(
       params={
         "asset_cfg": SceneEntityCfg("table", light_names=(TABLE_LIGHT_NAME,)),
         **_LIGHT_INTENSITY_RANGES,
+        "colour": preset.light_colour,
       },
     )
   if camera_model is not None:
@@ -522,6 +529,10 @@ def _apply(
       eval_dr=eval_dr,
     )
   )
+  # The tasks add their goal marker after the scene, so only replace_scene finds it.
+  goal = cfg.events.get(GOAL_COLOUR_EVENT)
+  if goal is not None and preset.goal_colour_range is not None:
+    goal.params["ranges"] = preset.goal_colour_range
   return cfg
 
 

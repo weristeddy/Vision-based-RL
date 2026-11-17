@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -50,8 +50,8 @@ class TexturePreset:
   image: Path
   texrepeat: tuple[float, float]
   rgba: tuple[float, float, float, float]
-  roughness: float
-  specular: float
+  roughness: float | None
+  specular: float | None
 
   def require(self) -> Path:
     if not self.image.is_file():
@@ -99,6 +99,28 @@ REAL_TABLE = TexturePreset(
   rgba=(0.593, 0.488, 0.363, 1.0),
   roughness=0.93,
   specular=0.02,
+)
+# The fixed evaluation tables render like the training bank's AmbientCG material:
+# laid once, MuJoCo's default roughness and specular. Wood049 is a training wood
+# near the bank's median colour, contrast and rendered brightness (142 / 157 on the
+# external / wrist camera against a training median of 131 / 138). Marble019 is an
+# unseen family, scaled to 0.37 so it renders at that median (123 / 139) and a
+# drop measures the material, not the exposure.
+WOOD049_TABLE = TexturePreset(
+  name="wood049",
+  image=AMBIENTCG_DIR / "Wood049_Color.png",
+  texrepeat=(1.0, 1.0),
+  rgba=(1.0, 1.0, 1.0, 1.0),
+  roughness=None,
+  specular=None,
+)
+MARBLE019_TABLE = TexturePreset(
+  name="marble019",
+  image=AMBIENTCG_DIR / "Marble019_Color.png",
+  texrepeat=(1.0, 1.0),
+  rgba=(0.37, 0.37, 0.37, 1.0),
+  roughness=None,
+  specular=None,
 )
 RED_PLASTIC_OBJECT = TexturePreset(
   name="red_plastic",
@@ -149,6 +171,11 @@ class ScenePreset:
   # whole RGB cube; the sim2real preset narrows it to the rig's measured
   # bordeaux (#68392c) so the sampled object stays a plausible real object.
   object_colour_range: tuple = ((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
+  # Set on every evaluation scene so a scene swap never inherits another's goal;
+  # None leaves the task's goal colour event alone.
+  goal_colour_range: tuple | None = None
+  # A fixed diffuse colour for the table light in place of the training draw.
+  light_colour: tuple[float, float, float] | None = None
   ood: bool = False
 
 
@@ -216,6 +243,27 @@ _REAL_TABLE_BANK = MaterialBank(kind="image", prefix="real_table", image=REAL_TA
 # 0.20/0.068/0.011), with margin. The previous 0.22-0.44/0.055-0.215/0-0.115
 # left 63 % of those matches outside it.
 REAL_TABLE_OBJECT_COLOUR_RANGE = ((0.14, 0.36), (0.04, 0.11), (0.0, 0.03))
+# The goal tape's measured green (see push_t.goal_marker), shared by every goal marker,
+# and the one event every task colours its goal marker with.
+GOAL_COLOUR_EVENT = "goal_color"
+REAL_TABLE_GOAL_COLOUR_RANGE = ((0.085, 0.16), (0.115, 0.21), (0.035, 0.07))
+
+
+def _fixed(rgb: tuple[float, float, float]) -> tuple:
+  return tuple((value, value) for value in rgb)
+
+
+# Fixed out-of-distribution values, each at the luminance of the training colour it
+# replaces (object ~0.12, goal ~0.14), so a drop measures hue, not brightness.
+BLUE_OBJECT = (0.035, 0.07, 0.60)
+BLUE_GOAL = (0.035, 0.09, 0.70)
+PURPLE_GOAL = (0.22, 0.04, 0.45)
+# The swap gives each the other's training median.
+SWAP_OBJECT = (0.12, 0.16, 0.05)
+SWAP_GOAL = (0.25, 0.075, 0.015)
+# Colosseum's Light_Color draws each channel from [0, 0.5]; this one is a hue the
+# training tint (warm to cold only) never produces.
+OOD_LIGHT_COLOUR = (0.08, 0.40, 0.45)
 
 
 def _ood_table(preset: TexturePreset) -> MaterialBank:
@@ -243,6 +291,7 @@ _PRESETS: dict[str, ScenePreset] = {
     table=_REAL_TABLE_BANK,
     wide_lighting=True,
     object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
+    goal_colour_range=REAL_TABLE_GOAL_COLOUR_RANGE,
   ),
   # real_table with the tabletop drawn from AmbientCG's wood families instead of
   # the rig's one photo.
@@ -251,6 +300,22 @@ _PRESETS: dict[str, ScenePreset] = {
     table=_AMBIENTCG_WOOD_TABLE,
     wide_lighting=True,
     object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
+  ),
+  # Fixed tables for evaluation: every episode of a seed is the same in all three,
+  # only the tabletop differs.
+  "wood049": ScenePreset(
+    "wood049",
+    table=MaterialBank(kind="image", prefix="wood049_table", image=WOOD049_TABLE),
+    wide_lighting=True,
+    object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
+    goal_colour_range=REAL_TABLE_GOAL_COLOUR_RANGE,
+  ),
+  "marble019": ScenePreset(
+    "marble019",
+    table=MaterialBank(kind="image", prefix="marble019_table", image=MARBLE019_TABLE),
+    wide_lighting=True,
+    object_colour_range=REAL_TABLE_OBJECT_COLOUR_RANGE,
+    goal_colour_range=REAL_TABLE_GOAL_COLOUR_RANGE,
   ),
   "wood": ScenePreset(
     "wood", table=_ood_table(WOOD_TABLE), obj=_RED_PLASTIC_OBJECT,
@@ -265,6 +330,43 @@ _PRESETS: dict[str, ScenePreset] = {
     lights="realistic", ood=True,
   ),
 }
+# wood049 with exactly one factor fixed out of distribution; everything else draws
+# as in training, so a seed gives the same episodes as wood049.
+for _name, _change in {
+  "ood_light": {"light_colour": OOD_LIGHT_COLOUR},
+  "object_blue": {"object_colour_range": _fixed(BLUE_OBJECT)},
+  "goal_blue": {"goal_colour_range": _fixed(BLUE_GOAL)},
+  "object_blue_goal_purple": {
+    "object_colour_range": _fixed(BLUE_OBJECT),
+    "goal_colour_range": _fixed(PURPLE_GOAL),
+  },
+  "colour_swap": {
+    "object_colour_range": _fixed(SWAP_OBJECT),
+    "goal_colour_range": _fixed(SWAP_GOAL),
+  },
+}.items():
+  _PRESETS[_name] = replace(_PRESETS["wood049"], name=_name, **_change)
+
+# Every student trains on real_texture_wood. The tables: in distribution (a
+# training wood), near OOD (the rig's own tabletop), far OOD (an unseen material);
+# then wood049 with the light, object or goal colour out of distribution.
+EVALUATION_SCENES = (
+  "wood049",
+  "real_table",
+  "marble019",
+  "ood_light",
+  "object_blue",
+  "goal_blue",
+  "object_blue_goal_purple",
+  "colour_swap",
+)
+GOAL_COLOUR_SCENES = ("goal_blue", "object_blue_goal_purple")
+
+
+def evaluation_scenes(*, goal_visible: bool) -> tuple[str, ...]:
+  if goal_visible:
+    return EVALUATION_SCENES
+  return tuple(scene for scene in EVALUATION_SCENES if scene not in GOAL_COLOUR_SCENES)
 
 
 def list_scenes() -> tuple[str, ...]:
@@ -348,6 +450,18 @@ def ambientcg_texture_names(families: tuple[str, ...] = ()) -> tuple[str, ...]:
 
 
 __all__ = [
+  "BLUE_GOAL",
+  "BLUE_OBJECT",
+  "EVALUATION_SCENES",
+  "GOAL_COLOUR_EVENT",
+  "GOAL_COLOUR_SCENES",
+  "OOD_LIGHT_COLOUR",
+  "PURPLE_GOAL",
+  "REAL_TABLE_GOAL_COLOUR_RANGE",
+  "SWAP_GOAL",
+  "SWAP_OBJECT",
+  "MARBLE019_TABLE",
+  "WOOD049_TABLE",
   "AMBIENTCG_PREFIX",
   "AMBIENTCG_TEXTURE_PATTERN",
   "AMBIENTCG_WOOD_FAMILIES",
@@ -374,6 +488,7 @@ __all__ = [
   "ambientcg_pool_paths",
   "ambientcg_texture_names",
   "ambientcg_texture_paths",
+  "evaluation_scenes",
   "get_preset",
   "list_scenes",
   "ood_scenes",

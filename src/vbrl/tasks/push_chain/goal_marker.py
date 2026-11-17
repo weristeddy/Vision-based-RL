@@ -93,19 +93,15 @@ def goal_marker_spec(link: int, num_links: int) -> mujoco.MjSpec:
 
 def add_goal_marker(cfg, num_links: int) -> None:
   from mjlab.entity import EntityCfg
-  from mjlab.managers.event_manager import EventTermCfg
 
-  from vbrl.tasks.push_chain.mdp.events import shared_material_rgb
+  from vbrl.scenes.presets import GOAL_COLOUR_EVENT
+  from vbrl.tasks.utils.events import goal_colour_event
 
   names = goal_entity_names(num_links)
   for link, name in enumerate(names):
     spec_fn = partial(goal_marker_spec, link, num_links)
     cfg.scene.entities[name] = EntityCfg(spec_fn=spec_fn)
-  cfg.events["goal_marker_color"] = EventTermCfg(
-    func=shared_material_rgb,
-    mode="reset",
-    params={"entity_names": names, "ranges": GOAL_REAL_RGBA_RANGE},
-  )
+  cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(names, GOAL_REAL_RGBA_RANGE)
 
 
 __all__ = [

@@ -22,10 +22,9 @@ TASK_IDS = (
   "Mjlab-PushT-State-Trossen",
   "Mjlab-LiftCube-State-Trossen",
   "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
-  "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
+  "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
 )
 STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
-PUSH_T_PPO_TASK_ID = "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen"
 LIFT_STATE_TASK_ID = "Mjlab-LiftCube-State-Trossen"
 
 NUM_ENVS = 8
@@ -192,7 +191,7 @@ def test_the_env_origin_grid_does_not_change_what_the_camera_sees() -> None:
 
   from vbrl.runtime import build_env
 
-  task_id = "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen"
+  task_id = "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
   env = build_env(task_id, device=DEVICE, num_envs=4, seed=0)
   try:
     model = env.sim.mj_model
@@ -268,9 +267,7 @@ def _float_state(module) -> dict:
 @pytest.mark.gpu
 @requires_cuda
 @requires_weights
-@pytest.mark.parametrize(
-  "task_id", (STATE_TASK_ID, LIFT_STATE_TASK_ID, PUSH_T_PPO_TASK_ID)
-)
+@pytest.mark.parametrize("task_id", (STATE_TASK_ID, LIFT_STATE_TASK_ID))
 def test_one_learning_iteration_updates_the_policy(
   task_id: str, tmp_path: Path
 ) -> None:
@@ -304,7 +301,7 @@ def test_one_learning_iteration_updates_the_policy(
 @requires_cuda
 @requires_weights
 def test_a_checkpoint_resumes_into_a_fresh_runner(tmp_path: Path) -> None:
-  with _training_stack(PUSH_T_PPO_TASK_ID, tmp_path) as (make_runner, _):
+  with _training_stack(STATE_TASK_ID, tmp_path) as (make_runner, _):
     trained = make_runner()
     trained.learn(num_learning_iterations=1, init_at_random_ep_len=True)
     checkpoint = sorted(tmp_path.glob("model_*.pt"))[-1]
@@ -318,25 +315,6 @@ def test_a_checkpoint_resumes_into_a_fresh_runner(tmp_path: Path) -> None:
     assert all(
       torch.equal(expected[name], restored[name]) for name in expected
     ), "a resumed policy does not match the one that was saved"
-
-
-@pytest.mark.sim
-@pytest.mark.gpu
-@requires_cuda
-@requires_weights
-def test_frozen_visual_features_are_cached_during_rollout(tmp_path: Path) -> None:
-  with _training_stack(PUSH_T_PPO_TASK_ID, tmp_path) as (make_runner, _):
-    runner = make_runner()
-    runner.learn(num_learning_iterations=1, init_at_random_ep_len=True)
-    algorithm = runner.alg
-
-    assert getattr(algorithm, "cache_frozen_features", False), (
-      "a frozen visual encoder did not enable feature caching"
-    )
-    stored = set(algorithm.storage.observations.keys())
-    assert any(key.endswith("_features") for key in stored), (
-      f"rollout storage holds no cached features: {sorted(stored)}"
-    )
 
 
 @pytest.mark.sim

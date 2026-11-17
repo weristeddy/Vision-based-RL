@@ -6,7 +6,8 @@ import torch
 from mjlab.entity import Entity
 from mjlab.envs.mdp import resolve_env_ids
 from mjlab.managers import SceneEntityCfg
-from mjlab.utils.lab_api.math import sample_gaussian
+from mjlab.managers.event_manager import EventTermCfg, requires_model_fields
+from mjlab.utils.lab_api.math import sample_gaussian, sample_uniform
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -62,4 +63,35 @@ def reset_joints_with_gaussian_offset(
   )
 
 
-__all__ = ["ROBOT_JOINT_POSITION_STD_RAD", "reset_joints_with_gaussian_offset"]
+@requires_model_fields("mat_rgba")
+def shared_material_rgb(
+  env: ManagerBasedRlEnv,
+  env_ids: torch.Tensor | None,
+  entity_names: tuple[str, ...],
+  ranges: tuple[tuple[float, float], ...],
+) -> None:
+  if env_ids is None:
+    env_ids = torch.arange(env.num_envs, device=env.device)
+  low, high = torch.tensor(ranges, device=env.device).unbind(-1)
+  rgb = sample_uniform(low, high, (len(env_ids), 3), env.device)
+  materials = torch.cat([env.scene[name].indexing.mat_ids for name in entity_names])
+  env.sim.model.mat_rgba[env_ids[:, None], materials, :3] = rgb[:, None]
+
+
+# One colour per episode for every marker entity: Push-Chain's goal is one per link.
+def goal_colour_event(
+  entity_names: tuple[str, ...], ranges: tuple[tuple[float, float], ...]
+) -> EventTermCfg:
+  return EventTermCfg(
+    func=shared_material_rgb,
+    mode="reset",
+    params={"entity_names": entity_names, "ranges": ranges},
+  )
+
+
+__all__ = [
+  "ROBOT_JOINT_POSITION_STD_RAD",
+  "goal_colour_event",
+  "reset_joints_with_gaussian_offset",
+  "shared_material_rgb",
+]

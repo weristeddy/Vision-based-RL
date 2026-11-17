@@ -48,7 +48,7 @@ def test_every_registered_task_freezes_actor_and_privileged_critic_groups() -> N
   from vbrl.tasks import vbrl_task_ids
 
   task_ids = vbrl_task_ids()
-  assert len(task_ids) == 28
+  assert len(task_ids) == 23
   for task_id in task_ids:
     agent = load_rl_cfg(task_id)
     if hasattr(agent, "student"):
@@ -75,11 +75,12 @@ def test_distillation_tasks_pair_a_vision_student_with_the_state_actor() -> None
   state_env = load_env_cfg(STATE_TASK_ID)
   assert "teacher" not in state_env.observations
   for task_id in (
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-Global-Trossen",
-    "Mjlab-PushT-RealTable-R3MResNet50-AfaFull32-Trossen",
-    "Mjlab-PushT-RealTable-R3MResNet50-Global-Trossen",
     "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen",
+    "Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen",
+    "Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen",
+    "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen",
   ):
     agent = load_rl_cfg(task_id)
     env = load_env_cfg(task_id)

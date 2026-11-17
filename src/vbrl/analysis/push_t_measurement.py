@@ -8,10 +8,8 @@ from typing import Any
 
 import numpy as np
 
-TASKS = {
-  "real_table": "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
-  "wood": "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
-}
+TASK = "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
+SCENES = {"real_table": "real_table", "wood": "real_texture_wood"}
 WIDTH, HEIGHT = 1280, 720
 GOAL_X, GOAL_Y = (0.2, 0.5), (-0.2, 0.2)
 T_OFFSET_STD = (0.03, 0.03, math.radians(30.0))
@@ -37,25 +35,27 @@ def ideal_view() -> tuple[Any, float]:
   return view, math.degrees(2.0 * math.atan(HEIGHT / 2 / focal))
 
 
-def make_env(task: str, num_envs: int, fovy: float, seed: int) -> Any:
+def make_env(scene: str, num_envs: int, fovy: float, seed: int) -> Any:
   import dataclasses
 
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.tasks.registry import load_env_cfg
 
   import vbrl.tasks  # noqa: F401
+  from vbrl.scenes.builder import replace_scene
 
-  cfg = load_env_cfg(task, play=True)
+  cfg = replace_scene(load_env_cfg(TASK, play=True), scene=scene)
   cfg.seed = seed
   cfg.scene.num_envs = num_envs
   for name in ("camera_position", "camera_orientation"):
     cfg.events.pop(name)
   # The rig has one T and one marker: their measured colour, not the training spread.
-  for name in ("object_color", "goal_color"):
-    ranges = cfg.events[name].params["ranges"]
-    cfg.events[name].params["ranges"] = {
-      axis: ((low + high) / 2,) * 2 for axis, (low, high) in ranges.items()
-    }
+  colour = cfg.events["object_color"].params
+  colour["ranges"] = {
+    axis: ((low + high) / 2,) * 2 for axis, (low, high) in colour["ranges"].items()
+  }
+  tape = cfg.events["goal_color"].params
+  tape["ranges"] = tuple(((low + high) / 2,) * 2 for low, high in tape["ranges"])
   # The rig's room light casts almost no shadow.
   cfg.scene.sensors = tuple(
     dataclasses.replace(
@@ -113,12 +113,12 @@ def _poses(prefix: str, truth: Any, fitted: Any) -> dict[str, float]:
 
 
 def simulate(
-  task: str, samples: int, num_envs: int, seed: int
+  scene: str, samples: int, num_envs: int, seed: int
 ) -> list[dict[str, float]]:
   from vbrl.deployment.push_t.silhouette import measure_goal, measure_t, overlap
 
   view, fovy = ideal_view()
-  env = make_env(task, num_envs, fovy, seed)
+  env = make_env(scene, num_envs, fovy, seed)
   generator = np.random.default_rng(seed)
   rows = []
   for _ in range(math.ceil(samples / num_envs)):
@@ -414,7 +414,7 @@ def main(argv: list[str] | None = None) -> None:
   parser = argparse.ArgumentParser(
     description="Benchmark the Push-T rig measurement against simulator ground truth."
   )
-  parser.add_argument("--scene", choices=sorted(TASKS), default="real_table")
+  parser.add_argument("--scene", choices=sorted(SCENES), default="real_table")
   parser.add_argument(
     "--output", type=Path, help="default reports/push_t/measurement/<scene>"
   )
@@ -434,7 +434,7 @@ def main(argv: list[str] | None = None) -> None:
   if args.replot:
     rows = _read_csv(samples)
   else:
-    rows = simulate(TASKS[args.scene], args.samples, args.num_envs, args.seed)
+    rows = simulate(SCENES[args.scene], args.samples, args.num_envs, args.seed)
     output.mkdir(parents=True, exist_ok=True)
     _write_csv(samples, rows)
   real = real_example(args.rig_frame)

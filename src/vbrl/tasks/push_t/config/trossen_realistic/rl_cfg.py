@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mjlab.rl import RslRlModelCfg
 
+from vbrl.scenes.presets import EVALUATION_SCENES
 from vbrl.tasks.utils import wandb_task_tag
 from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillationCfg
 from vbrl.training.ppo import VisualPpoCfg
@@ -9,7 +10,6 @@ from vbrl.training.runner import VbrlOnPolicyRunnerCfg
 from vbrl.vision.config import VisionConfig
 
 STATE_TASK_ID = "Mjlab-PushT-State-Trossen"
-_EVALUATION_SCENES = ("real_table", "real_texture_wood")
 _DISTILLATION_MAX_ITERATIONS = 8000
 _NETWORK = {
   "hidden_dims": (256, 256, 128),
@@ -89,48 +89,6 @@ def trossen_realistic_push_t_state_ppo_runner_cfg() -> VbrlOnPolicyRunnerCfg:
   )
 
 
-def trossen_realistic_push_t_rgb_ppo_runner_cfg(
-  task_id: str, vision: VisionConfig
-) -> VbrlOnPolicyRunnerCfg:
-  return VbrlOnPolicyRunnerCfg(
-    seed=0,
-    num_steps_per_env=16,
-    max_iterations=8000,
-    obs_groups={
-      "actor": ("actor", "camera"),
-      "critic": ("critic",),
-    },
-    save_interval=100,
-    evaluation_scenes=_EVALUATION_SCENES,
-    experiment_name="push_t_rgb_ppo",
-    run_name=wandb_task_tag(task_id),
-    logger="wandb",
-    wandb_project="mjlab",
-    wandb_tags=(
-      wandb_task_tag(task_id),
-      "push_t",
-      "rgb",
-      "ppo",
-      vision.encoder,
-      vision.adapter,
-    ),
-    clip_actions=1.0,
-    upload_model=True,
-    actor=RslRlModelCfg(
-      **_NETWORK,
-      cnn_cfg={"vision": vision.asdict(), "latent_batchnorm": False},
-      distribution_cfg=_GAUSSIAN,
-      class_name="vbrl.vision.model:VisionModel",
-    ),
-    critic=RslRlModelCfg(**_NETWORK, class_name="MLPModel"),
-    algorithm=_algorithm(
-      cache_frozen_features=vision.frozen,
-      feature_cache_dtype="bfloat16",
-      gradient_accumulation_steps=8,
-    ),
-  )
-
-
 def trossen_realistic_push_t_rgb_distillation_runner_cfg(
   task_id: str, vision: VisionConfig
 ) -> DistillationRunnerCfg:
@@ -140,7 +98,7 @@ def trossen_realistic_push_t_rgb_distillation_runner_cfg(
     max_iterations=_DISTILLATION_MAX_ITERATIONS,
     obs_groups={"student": ("actor", "camera"), "teacher": ("teacher",)},
     save_interval=100,
-    evaluation_scenes=_EVALUATION_SCENES,
+    evaluation_scenes=EVALUATION_SCENES,
     experiment_name="push_t_rgb_distillation",
     run_name=wandb_task_tag(task_id),
     logger="wandb",
@@ -169,6 +127,5 @@ def trossen_realistic_push_t_rgb_distillation_runner_cfg(
 __all__ = [
   "STATE_TASK_ID",
   "trossen_realistic_push_t_rgb_distillation_runner_cfg",
-  "trossen_realistic_push_t_rgb_ppo_runner_cfg",
   "trossen_realistic_push_t_state_ppo_runner_cfg",
 ]

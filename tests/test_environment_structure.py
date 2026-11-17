@@ -233,7 +233,7 @@ def test_native_registry_play_configs_match_task_local_factories() -> None:
     "Mjlab-LiftCube-State-Trossen",
     "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushT-State-Trossen",
-    "Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
   ):
     train = load_env_cfg(task_id)
     play = load_env_cfg(task_id, play=True)

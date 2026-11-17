@@ -15,7 +15,8 @@ from vbrl.scenes.presets import (  # noqa: E402
 
 ALL_SCENES = (
   "default", "procedural", "real_texture", "real_table", "real_texture_wood",
-  "wood", "plaster", "peacock",
+  "wood049", "marble019", "wood", "plaster", "peacock", "ood_light", "object_blue",
+  "goal_blue", "object_blue_goal_purple", "colour_swap",
 )
 # Every training preset randomizes the sun's colour on top of its pose. The
 # matched-evaluation branch deliberately does not; see `_events` in the builder.
@@ -289,3 +290,102 @@ def test_real_texture_wood_draws_only_wood_textures() -> None:
   assert paths
   assert all(ambientcg_family(path) in AMBIENTCG_WOOD_FAMILIES for path in paths)
   assert table_spec(preset).compile().ntex == len(paths) + BACKDROP_COUNT
+
+
+def test_every_student_is_evaluated_in_its_tasks_scenes() -> None:
+  from mjlab.tasks.registry import load_rl_cfg
+
+  import vbrl.tasks  # noqa: F401
+  from vbrl.scenes.presets import EVALUATION_SCENES, GOAL_COLOUR_SCENES
+  from vbrl.tasks import vbrl_task_ids
+
+  assert EVALUATION_SCENES == (
+    "wood049",
+    "real_table",
+    "marble019",
+    "ood_light",
+    "object_blue",
+    "goal_blue",
+    "object_blue_goal_purple",
+    "colour_swap",
+  )
+  students = [t for t in vbrl_task_ids() if "-WoodTable-" in t]
+  assert len(students) == 18
+  for task_id in students:
+    expected = EVALUATION_SCENES
+    if "LiftCube" in task_id:
+      expected = tuple(s for s in EVALUATION_SCENES if s not in GOAL_COLOUR_SCENES)
+    assert load_rl_cfg(task_id).evaluation_scenes == expected, task_id
+
+
+def test_the_evaluation_scenes_draw_the_same_events() -> None:
+  from vbrl.scenes.presets import EVALUATION_SCENES
+
+  configs = [_apply(scene) for scene in EVALUATION_SCENES]
+  for cfg in configs[1:]:
+    assert list(cfg.events) == list(configs[0].events)
+    for name, term in cfg.events.items():
+      reference = configs[0].events[name]
+      assert term.func is reference.func, name
+      assert term.mode == reference.mode, name
+      assert set(term.params) == set(reference.params), name
+
+
+def test_each_ood_scene_moves_exactly_its_factor() -> None:
+  from vbrl.scenes.presets import (
+    BLUE_GOAL,
+    BLUE_OBJECT,
+    OOD_LIGHT_COLOUR,
+    PURPLE_GOAL,
+    REAL_TABLE_GOAL_COLOUR_RANGE,
+    REAL_TABLE_OBJECT_COLOUR_RANGE,
+    SWAP_GOAL,
+    SWAP_OBJECT,
+  )
+
+  def fixed(rgb):
+    return tuple((value, value) for value in rgb)
+
+  expected = {
+    "wood049": (REAL_TABLE_OBJECT_COLOUR_RANGE, REAL_TABLE_GOAL_COLOUR_RANGE, None),
+    "ood_light": (
+      REAL_TABLE_OBJECT_COLOUR_RANGE, REAL_TABLE_GOAL_COLOUR_RANGE, OOD_LIGHT_COLOUR
+    ),
+    "object_blue": (fixed(BLUE_OBJECT), REAL_TABLE_GOAL_COLOUR_RANGE, None),
+    "goal_blue": (REAL_TABLE_OBJECT_COLOUR_RANGE, fixed(BLUE_GOAL), None),
+    "object_blue_goal_purple": (fixed(BLUE_OBJECT), fixed(PURPLE_GOAL), None),
+    "colour_swap": (fixed(SWAP_OBJECT), fixed(SWAP_GOAL), None),
+  }
+  for scene, (obj, goal, light) in expected.items():
+    preset = get_preset(scene)
+    assert preset.table == get_preset("wood049").table, scene
+    assert preset.object_colour_range == obj, scene
+    assert preset.goal_colour_range == goal, scene
+    assert preset.light_colour == light, scene
+    events = _apply(scene).events
+    assert events["object_color"].params["ranges"] == dict(enumerate(obj)), scene
+    assert events["light_intensity"].params["colour"] == light, scene
+
+
+@pytest.mark.parametrize(
+  ("task_id", "event"),
+  [
+    ("Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen", "goal_color"),
+    ("Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen", "goal_color"),
+  ],
+)
+def test_replace_scene_sets_each_tasks_goal_colour(task_id: str, event: str) -> None:
+  from mjlab.tasks.registry import load_env_cfg
+
+  import vbrl.tasks  # noqa: F401
+  from vbrl.scenes.builder import replace_scene
+  from vbrl.scenes.presets import BLUE_GOAL, REAL_TABLE_GOAL_COLOUR_RANGE
+
+  def ranges(cfg):
+    return tuple(cfg.events[event].params["ranges"])
+
+  assert ranges(load_env_cfg(task_id)) == REAL_TABLE_GOAL_COLOUR_RANGE
+  blue = replace_scene(load_env_cfg(task_id, play=True), scene="goal_blue")
+  assert ranges(blue) == tuple((value, value) for value in BLUE_GOAL)
+  back = replace_scene(blue, scene="wood049")
+  assert ranges(back) == REAL_TABLE_GOAL_COLOUR_RANGE

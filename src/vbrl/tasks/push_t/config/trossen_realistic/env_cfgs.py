@@ -9,15 +9,15 @@ from vbrl.asset_zoo.objects import PUSH_T_XML
 from vbrl.asset_zoo.robots.definition import CameraView
 from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
 from vbrl.scenes.builder import apply_scene
+from vbrl.scenes.presets import GOAL_COLOUR_EVENT
 from vbrl.tasks.push_t.goal_marker import (
-  GOAL_COLOUR_EVENT,
   GOAL_ENTITY_NAME,
   GOAL_REAL_RGBA_RANGE,
-  goal_colour_event,
   goal_marker_spec,
 )
 from vbrl.tasks.push_t.push_t_env_cfg import build_env_cfg
 from vbrl.tasks.utils import add_rgb_camera
+from vbrl.tasks.utils.events import goal_colour_event
 
 _OBJECT_NAME = "object"
 # The 45-degree tilted pose, measured against the ChArUco board: it keeps 79% of the
@@ -49,14 +49,14 @@ def trossen_realistic_push_t_state_env_cfg(
 
 
 def trossen_realistic_push_t_rgb_env_cfg(
-  *, scene: str, distill: bool = True, play: bool = False
+  *, scene: str, play: bool = False
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
   cfg = build_env_cfg(
     robot=robot,
     object_name=_OBJECT_NAME,
     rgb=True,
-    distill=distill,
+    distill=True,
     play=play,
     goal_observation_noise=_CALIBRATION_NOISE,
   )
@@ -77,7 +77,9 @@ def trossen_realistic_push_t_rgb_env_cfg(
     object_name=_OBJECT_NAME,
   )
   cfg.scene.entities[GOAL_ENTITY_NAME] = EntityCfg(spec_fn=goal_marker_spec)
-  cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(GOAL_REAL_RGBA_RANGE)
+  cfg.events[GOAL_COLOUR_EVENT] = goal_colour_event(
+    (GOAL_ENTITY_NAME,), GOAL_REAL_RGBA_RANGE
+  )
   if not play:
     cfg.events["camera_fovy"] = EventTermCfg(
       func=dr.cam_fovy,

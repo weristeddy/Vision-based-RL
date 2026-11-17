@@ -55,7 +55,7 @@ def test_push_t_students_distill_with_the_teachers_network() -> None:
   from vbrl.training.distillation import VisualDistillationCfg
 
   state = load_rl_cfg("Mjlab-PushT-State-Trossen")
-  student = load_rl_cfg("Mjlab-PushT-RealTable-DinoV2ViTS14-AfaFull6-Trossen")
+  student = load_rl_cfg("Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen")
 
   assert state.algorithm.learning_rate == 0.0001
   assert state.max_iterations == 8000
@@ -67,34 +67,6 @@ def test_push_t_students_distill_with_the_teachers_network() -> None:
   assert student.teacher.distribution_cfg == state.actor.distribution_cfg
   assert student.student.distribution_cfg["init_std"] == 0.1
   assert student.clip_actions == state.clip_actions == 1.0
-
-
-def test_push_t_visual_ppo_trains_exactly_like_the_teacher() -> None:
-  from dataclasses import asdict
-
-  from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
-
-  from vbrl.tasks.push_t.config.trossen_realistic.rl_cfg import STATE_TASK_ID
-
-  task_id = "Mjlab-PushT-RealTablePPO-DinoV2ViTS14-AfaFull6-Trossen"
-  state, ppo = load_rl_cfg(STATE_TASK_ID), load_rl_cfg(task_id)
-  batching = ("cache_frozen_features", "gradient_accumulation_steps")
-  a, b = asdict(state.algorithm), asdict(ppo.algorithm)
-  assert {k: v for k, v in a.items() if k not in batching} == {
-    k: v for k, v in b.items() if k not in batching
-  }
-  assert ppo.algorithm.gradient_accumulation_steps == 8
-  assert ppo.max_iterations == state.max_iterations
-  assert ppo.obs_groups == {"actor": ("actor", "camera"), "critic": ("critic",)}
-  assert ppo.actor.distribution_cfg == state.actor.distribution_cfg
-  assert ppo.critic == state.critic
-
-  state_env, ppo_env = load_env_cfg(STATE_TASK_ID), load_env_cfg(task_id)
-  assert ppo_env.rewards == state_env.rewards
-  assert ppo_env.terminations == state_env.terminations
-  assert ppo_env.actions == state_env.actions
-  assert ppo_env.commands["push_t_goal"].near_object_start is True
-  assert "teacher" not in ppo_env.observations
 
 
 def test_lift_cube_teacher_bounds_its_actions_like_push_t() -> None:
