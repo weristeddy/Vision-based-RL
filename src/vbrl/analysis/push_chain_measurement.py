@@ -15,8 +15,7 @@ SCENES = {"real_table": "real_table", "wood": "real_texture_wood"}
 POSITION_STD = 0.03
 ANGLE_STD = math.radians(30.0)
 SUCCESS_THRESHOLD = 0.9
-CHAIN_COLOUR, GOAL_COLOUR = "#2a78d6", "#eb6834"
-INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
+CHAIN_COLOUR, GOAL_COLOUR, INK = "#2a78d6", "#eb6834", "#0b0b0b"
 
 
 def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int) -> Any:
@@ -29,6 +28,7 @@ def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int)
   from vbrl.tasks.push_chain.config.trossen_realistic.env_cfgs import (
     trossen_realistic_push_chain_rgb_env_cfg,
   )
+  from vbrl.tasks.push_chain.geometry import LINK_HALF_HEIGHT
 
   cfg = trossen_realistic_push_chain_rgb_env_cfg(
     scene=SCENES[scene],
@@ -37,6 +37,10 @@ def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int)
     play=True,
   )
   cfg.seed = seed
+  # Rendered at rest on the table like the rig's chain, not at the start height the
+  # simulation drops it from: 1 mm of float showed as a 1 mm bias at 45 degrees.
+  rest = (LINK_HALF_HEIGHT, LINK_HALF_HEIGHT)
+  cfg.commands["push_chain_goal"].object_pose_range.z = rest
   cfg.scene.num_envs = num_envs
   for name in ("camera_position", "camera_orientation"):
     cfg.events.pop(name)
@@ -182,67 +186,203 @@ def summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
   }
 
 
-def plot(rows: list[dict[str, Any]], scene: str, output: Path) -> None:
+def _aligned(fit: Any, truth: Any) -> Any:
+  import torch
+
+  from vbrl.tasks.push_chain.geometry import (
+    centre_link,
+    chain_from_pose,
+    chain_landmarks,
+    landmark_errors,
+    reversed_links,
+  )
+
+  fitted, true = (chain_from_pose(torch.tensor(p))[None] for p in (fit, truth))
+  if landmark_errors(fitted, true)[0].argmin() == 0:
+    return np.asarray(fit)
+  links = reversed_links(fitted)[0]
+  count = len(links)
+  middle = chain_landmarks(links)[count]
+  yaws = links[:, 2]
+  yaw = yaws[centre_link(count)].item()
+  return np.r_[middle.numpy(), yaw, torch.diff(yaws).numpy()]
+
+
+def _pose_errors(rows: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
+  accepted = [row for row in rows if row[f"{prefix}_reliable"]]
+  hinges = sorted(
+    key.removeprefix(f"{prefix}_true_")
+    for key in rows[0]
+    if key.startswith(f"{prefix}_true_hinge")
+  )
+  names = ("x", "y", "yaw", *hinges)
+  true = np.array([[row[f"{prefix}_true_{n}"] for n in names] for row in accepted])
+  fit = np.array([[row[f"{prefix}_fit_{n}"] for n in names] for row in accepted])
+  fit = np.array([_aligned(f, t) for f, t in zip(fit, true, strict=True)])
+  angles = np.degrees(np.remainder(fit[:, 2:] - true[:, 2:] + np.pi, 2 * np.pi) - np.pi)
+  return {
+    "true_x": true[:, 0],
+    "x": (fit[:, 0] - true[:, 0]) * 1000.0,
+    "y": (fit[:, 1] - true[:, 1]) * 1000.0,
+    "yaw": angles[:, 0],
+    "hinges": angles[:, 1:],
+    "position": np.hypot(fit[:, 0] - true[:, 0], fit[:, 1] - true[:, 1]) * 1000.0,
+  }
+
+
+def _pose_row(axes: Any, rows: list, prefix: str, colour: str, name: str) -> None:
+  from vbrl.analysis.push_t_measurement import _error_panel, _header, _limit
+
+  errors = _pose_errors(rows, prefix)
+  millimetres = _limit(errors["x"], errors["y"])
+  degrees = _limit(errors["yaw"], errors["hinges"].ravel())
+  labels = "abcd" if prefix == "goal" else "efgh"
+  panels = (("x", " mm"), ("y", " mm"), ("yaw", "°"), ("hinges", "°"))
+  for axis, (key, unit), label in zip(axes, panels, labels, strict=True):
+    error = errors[key]
+    x = errors["true_x"]
+    if key == "hinges":
+      x, error = np.repeat(x, error.shape[1]), error.ravel()
+    limit = millimetres if unit == " mm" else degrees
+    _error_panel(axis, x, error, colour, limit, unit)
+    _header(axis, f"({label}) {name}, {key}", error, limit, unit)
+    axis.set_ylabel(f"Δ{key} ({unit.strip()})")
+    axis.set_xlabel("True x (m)")
+
+
+def _overlap_panel(axis: Any, rows: list) -> None:
+  from vbrl.analysis.push_t_measurement import (
+    REFERENCE_COLOUR,
+    _error_panel,
+    _header,
+    _limit,
+  )
+
+  accepted = [row for row in rows if row["chain_reliable"] and row["goal_reliable"]]
+  true = np.array([row["overlap_true"] for row in accepted]) * 100.0
+  error = np.array([row["overlap_measured"] for row in accepted]) * 100.0 - true
+  threshold = SUCCESS_THRESHOLD * 100.0
+  disagree = (true >= threshold) != (true + error >= threshold)
+  limit = _limit(error)
+  _error_panel(axis, true[~disagree], error[~disagree], CHAIN_COLOUR, limit, " pp")
+  axis.axvline(threshold, color=REFERENCE_COLOUR, linewidth=0.8, linestyle=(0, (4, 3)))
+  axis.scatter(
+    true[disagree],
+    error[disagree],
+    s=12,
+    color=GOAL_COLOUR,
+    linewidths=0,
+    label=f"success at {threshold:.0f} % flipped ({disagree.sum()})",
+  )
+  axis.legend(loc="lower left", frameon=False, fontsize=6.5, handletextpad=0.2)
+  _header(axis, "(i) Chain overlap", error, limit, " pp")
+  axis.set_xlabel("True overlap (%)")
+  axis.set_ylabel("Δ overlap (pp)")
+  axis.set_xlim(0, 100)
+
+
+def _figure(height: float) -> Any:
   import matplotlib
 
   matplotlib.use("Agg")
   import matplotlib.pyplot as plt
 
-  figure, (errors, overlaps) = plt.subplots(1, 2, figsize=(10.0, 4.2))
-  for k, (name, colour) in enumerate((("goal", GOAL_COLOUR), ("chain", CHAIN_COLOUR))):
-    values = np.sort([r[f"{name}_error_mm"] for r in rows if r[f"{name}_reliable"]])
-    share = np.arange(1, len(values) + 1) / len(rows)
-    errors.step(values, share, where="post", color=colour, lw=2, label=name)
-    errors.text(
-      0.97,
-      0.42 - 0.08 * k,
-      f"{name}: median {np.median(values):.2f} mm, {len(values)}/{len(rows)} found",
-      transform=errors.transAxes,
-      ha="right",
-      fontsize=9,
-      color=INK,
-    )
-  errors.set_xlim(0, 5)
-  errors.set_ylim(0, 1.02)
-  errors.set_xlabel("worst-landmark error [mm]")
-  errors.set_ylabel("share of samples")
-  errors.set_title("Pose error", loc="left", fontsize=11, color=INK)
-  errors.legend(frameon=False, loc="lower right")
-
-  both = [r for r in rows if r["goal_reliable"] and r["chain_reliable"]]
-  true = np.array([r["overlap_true"] for r in both])
-  measured = np.array([r["overlap_measured"] for r in both])
-  flipped = (true >= SUCCESS_THRESHOLD) != (measured >= SUCCESS_THRESHOLD)
-  overlaps.plot([0, 1], [0, 1], color=MUTED, lw=1)
-  for axis in (overlaps.axvline, overlaps.axhline):
-    axis(SUCCESS_THRESHOLD, color=MUTED, lw=1, ls="--")
-  overlaps.scatter(true[~flipped], measured[~flipped], s=10, color=CHAIN_COLOUR)
-  overlaps.scatter(
-    true[flipped], measured[flipped], s=24, color=GOAL_COLOUR, label="success flipped"
+  plt.rcParams.update(
+    {"font.size": 8, "pdf.fonttype": 42, "ps.fonttype": 42, "axes.linewidth": 0.6}
   )
-  error = np.abs(measured - true) * 100.0
-  overlaps.set_title("Chain overlap", loc="left", fontsize=11, color=INK)
-  overlaps.text(
-    0.97,
-    0.06,
-    f"error {error.mean():.2f} pp (median {np.median(error):.2f})\n"
-    f"success flipped in {int(flipped.sum())} of {len(both)}",
-    transform=overlaps.transAxes,
-    ha="right",
-    fontsize=9,
+  return plt.figure(figsize=(8.0, height), layout="constrained")
+
+
+def _save(figure: Any, output: Path, name: str) -> None:
+  import matplotlib.pyplot as plt
+
+  output.mkdir(parents=True, exist_ok=True)
+  for suffix in ("pdf", "png"):
+    figure.savefig(output / f"{name}.{suffix}", dpi=300)
+  plt.close(figure)
+
+
+def plot(rows: list[dict[str, Any]], output: Path) -> None:
+  figure = _figure(7.0)
+  grid = figure.add_gridspec(3, 4)
+  goal = [figure.add_subplot(grid[0, k]) for k in range(4)]
+  chain = [figure.add_subplot(grid[1, k]) for k in range(4)]
+  _pose_row(goal, rows, "goal", GOAL_COLOUR, "Goal")
+  _pose_row(chain, rows, "chain", CHAIN_COLOUR, "Chain")
+  _overlap_panel(figure.add_subplot(grid[2, :]), rows)
+  _save(figure, output, "measurement_benchmark")
+
+
+def _bar_panel(axis: Any, rows: list, key: str, unit: str) -> None:
+  from matplotlib.colors import to_rgba
+
+  from vbrl.analysis.push_t_measurement import _style
+
+  bars = []
+  for prefix, name, colour in (
+    ("goal", "Goal", GOAL_COLOUR),
+    ("chain", "Chain", CHAIN_COLOUR),
+  ):
+    errors = np.abs(_pose_errors(rows, prefix)[key]).ravel()
+    count = sum(row[f"{prefix}_reliable"] for row in rows)
+    bars.append((name, colour, errors.mean(), errors.std(), count))
+  top = 1.3 * max(mean + spread for _, _, mean, spread, _ in bars)
+  for position, (_, colour, mean, spread, _) in enumerate(bars):
+    axis.bar(
+      position,
+      mean,
+      width=0.6,
+      color=to_rgba(colour, 0.25),
+      edgecolor=colour,
+      linewidth=1.4,
+    )
+    axis.errorbar(
+      position, mean, yerr=spread, color=colour, capsize=5, elinewidth=1.2, capthick=1.2
+    )
+    axis.text(
+      position,
+      mean + spread + 0.03 * top,
+      f"{mean:.2f} ± {spread:.2f}",
+      ha="center",
+      va="bottom",
+      color=INK,
+      fontsize=7,
+    )
+  axis.set_xticks(
+    range(len(bars)), [f"{name}\nn = {count}" for name, _, _, _, count in bars]
+  )
+  axis.tick_params(axis="x", length=0)
+  axis.set_xlim(-0.6, len(bars) - 0.4)
+  axis.set_ylim(0.0, top)
+  axis.set_ylabel(f"Error ({unit})")
+  _style(axis)
+  axis.grid(False, axis="x")
+
+
+def plot_summary(rows: list[dict[str, Any]], output: Path) -> None:
+  from vbrl.analysis.push_t_measurement import _subtitle
+
+  figure = _figure(3.3)
+  figure.suptitle(
+    f"Push-Chain pose measurement against ground truth ({len(rows)} rendered scenes)",
+    x=0.01,
+    ha="left",
+    fontsize=10,
+    fontweight="bold",
     color=INK,
   )
-  overlaps.set_xlabel("true overlap")
-  overlaps.set_ylabel("measured overlap")
-  overlaps.legend(frameon=False, loc="upper left")
-  for axis in (errors, overlaps):
-    axis.grid(color=GRID, lw=0.8)
-    axis.spines[["top", "right"]].set_visible(False)
-  figure.suptitle(f"Push-Chain rig measurement on {scene}", fontsize=12, color=INK)
-  figure.tight_layout()
-  for suffix in ("png", "pdf"):
-    figure.savefig(output / f"measurement.{suffix}", dpi=200)
-  plt.close(figure)
+  grid = figure.add_gridspec(1, 3)
+  for k, (key, unit, title, note) in enumerate(
+    (
+      ("position", "mm", "(a) Position", "middle point, xy distance, mean ± sd"),
+      ("yaw", "°", "(b) Yaw", "absolute angle, mean ± sd"),
+      ("hinges", "°", "(c) Hinges", "absolute angle per hinge, mean ± sd"),
+    )
+  ):
+    axis = figure.add_subplot(grid[0, k])
+    _bar_panel(axis, rows, key, unit)
+    _subtitle(axis, title, note)
+  _save(figure, output, "measurement_summary")
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -305,10 +445,11 @@ def main(argv: list[str] | None = None) -> None:
     _write_csv(samples, rows)
   for key, value in summary(rows).items():
     print(f"{key:24s} {value}")
-  plot(rows, args.scene, output)
+  plot(rows, output)
+  plot_summary(rows, output)
 
 
-__all__ = ["main", "plot", "render", "simulate", "summary"]
+__all__ = ["main", "plot", "plot_summary", "render", "simulate", "summary"]
 
 
 if __name__ == "__main__":
