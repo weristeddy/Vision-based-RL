@@ -11,11 +11,12 @@ torch = pytest.importorskip("torch")
 
 from vbrl.paths import model_root  # noqa: E402
 from vbrl.vision.backbones import dinov2 as _dinov2  # noqa: E402
+from vbrl.vision.backbones import dinov3 as _dinov3  # noqa: E402
 from vbrl.vision.backbones import r3m as _r3m  # noqa: E402
 from vbrl.vision.config import VisionConfig  # noqa: E402
 from vbrl.vision.registry import ENCODERS, build_encoder  # noqa: E402
 
-_LOADERS = {"dinov2": _dinov2.load, "r3m": _r3m.load}
+_LOADERS = {"dinov2": _dinov2.load, "dinov3": _dinov3.load, "r3m": _r3m.load}
 
 
 TASK_IDS = (
@@ -61,6 +62,7 @@ def _cached_pretrained_backbones(monkeypatch: pytest.MonkeyPatch) -> None:
   import copy
 
   monkeypatch.setattr(_dinov2, "load", lambda: copy.deepcopy(_shared_backbone("dinov2")))
+  monkeypatch.setattr(_dinov3, "load", lambda: copy.deepcopy(_shared_backbone("dinov3")))
   monkeypatch.setattr(_r3m, "load", lambda: copy.deepcopy(_shared_backbone("r3m")))
 
 

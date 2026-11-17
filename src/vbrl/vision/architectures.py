@@ -3,7 +3,7 @@ from __future__ import annotations
 from vbrl.vision.config import AdapterName, EncoderName, VisionConfig
 
 PRETRAINED_ENCODERS = frozenset(
-  {"dinov2_vits14", "r3m_resnet50", "r3m_resnet50_layer3"}
+  {"dinov2_vits14", "dinov3_vits16", "r3m_resnet50", "r3m_resnet50_layer3"}
 )
 
 # AFA head count is not a free parameter.
@@ -80,6 +80,7 @@ ARCHITECTURES: dict[str, VisionConfig] = {
   "R3MResNet50-AfaFull32": vision_cfg(
     "r3m_resnet50", "afa_full", afa_num_heads=2048 // AFA_HEAD_DIM
   ),
+  "DinoV3ViTS16-Global": vision_cfg("dinov3_vits16", "global_normalized"),
   # Each row below pools its encoder's feature map down to a grid the encoder does not
   # produce.
   "NatureCnn-LocalGrid7": vision_cfg("nature_cnn", "local_grid", target_grid_size=7),
@@ -93,8 +94,8 @@ ARCHITECTURES: dict[str, VisionConfig] = {
 }
 
 
-# The 20 rows above the superseded block: what a new registration crosses.
-CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:20]
+# The 21 rows above the superseded block: what a new registration crosses.
+CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:21]
 
 
 __all__ = [

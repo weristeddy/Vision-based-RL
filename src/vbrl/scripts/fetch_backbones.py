@@ -55,11 +55,15 @@ def main(argv: Sequence[str] | None = None) -> int:
   root.mkdir(parents=True, exist_ok=True)
   os.environ["VBRL_MODEL_ROOT"] = str(root)
 
-  from vbrl.vision.backbones import dinov2, r3m
+  from vbrl.vision.backbones import dinov2, dinov3, r3m
 
   if arguments.verify:
     failures = 0
-    for name, load in (("dinov2-small", dinov2.load), ("r3m resnet50", r3m.load)):
+    for name, load in (
+      ("dinov2-small", dinov2.load),
+      ("dinov3 vit-s/16", dinov3.load),
+      ("r3m resnet50", r3m.load),
+    ):
       try:
         load()
         print(f"  ok       {name}")
@@ -72,6 +76,8 @@ def main(argv: Sequence[str] | None = None) -> int:
   print(f"Fetching backbones into {root}")
   dinov2.load(allow_download=True)
   print("  dinov2-small")
+  dinov3.load(allow_download=True)
+  print("  dinov3 vit-s/16")
   r3m.load(allow_download=True)
   print("  r3m resnet50")
   return 0

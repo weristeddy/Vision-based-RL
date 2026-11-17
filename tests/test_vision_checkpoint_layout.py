@@ -30,6 +30,20 @@ class _FakeDinoV2(nn.Module):
     }
 
 
+class _FakeDinoV3(nn.Module):
+  num_prefix_tokens = 5
+
+  def __init__(self) -> None:
+    super().__init__()
+    self.patch_embed = nn.Conv2d(3, 384, kernel_size=16, stride=16)
+
+  def forward_features(self, images: torch.Tensor) -> torch.Tensor:
+    patches = (images.shape[-2] // 16) * (images.shape[-1] // 16)
+    return torch.zeros(
+      images.shape[0], patches + 5, 384, dtype=images.dtype, device=images.device
+    )
+
+
 class _FakeResNet50(nn.Module):
   def __init__(self) -> None:
     super().__init__()
@@ -54,9 +68,10 @@ class _FakeR3M(nn.Module):
 
 @pytest.fixture
 def _fake_backbones(monkeypatch: pytest.MonkeyPatch) -> None:
-  from vbrl.vision.backbones import dinov2, r3m
+  from vbrl.vision.backbones import dinov2, dinov3, r3m
 
   monkeypatch.setattr(dinov2, "load", _FakeDinoV2)
+  monkeypatch.setattr(dinov3, "load", _FakeDinoV3)
   monkeypatch.setattr(r3m, "load", _FakeR3M)
 
 

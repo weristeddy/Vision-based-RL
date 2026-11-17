@@ -58,7 +58,7 @@ dependencies = [
   # Vision backbones. R3M publishes no wheel, so it is pinned to the source
   # revision that produced the retained checkpoints (see [tool.uv.sources]).
   "transformers==4.55.2",
-  "timm==1.0.19",
+  "timm==1.0.30",
   "safetensors==0.6.2",
   "r3m",
   # Analysis, plotting, and asset fetching.

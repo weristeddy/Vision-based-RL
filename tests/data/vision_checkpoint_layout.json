@@ -367,6 +367,12 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
+    "Mjlab-PushT-WoodTable-DinoV3ViTS16-Global-Trossen": [
+      "adapter.1.bias:(384,)",
+      "adapter.1.weight:(384,)",
+      "backbone.patch_embed.bias:(384,)",
+      "backbone.patch_embed.weight:(384, 3, 16, 16)"
+    ],
     "Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen": [
       "adapter.proj.bias:(256,)",
       "adapter.proj.weight:(256, 36864)",

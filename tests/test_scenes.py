@@ -310,7 +310,7 @@ def test_every_student_is_evaluated_in_its_tasks_scenes() -> None:
     "colour_swap",
   )
   students = [t for t in vbrl_task_ids() if "-WoodTable-" in t]
-  assert len(students) == 18
+  assert len(students) == 19
   for task_id in students:
     expected = EVALUATION_SCENES
     if "LiftCube" in task_id:

@@ -15,7 +15,7 @@ from vbrl.vision.preprocessing import prepare_images
 from vbrl.vision.registry import ADAPTERS, ENCODERS, build_encoder
 
 BACKBONES = (
-  "nature_cnn", "compact_vit", "dinov2_vits14",
+  "nature_cnn", "compact_vit", "dinov2_vits14", "dinov3_vits16",
   "r3m_resnet50", "r3m_resnet50_layer3",
 )
 ADAPTER_NAMES = (
@@ -45,9 +45,10 @@ class _StubR3M(nn.Module):
 
 @pytest.fixture
 def _fake_pretrained_backbones(monkeypatch: pytest.MonkeyPatch) -> None:
-  from vbrl.vision.backbones import dinov2, r3m
+  from vbrl.vision.backbones import dinov2, dinov3, r3m
 
   monkeypatch.setattr(dinov2, "load", nn.Identity)
+  monkeypatch.setattr(dinov3, "load", nn.Identity)
   monkeypatch.setattr(r3m, "load", _StubR3M)
 
 
@@ -61,6 +62,7 @@ def test_declared_backbone_adapter_capability_matrix_is_complete() -> None:
     "nature_cnn": (64, "scratch", True, None),
     "compact_vit": (128, "scratch", True, None),
     "dinov2_vits14": (384, "pretrained", False, 128),
+    "dinov3_vits16": (384, "pretrained", False, 128),
     "r3m_resnet50": (2048, "pretrained", False, 256),
     "r3m_resnet50_layer3": (1024, "pretrained", False, 128),
   }
@@ -89,6 +91,7 @@ NATIVE_GRIDS = {
   "nature_cnn": 24,
   "compact_vit": 14,
   "dinov2_vits14": 16,
+  "dinov3_vits16": 14,
   "r3m_resnet50": 7,
   "r3m_resnet50_layer3": 14,
 }

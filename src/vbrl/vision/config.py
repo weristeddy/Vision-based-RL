@@ -9,6 +9,7 @@ EncoderName: TypeAlias = Literal[
   "nature_cnn",
   "compact_vit",
   "dinov2_vits14",
+  "dinov3_vits16",
   "r3m_resnet50",
   "r3m_resnet50_layer3",
 ]

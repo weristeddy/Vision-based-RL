@@ -8,6 +8,8 @@ from vbrl.paths import CHECKOUT_MODEL_DIRECTORY, DEFAULT_MODEL_ROOT, model_root
 from vbrl.vision.backbones.weights import (
   DINOV2_REPO,
   DINOV2_REVISION,
+  DINOV3_REPO,
+  DINOV3_REVISION,
   R3M_MODEL,
   huggingface_cache,
   r3m_files,
@@ -53,6 +55,12 @@ def test_the_dinov2_revision_is_pinned_to_a_commit() -> None:
   assert set(DINOV2_REVISION) <= set("0123456789abcdef")
   assert DINOV2_REPO == "facebook/dinov2-small"
   assert R3M_MODEL == "resnet50"
+
+
+def test_the_dinov3_revision_is_pinned_to_a_commit() -> None:
+  assert len(DINOV3_REVISION) == 40
+  assert set(DINOV3_REVISION) <= set("0123456789abcdef")
+  assert DINOV3_REPO == "timm/vit_small_patch16_dinov3.lvd1689m"
 
 
 def test_fetching_weights_does_not_require_torch() -> None:

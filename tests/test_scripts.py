@@ -152,7 +152,10 @@ def test_after_training_the_run_is_evaluated_published_and_trimmed(
     assert (tmp_path / "evaluation.csv").exists()
     assert (tmp_path / "final_evaluation.csv").exists()
     assert {"eval/iteration": 200, "eval/success": 0.25} in run.rows
-    assert run.summary["final/real_texture_wood/success"] == 0.5
+    from vbrl.scenes.presets import EVALUATION_SCENES
+
+    for scene in EVALUATION_SCENES:
+      assert run.summary[f"final/{scene}/success"] == 0.5
     assert any("final/success" in row for row in run.rows)
 
 
