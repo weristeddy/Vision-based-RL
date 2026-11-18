@@ -24,6 +24,7 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-State-Trossen",
     "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
     "Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-PushT-WoodTable-DinoV3ViTS16-AfaFull6-Trossen",
     "Mjlab-PushT-WoodTable-DinoV3ViTS16-Global-Trossen",
     "Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen",
     "Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen",
@@ -42,11 +43,11 @@ EXPECTED_TASK_IDS = frozenset(
 )
 
 
-def test_the_registered_id_set_is_exactly_these_24_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_25_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 24
+  assert len(EXPECTED_TASK_IDS) == 25
 
 
 def test_no_id_names_the_default_camera() -> None:
@@ -83,7 +84,7 @@ def test_every_visual_task_sees_the_one_external_camera() -> None:
     assert external <= {"external_cam"}, f"{task_id} has {external}"
     seen_external += bool(external)
 
-  assert seen_external == 13
+  assert seen_external == 14
 
 
 def test_every_push_t_arm_samples_the_full_goal_yaw() -> None:

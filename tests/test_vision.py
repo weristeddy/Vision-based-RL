@@ -144,7 +144,7 @@ def test_afa_head_count_follows_the_published_64_wide_split() -> None:
     suffix = "Afa" if config.adapter == "afa" else "AfaFull"
     assert token.endswith(f"-{suffix}{config.afa_num_heads}"), token
 
-  assert seen == 5
+  assert seen == 6
 
 
 @pytest.mark.usefixtures("_fake_pretrained_backbones")

@@ -37,6 +37,7 @@ register_mjlab_task(
 _distill("Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen", "DinoV2ViTS14-Global", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-DinoV3ViTS16-Global-Trossen", "DinoV3ViTS16-Global", "real_texture_wood")
+_distill("Mjlab-PushT-WoodTable-DinoV3ViTS16-AfaFull6-Trossen", "DinoV3ViTS16-AfaFull6", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen", "R3MResNet50-AfaFull32", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen", "R3MResNet50-Global", "real_texture_wood")
 _distill("Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen", "NatureCnn-FlattenRelu", "real_texture_wood")
