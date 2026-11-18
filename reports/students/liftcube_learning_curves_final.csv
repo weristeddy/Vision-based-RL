@@ -1,0 +1,13 @@
+curve,metric,seeds,mean,std,runs
+DINOv2 + AFA,success,3,100.0,0.0,oaq4s80l qm999vka buljwnnl
+DINOv2 global,success,3,99.21875,0.7042092334890604,lxecudf0 v3zwmalb q274r4ra
+R3M + AFA,success,3,100.0,0.0,94dlia0s zyiyjmnb vqm70h53
+R3M global,success,3,99.67447916666666,0.22552744890219759,csfdx04e 4md02xdm himcw4vq
+Nature CNN,success,3,100.0,0.0,vwr1mvaf 5o1prtxa rumte7b7
+CompactViT,success,3,100.0,0.0,xzshwd6v qhqnoijf swff3q1s
+DINOv2 + AFA,position_error,3,7.510661102742233,0.7730226928032481,oaq4s80l qm999vka buljwnnl
+DINOv2 global,position_error,3,19.929103018322774,2.6256681916057865,lxecudf0 v3zwmalb q274r4ra
+R3M + AFA,position_error,3,8.199075406613096,0.6483368132223943,94dlia0s zyiyjmnb vqm70h53
+R3M global,position_error,3,10.308577615319336,1.0053400851363214,csfdx04e 4md02xdm himcw4vq
+Nature CNN,position_error,3,7.7601040348630095,0.4321013169553548,vwr1mvaf 5o1prtxa rumte7b7
+CompactViT,position_error,3,7.953419563383099,0.5547283970890072,xzshwd6v qhqnoijf swff3q1s

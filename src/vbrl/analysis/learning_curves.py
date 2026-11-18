@@ -82,6 +82,7 @@ def plot(
   output: Path,
   name: str,
   seeds: bool = False,
+  ylims: dict[str, tuple[float, float]] | None = None,
 ) -> list[dict[str, object]]:
   import matplotlib
 
@@ -131,7 +132,7 @@ def plot(
         "std": final.std(ddof=1) * scale if len(final) > 1 else 0.0,
         "runs": " ".join(curve.runs),
       })
-    _style(axis, label, limits)
+    _style(axis, label, (ylims or {}).get(metric, limits))
   if len(curves) > 1 or reference is not None:
     handles, labels = axes[0][0].get_legend_handles_labels()
     figure.legend(
@@ -146,6 +147,14 @@ def plot(
     figure.savefig(output / f"{name}.{suffix}", dpi=300)
   plt.close(figure)
   return summary
+
+
+def _parse_ylim(text: str) -> tuple[str, tuple[float, float]]:
+  metric, separator, bounds = text.partition("=")
+  low, comma, high = bounds.partition(",")
+  if not separator or not comma or metric not in METRICS:
+    raise ValueError(f"Expected metric=low,high, metric in {sorted(METRICS)}: {text!r}")
+  return metric, (float(low), float(high))
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -168,6 +177,10 @@ def main(argv: list[str] | None = None) -> None:
   parser.add_argument(
     "--seeds", action="store_true", help="thin line per seed instead of the band"
   )
+  parser.add_argument(
+    "--ylim", action="append", default=[], type=_parse_ylim,
+    help="metric=low,high in plotted units, e.g. position_error=0,40",
+  )
   args = parser.parse_args(argv)
 
   metrics = tuple(args.metric)
@@ -177,7 +190,8 @@ def main(argv: list[str] | None = None) -> None:
     for group in groups
   }
   summary = plot(
-    args.curve, args.reference, metrics, data, args.output, args.name, args.seeds
+    args.curve, args.reference, metrics, data, args.output, args.name, args.seeds,
+    dict(args.ylim),
   )
   _write_csv(
     args.output / f"{args.name}_curves.csv",
