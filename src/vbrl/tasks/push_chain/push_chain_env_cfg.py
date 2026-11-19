@@ -210,9 +210,9 @@ def build_env_cfg(
     },
   )
   hinges = SceneEntityCfg(object_name, joint_names=mdp.HINGE_JOINTS)
-  for name, func in (
-    ("hinge_friction", mdp.dr.joint_friction),
-    ("hinge_damping", mdp.dr.joint_damping),
+  for name, func, distribution, ranges in (
+    ("hinge_friction", mdp.dr.joint_friction, "log_uniform", mdp.HINGE_FRICTION_RANGE),
+    ("hinge_damping", mdp.dr.joint_damping, "uniform", mdp.HINGE_DAMPING_RANGE),
   ):
     cfg.events[name] = EventTermCfg(
       func=func,
@@ -220,8 +220,8 @@ def build_env_cfg(
       params={
         "asset_cfg": hinges,
         "operation": "scale",
-        "distribution": "uniform",
-        "ranges": mdp.HINGE_SCALE_RANGE,
+        "distribution": distribution,
+        "ranges": ranges,
       },
     )
   cfg.scene.sensors += (

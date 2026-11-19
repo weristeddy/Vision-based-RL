@@ -14,12 +14,8 @@ from vbrl.training.distillation import DistillationRunnerCfg, VisualDistillation
 from vbrl.training.runner import VbrlOnPolicyRunnerCfg
 from vbrl.vision.config import VisionConfig
 
-STATE_TASK_ID = "Mjlab-PushChain-State-Trossen"
 
-
-def trossen_realistic_push_chain_state_ppo_runner_cfg(
-  task_id: str = STATE_TASK_ID,
-) -> VbrlOnPolicyRunnerCfg:
+def trossen_realistic_push_chain_state_ppo_runner_cfg(task_id: str) -> VbrlOnPolicyRunnerCfg:
   return VbrlOnPolicyRunnerCfg(
     seed=0,
     num_steps_per_env=16,
@@ -83,7 +79,6 @@ def trossen_realistic_push_chain_rgb_distillation_runner_cfg(
 
 
 __all__ = [
-  "STATE_TASK_ID",
   "trossen_realistic_push_chain_rgb_distillation_runner_cfg",
   "trossen_realistic_push_chain_state_ppo_runner_cfg",
 ]

@@ -6,10 +6,10 @@
 
     link0 (ring end) - link1 (middle) - link2 (peg end)
 
-  Lengths as push_chain.xml: end parts 70 mm from the free end to the pin, middle parts
+  Lengths: end parts 70 mm from the free end to the pin, middle parts
   87.5 mm between their pins, all 30 mm wide and 30 mm high, every full-height block
   52.5 mm long and starting 17.5 mm from its pin (joint stop about 97-99 deg).
-  Peg (D7.5) and holes (D8) are not geoms: the hinge replaces them.
+  Peg (D7) and holes (D8, 1 mm clearance) are not geoms: the hinge replaces them.
   Mass, centre of mass and full inertia are computed from the solid parts (pegs
   included, holes removed) at 341.1 kg/m^3, the effective density of the earlier
   end link. TODO: weigh the printed parts and scale mass and inertia.
@@ -36,13 +36,18 @@
     </default>
     <default class="hinge">
       <!-- range +-97 deg; limit stiffer than MuJoCo's default (0.02 s), the
-           stiffest that stays stable at the 5 ms timestep -->
+           stiffest that stays stable at the 5 ms timestep.
+           frictionloss: estimate for printed PLA on PLA (mu ~0.45) with 1 mm peg
+           clearance. Unloaded the joint has no contact, so friction comes only from
+           the force that drags the other links (0.05-0.2 N) acting at the 3.5 mm
+           peg radius: 0.08-0.3 mN m. Nominal 0.2 mN m, randomized in training.
+           damping: a dry joint has almost none; kept small for numerical stability. -->
       <joint
         type="hinge"
         limited="true"
         range="-1.69297 1.69297"
-        damping="0.0005"
-        frictionloss="0.001"
+        damping="0.0001"
+        frictionloss="0.0002"
         armature="1e-05"
         solreflimit="0.01 1"
         solimplimit="0.95 0.99 0.001 0.5 2"
@@ -61,7 +66,7 @@
   <worldbody>
     <body name="push_chain_link1">
       <freejoint name="push_chain_joint" />
-      <inertial pos="0.00592 0 -2.52666e-05" mass="0.0249017" fullinertia="3.67378e-06 2.01862e-05 2.01211e-05 0 2.00422e-06 0" />
+      <inertial pos="0.0060116 0 -1.932e-05" mass="0.0248558" fullinertia="3.67124e-06 2.00703e-05 2.00072e-05 0 2.01157e-06 0" />
       <geom name="push_chain_link1_plate_collision" class="collision" type="box" size="0.00875 0.015 0.00375" pos="-0.035 0 0.01125" />
       <geom name="push_chain_link1_plate_tip_collision" class="collision" type="cylinder" size="0.015 0.00375" pos="-0.04375 0 0.01125" />
       <geom name="push_chain_link1_body_collision" class="collision" type="box" size="0.02625 0.015 0.015" pos="0 0 0" />
@@ -84,7 +89,7 @@
       </body>
       <body name="push_chain_link2" pos="0.07875 0 0">
         <joint name="push_chain_hinge1" class="hinge" pos="-0.035 0 0" axis="0 0 1" />
-        <inertial pos="0.00304416 0 0.0012952" mass="0.0186919" fullinertia="2.84971e-06 9.17414e-06 9.04721e-06 0 8.53522e-07 0" />
+        <inertial pos="0.00313768 0 0.00130637" mass="0.0186461" fullinertia="2.84669e-06 9.10462e-06 8.9801e-06 0 8.61467e-07 0" />
         <geom name="push_chain_link2_body_collision" class="collision" type="box" size="0.02625 0.015 0.015" pos="0.00875 0 0" />
         <geom name="push_chain_link2_plate_collision" class="collision" type="box" size="0.00875 0.015 0.00375" pos="-0.02625 0 0.01125" />
         <geom name="push_chain_link2_plate_tip_collision" class="collision" type="cylinder" size="0.015 0.00375" pos="-0.035 0 0.01125" />

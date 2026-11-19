@@ -30,24 +30,23 @@ EXPECTED_TASK_IDS = frozenset(
     "Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen",
     "Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen",
     "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen",
-    "Mjlab-PushChain-State-Trossen",
     "Mjlab-PushChain3-State-Trossen",
     "Mjlab-PushChain4-State-Trossen",
-    "Mjlab-PushChain-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
-    "Mjlab-PushChain-WoodTable-DinoV2ViTS14-Global-Trossen",
-    "Mjlab-PushChain-WoodTable-R3MResNet50-AfaFull32-Trossen",
-    "Mjlab-PushChain-WoodTable-R3MResNet50-Global-Trossen",
-    "Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen",
-    "Mjlab-PushChain-WoodTable-CompactVit-Svea-Trossen",
+    "Mjlab-PushChain3-WoodTable-DinoV2ViTS14-AfaFull6-Trossen",
+    "Mjlab-PushChain3-WoodTable-DinoV2ViTS14-Global-Trossen",
+    "Mjlab-PushChain3-WoodTable-R3MResNet50-AfaFull32-Trossen",
+    "Mjlab-PushChain3-WoodTable-R3MResNet50-Global-Trossen",
+    "Mjlab-PushChain3-WoodTable-NatureCnn-FlattenRelu-Trossen",
+    "Mjlab-PushChain3-WoodTable-CompactVit-Svea-Trossen",
   )
 )
 
 
-def test_the_registered_id_set_is_exactly_these_25_tasks() -> None:
+def test_the_registered_id_set_is_exactly_these_24_tasks() -> None:
   from vbrl.tasks import vbrl_task_ids
 
   assert frozenset(vbrl_task_ids()) == EXPECTED_TASK_IDS
-  assert len(EXPECTED_TASK_IDS) == 25
+  assert len(EXPECTED_TASK_IDS) == 24
 
 
 def test_no_id_names_the_default_camera() -> None:

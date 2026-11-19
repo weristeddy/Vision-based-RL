@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 SUCCESS_THRESHOLD = 0.9
 
 
 def main(argv: Any = None) -> int:
-  from vbrl.asset_zoo.objects import PUSH_CHAIN_XML
   from vbrl.deployment.push_chain import frame
   from vbrl.deployment.push_chain.silhouette import measure_chain, overlap, render_chain
 
@@ -15,16 +13,11 @@ def main(argv: Any = None) -> int:
     "Fit the chain in one external-camera frame, with the arm at home, and print its "
     "overlap with the goal saved by measure_goal."
   )
-  parser.add_argument(
-    "--chain-xml",
-    type=Path,
-    default=PUSH_CHAIN_XML,
-    help="Model of the chain on the table (default: the original three-link chain).",
-  )
+  parser.add_argument("--links", type=int, default=3, help="Number of chain links.")
   arguments = parser.parse_args(argv)
   goal = frame.read_goal(arguments.goal_file)
   view, image = frame.load(arguments)
-  fit = measure_chain(view, image, arguments.chain_xml)
+  fit = measure_chain(view, image, arguments.links)
   frame.report(arguments, image, "chain", fit.pose, fit, render_chain(view, fit.pose))
   print(f"goal   {frame.pose(goal)}")
   coverage, lowest_link = overlap(fit.pose, goal)

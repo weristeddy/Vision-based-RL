@@ -4,12 +4,11 @@ import functools
 import itertools
 import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from vbrl.asset_zoo.objects import PUSH_CHAIN_XML
+from vbrl.asset_zoo.objects import push_chain_xml
 from vbrl.deployment.push_t.silhouette import (
   CHROMATICITY_MARGIN,
   _fill,
@@ -63,10 +62,10 @@ def _pins(chain: Any) -> Any:
 
 
 @functools.cache
-def _parts(chain_xml: Path) -> tuple[tuple[int, Any, float, float], ...]:
+def _parts(num_links: int) -> tuple[tuple[int, Any, float, float], ...]:
   import mujoco
 
-  model = mujoco.MjModel.from_xml_path(str(chain_xml))
+  model = mujoco.MjModel.from_xml_path(str(push_chain_xml(num_links)))
   parts = []
   for geom in range(model.ngeom):
     if not model.geom_contype[geom]:
@@ -91,14 +90,10 @@ def _prism(view: Any, local: Any, pose: Any, low: float, high: float) -> Any:
   return cv2.convexHull(np.concatenate(list(levels)).astype(np.float32))[:, 0]
 
 
-def num_links(chain_xml: Path) -> int:
-  return 1 + max(link for link, *_ in _parts(chain_xml))
-
-
-def render_chain(view: Any, pose: Any, chain_xml: Path = PUSH_CHAIN_XML) -> Any:
+def render_chain(view: Any, pose: Any) -> Any:
   mask = np.zeros((view.height, view.width), np.uint8)
   chain = links(pose)
-  for link, outline, low, high in _parts(chain_xml):
+  for link, outline, low, high in _parts(len(chain)):
     _fill(mask, _prism(view, outline, chain[link], low, high), 1)
   return mask
 
@@ -193,12 +188,10 @@ def _colour(view: Any, image: Any) -> tuple[Any, Any]:
   return _relative_green(view, image, WORKSPACE_CENTER, WORKSPACE_HALF_EXTENTS)
 
 
-def measure_chain(view: Any, image: Any, chain_xml: Path = PUSH_CHAIN_XML) -> Fit:
+def measure_chain(view: Any, image: Any, num_links: int = 3) -> Fit:
   green, valid = _colour(view, image)
   mask = _largest_region(((green < -CHROMATICITY_MARGIN) & valid).astype(np.uint8))
-  render = functools.partial(render_chain, chain_xml=chain_xml)
-  count = num_links(chain_xml)
-  return _fit(view, mask, render, count, LINK_HALF_HEIGHT, MIN_CHAIN_IOU)
+  return _fit(view, mask, render_chain, num_links, LINK_HALF_HEIGHT, MIN_CHAIN_IOU)
 
 
 def measure_goal(view: Any, image: Any, num_links: int = 3) -> Fit:
@@ -229,7 +222,6 @@ __all__ = [
   "links",
   "measure_chain",
   "measure_goal",
-  "num_links",
   "overlap",
   "render_chain",
   "render_goal",

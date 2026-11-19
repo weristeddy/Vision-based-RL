@@ -371,7 +371,7 @@ def test_each_ood_scene_moves_exactly_its_factor() -> None:
   ("task_id", "event"),
   [
     ("Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen", "goal_color"),
-    ("Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen", "goal_color"),
+    ("Mjlab-PushChain3-WoodTable-NatureCnn-FlattenRelu-Trossen", "goal_color"),
   ],
 )
 def test_replace_scene_sets_each_tasks_goal_colour(task_id: str, event: str) -> None:

@@ -9,8 +9,6 @@ from typing import Any
 
 import numpy as np
 
-from vbrl.asset_zoo.objects import PUSH_CHAIN_XML
-
 SCENES = {"real_table": "real_table", "wood": "real_texture_wood"}
 POSITION_STD = 0.03
 ANGLE_STD = math.radians(30.0)
@@ -18,13 +16,12 @@ SUCCESS_THRESHOLD = 0.9
 CHAIN_COLOUR, GOAL_COLOUR, INK = "#2a78d6", "#eb6834", "#0b0b0b"
 
 
-def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int) -> Any:
+def make_env(scene: str, num_links: int, num_envs: int, fovy: float, seed: int) -> Any:
   import dataclasses
 
   from mjlab.envs import ManagerBasedRlEnv
 
   from vbrl.analysis.push_t_measurement import HEIGHT, WIDTH
-  from vbrl.deployment.push_chain.silhouette import num_links
   from vbrl.tasks.push_chain.config.trossen_realistic.env_cfgs import (
     trossen_realistic_push_chain_rgb_env_cfg,
   )
@@ -32,8 +29,7 @@ def make_env(scene: str, chain_xml: Path, num_envs: int, fovy: float, seed: int)
 
   cfg = trossen_realistic_push_chain_rgb_env_cfg(
     scene=SCENES[scene],
-    num_links=num_links(chain_xml),
-    object_xml=chain_xml,
+    num_links=num_links,
     play=True,
   )
   cfg.seed = seed
@@ -90,7 +86,7 @@ def _worst_landmark_mm(a: Any, b: Any) -> float:
 
 
 def _measure(
-  view: Any, clean: Any, episode: Any, goal: Any, chain: Any, chain_xml: Path
+  view: Any, clean: Any, episode: Any, goal: Any, chain: Any
 ) -> dict[str, Any]:
   import cv2
 
@@ -99,7 +95,7 @@ def _measure(
   cv2.setNumThreads(1)
   count = len(goal) - 2
   fitted_goal = measure_goal(view, clean, count)
-  fitted_chain = measure_chain(view, episode, chain_xml)
+  fitted_chain = measure_chain(view, episode, count)
   goal_pose = fitted_goal.pose[:-1]
   true_coverage, true_link = overlap(chain, goal)
   coverage, link = overlap(fitted_chain.pose, goal_pose)
@@ -130,7 +126,7 @@ def _measure(
 
 
 def simulate(
-  scene: str, chain_xml: Path, samples: int, num_envs: int, seed: int, workers: int
+  scene: str, num_links: int, samples: int, num_envs: int, seed: int, workers: int
 ) -> list[dict[str, Any]]:
   import multiprocessing
   from concurrent.futures import ProcessPoolExecutor
@@ -139,7 +135,7 @@ def simulate(
   from vbrl.tasks.push_chain.geometry import HINGE_LIMIT
 
   view, fovy = ideal_view()
-  env = make_env(scene, chain_xml, num_envs, fovy, seed)
+  env = make_env(scene, num_links, num_envs, fovy, seed)
   command = env.command_manager.get_term("push_chain_goal")
   generator = np.random.default_rng(seed)
   rows = []
@@ -155,8 +151,7 @@ def simulate(
       hidden = chain.copy()
       hidden[:, 1] += 5.0
       clean, episode = render(env, hidden, goal), render(env, chain, goal)
-      models = [chain_xml] * num_envs
-      rows += pool.map(_measure, [view] * num_envs, clean, episode, goal, chain, models)
+      rows += pool.map(_measure, [view] * num_envs, clean, episode, goal, chain)
   env.close()
   return rows[:samples]
 
@@ -405,16 +400,11 @@ def main(argv: list[str] | None = None) -> None:
     description="Benchmark the Push-Chain rig measurement against simulator ground truth."
   )
   parser.add_argument("--scene", choices=sorted(SCENES), default="real_table")
-  parser.add_argument(
-    "--chain-xml",
-    type=Path,
-    default=PUSH_CHAIN_XML,
-    help="Chain model to render and measure (default: the original three-link chain).",
-  )
+  parser.add_argument("--links", type=int, default=3, help="Number of chain links.")
   parser.add_argument(
     "--output",
     type=Path,
-    help="default reports/push_chain/measurement/[<model>/]<scene>",
+    help="default reports/push_chain/measurement/push_chain_<links>/<scene>",
   )
   parser.add_argument("--samples", type=int, default=512)
   parser.add_argument("--num-envs", type=int, default=64)
@@ -425,9 +415,7 @@ def main(argv: list[str] | None = None) -> None:
   )
   args = parser.parse_args(argv)
 
-  folder = Path("reports/push_chain/measurement")
-  if args.chain_xml != PUSH_CHAIN_XML:
-    folder = folder / args.chain_xml.stem
+  folder = Path(f"reports/push_chain/measurement/push_chain_{args.links}")
   output = args.output or folder / args.scene
   samples = output / "samples.csv"
   if args.summarize:
@@ -435,7 +423,7 @@ def main(argv: list[str] | None = None) -> None:
   else:
     rows = simulate(
       args.scene,
-      args.chain_xml,
+      args.links,
       args.samples,
       args.num_envs,
       args.seed,

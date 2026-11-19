@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
 from mjlab.managers import EventTermCfg
 
-from vbrl.asset_zoo.objects import PUSH_CHAIN_XML
+from vbrl.asset_zoo.objects import push_chain_xml
 from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
 from vbrl.scenes.builder import apply_scene
 from vbrl.tasks.push_chain.goal_marker import add_goal_marker
@@ -20,7 +18,7 @@ from vbrl.tasks.utils import add_rgb_camera
 
 
 def trossen_realistic_push_chain_state_env_cfg(
-  *, num_links: int = 3, object_xml: Path = PUSH_CHAIN_XML, play: bool = False
+  *, num_links: int = 3, play: bool = False
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
   cfg = build_env_cfg(
@@ -31,7 +29,7 @@ def trossen_realistic_push_chain_state_env_cfg(
     scene="default",
     robot=robot,
     camera_view=None,
-    object_xml=object_xml,
+    object_xml=push_chain_xml(num_links),
     object_name=_OBJECT_NAME,
   )
   cfg.scene.num_envs = 1 if play else 1024
@@ -43,7 +41,6 @@ def trossen_realistic_push_chain_rgb_env_cfg(
   *,
   scene: str,
   num_links: int = 3,
-  object_xml: Path = PUSH_CHAIN_XML,
   distill: bool = True,
   play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
@@ -70,7 +67,7 @@ def trossen_realistic_push_chain_rgb_env_cfg(
     scene=scene,
     robot=robot,
     camera_view=_CAMERA_VIEW,
-    object_xml=object_xml,
+    object_xml=push_chain_xml(num_links),
     object_name=_OBJECT_NAME,
   )
   add_goal_marker(cfg, num_links)

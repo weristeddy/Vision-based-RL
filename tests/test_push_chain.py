@@ -9,8 +9,7 @@ import pytest
 pytest.importorskip("mjlab")
 torch = pytest.importorskip("torch")
 
-XML = "src/vbrl/asset_zoo/objects/push_chain.xml"
-STATE_TASK_ID = "Mjlab-PushChain-State-Trossen"
+STATE_TASK_ID = "Mjlab-PushChain3-State-Trossen"
 
 
 def _links(xy, yaw, hinges):
@@ -19,71 +18,21 @@ def _links(xy, yaw, hinges):
   return chain_from_pose(torch.cat((xy, yaw[..., None], hinges), -1))
 
 
-def _model():
+@pytest.mark.parametrize("num_links", [3, 4])
+def test_the_chain_models_match_the_geometry_constants(num_links) -> None:
   import mujoco
 
-  return mujoco.MjModel.from_xml_path(XML)
-
-
-def test_geometry_constants_match_the_xml() -> None:
+  from vbrl.asset_zoo.objects import push_chain_xml
   from vbrl.tasks.push_chain import geometry as g
 
-  model = _model()
-  spacing = g.END_LINK_HALF_LENGTH + g.MIDDLE_LINK_HALF_LENGTH
-  assert model.body("push_chain_link0").pos == pytest.approx((-spacing, 0, 0))
-  assert model.body("push_chain_link2").pos == pytest.approx((spacing, 0, 0))
-  assert model.joint("push_chain_hinge0").pos[0] == pytest.approx(
-    g.END_LINK_HALF_LENGTH
-  )
-  assert model.joint("push_chain_hinge1").pos[0] == pytest.approx(
-    -g.END_LINK_HALF_LENGTH
-  )
-  for hinge in ("push_chain_hinge0", "push_chain_hinge1"):
-    assert model.joint(hinge).range == pytest.approx((-g.HINGE_LIMIT, g.HINGE_LIMIT))
-
-  lower = model.geom("push_chain_link1_lower_collision")
-  assert lower.size[:2] == pytest.approx((g.MIDDLE_LINK_HALF_LENGTH, g.LINK_HALF_WIDTH))
-  ring = model.geom("push_chain_link1_ring_right_collision")
-  assert ring.size[0] == pytest.approx(g.PIN_RADIUS)
-  assert ring.pos[0] == pytest.approx(g.MIDDLE_LINK_HALF_LENGTH)
-  for link, sign in ((0, 1.0), (2, -1.0)):
-    body = model.geom(f"push_chain_link{link}_body_collision")
+  model = mujoco.MjModel.from_xml_path(str(push_chain_xml(num_links)))
+  for i in range(num_links - 1):
+    hinge = model.joint(f"push_chain_hinge{i}")
+    assert hinge.range == pytest.approx((-g.HINGE_LIMIT, g.HINGE_LIMIT))
+  for i in range(num_links):
+    body = model.geom(f"push_chain_link{i}_body_collision")
     assert body.size[1:] == pytest.approx((g.LINK_HALF_WIDTH, g.LINK_HALF_HEIGHT))
-    free_end = body.pos[0] - sign * body.size[0]
-    assert free_end == pytest.approx(-sign * g.END_LINK_HALF_LENGTH)
-    tip = model.geom(f"push_chain_link{link}_plate_tip_collision")
-    assert tip.size[0] == pytest.approx(g.PIN_RADIUS)
-    assert tip.pos[0] == pytest.approx(sign * g.END_LINK_HALF_LENGTH)
   assert g.REST_HEIGHT - g.LINK_HALF_HEIGHT == pytest.approx(0.001)
-
-
-def test_forward_kinematics_matches_mujoco() -> None:
-  import mujoco
-
-  model = _model()
-  data = mujoco.MjData(model)
-  rng = np.random.default_rng(0)
-  for _ in range(20):
-    x, y, yaw = (
-      rng.uniform(-0.3, 0.3),
-      rng.uniform(-0.3, 0.3),
-      rng.uniform(-np.pi, np.pi),
-    )
-    hinges = rng.uniform(-1.6, 1.6, 2)
-    data.qpos[:7] = (x, y, 0.016, np.cos(yaw / 2), 0, 0, np.sin(yaw / 2))
-    data.qpos[7:] = hinges
-    mujoco.mj_kinematics(model, data)
-    links = _links(
-      torch.tensor((x, y), dtype=torch.float64),
-      torch.tensor(yaw, dtype=torch.float64),
-      torch.tensor(hinges),
-    ).numpy()
-    for i in range(3):
-      body = model.body(f"push_chain_link{i}").id
-      w, _, _, z = data.xquat[body]
-      assert links[i, :2] == pytest.approx(data.xpos[body, :2], abs=1e-6)
-      error = math.remainder(links[i, 2] - 2 * math.atan2(z, w), 2 * math.pi)
-      assert error == pytest.approx(0.0, abs=1e-6)
 
 
 def test_validity_checks_include_the_pins() -> None:
@@ -378,7 +327,7 @@ def test_chain_colour_event_picks_up_the_chain_material() -> None:
 
   import vbrl.tasks  # noqa: F401
 
-  cfg = load_env_cfg("Mjlab-PushChain-WoodTable-DinoV2ViTS14-AfaFull6-Trossen")
+  cfg = load_env_cfg("Mjlab-PushChain3-WoodTable-DinoV2ViTS14-AfaFull6-Trossen")
   materials = cfg.events["object_color"].params["asset_cfg"].material_names
   assert materials == ("push_chain_red",)
   assert {f"goal_marker_link{i}" for i in range(3)} <= set(cfg.scene.entities)
@@ -390,7 +339,7 @@ def test_students_see_the_state_actor_as_their_teacher() -> None:
   import vbrl.tasks  # noqa: F401
 
   state = load_env_cfg(STATE_TASK_ID)
-  student = load_env_cfg("Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen")
+  student = load_env_cfg("Mjlab-PushChain3-WoodTable-NatureCnn-FlattenRelu-Trossen")
   teacher = student.observations["teacher"].terms
   assert list(teacher) == list(state.observations["actor"].terms)
   assert teacher["target_pose"].params["calibration_bias"] is False

@@ -146,7 +146,7 @@
       "backbone.convnet.layer4.bias:(2048,)",
       "backbone.convnet.layer4.weight:(2048, 1024, 1, 1)"
     ],
-    "Mjlab-PushChain-WoodTable-CompactVit-Svea-Trossen": [
+    "Mjlab-PushChain3-WoodTable-CompactVit-Svea-Trossen": [
       "adapter.0.bias:(256,)",
       "adapter.0.weight:(256, 128)",
       "adapter.1.bias:(256,)",
@@ -198,7 +198,7 @@
       "backbone.patch_embed.weight:(128, 3, 16, 16)",
       "backbone.pos_embed:(1, 197, 128)"
     ],
-    "Mjlab-PushChain-WoodTable-DinoV2ViTS14-AfaFull6-Trossen": [
+    "Mjlab-PushChain3-WoodTable-DinoV2ViTS14-AfaFull6-Trossen": [
       "adapter.0.pool.k_norm.bias:(64,)",
       "adapter.0.pool.k_norm.weight:(64,)",
       "adapter.0.pool.kv.bias:(768,)",
@@ -215,13 +215,13 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
-    "Mjlab-PushChain-WoodTable-DinoV2ViTS14-Global-Trossen": [
+    "Mjlab-PushChain3-WoodTable-DinoV2ViTS14-Global-Trossen": [
       "adapter.1.bias:(384,)",
       "adapter.1.weight:(384,)",
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
-    "Mjlab-PushChain-WoodTable-NatureCnn-FlattenRelu-Trossen": [
+    "Mjlab-PushChain3-WoodTable-NatureCnn-FlattenRelu-Trossen": [
       "adapter.proj.bias:(256,)",
       "adapter.proj.weight:(256, 36864)",
       "backbone.trunk.0.bias:(32,)",
@@ -231,7 +231,7 @@
       "backbone.trunk.4.bias:(64,)",
       "backbone.trunk.4.weight:(64, 64, 3, 3)"
     ],
-    "Mjlab-PushChain-WoodTable-R3MResNet50-AfaFull32-Trossen": [
+    "Mjlab-PushChain3-WoodTable-R3MResNet50-AfaFull32-Trossen": [
       "adapter.0.pool.k_norm.bias:(64,)",
       "adapter.0.pool.k_norm.weight:(64,)",
       "adapter.0.pool.kv.bias:(4096,)",
@@ -274,7 +274,7 @@
       "resnet.layer4.bias:(2048,)",
       "resnet.layer4.weight:(2048, 1024, 1, 1)"
     ],
-    "Mjlab-PushChain-WoodTable-R3MResNet50-Global-Trossen": [
+    "Mjlab-PushChain3-WoodTable-R3MResNet50-Global-Trossen": [
       "adapter.1.bias:(2048,)",
       "adapter.1.weight:(2048,)",
       "backbone.convnet.bn1.bias:(64,)",
