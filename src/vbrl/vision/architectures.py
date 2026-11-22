@@ -84,6 +84,9 @@ ARCHITECTURES: dict[str, VisionConfig] = {
   "DinoV3ViTS16-AfaFull6": vision_cfg(
     "dinov3_vits16", "afa_full", afa_num_heads=384 // AFA_HEAD_DIM
   ),
+  "R3MResNet50L3-AfaFull16": vision_cfg(
+    "r3m_resnet50_layer3", "afa_full", afa_num_heads=1024 // AFA_HEAD_DIM
+  ),
   # Each row below pools its encoder's feature map down to a grid the encoder does not
   # produce.
   "NatureCnn-LocalGrid7": vision_cfg("nature_cnn", "local_grid", target_grid_size=7),
@@ -97,8 +100,8 @@ ARCHITECTURES: dict[str, VisionConfig] = {
 }
 
 
-# The 22 rows above the superseded block: what a new registration crosses.
-CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:22]
+# The 23 rows above the superseded block: what a new registration crosses.
+CURRENT_ARCHITECTURES: tuple[str, ...] = tuple(ARCHITECTURES)[:23]
 
 
 __all__ = [

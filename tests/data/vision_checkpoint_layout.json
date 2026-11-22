@@ -460,6 +460,35 @@
       "backbone.convnet.layer3.weight:(1024, 512, 1, 1)",
       "backbone.convnet.layer4.bias:(2048,)",
       "backbone.convnet.layer4.weight:(2048, 1024, 1, 1)"
+    ],
+    "Mjlab-PushT-WoodTable-R3MResNet50L3-AfaFull16-Trossen": [
+      "adapter.0.pool.k_norm.bias:(64,)",
+      "adapter.0.pool.k_norm.weight:(64,)",
+      "adapter.0.pool.kv.bias:(2048,)",
+      "adapter.0.pool.kv.weight:(2048, 1024)",
+      "adapter.0.pool.latent:(1, 1, 1024)",
+      "adapter.0.pool.norm.bias:(1024,)",
+      "adapter.0.pool.norm.weight:(1024,)",
+      "adapter.0.pool.q.bias:(1024,)",
+      "adapter.0.pool.q.weight:(1024, 1024)",
+      "adapter.0.pool.q_norm.bias:(64,)",
+      "adapter.0.pool.q_norm.weight:(64,)",
+      "adapter.1.bias:(1024,)",
+      "adapter.1.weight:(1024,)",
+      "backbone.convnet.bn1.bias:(64,)",
+      "backbone.convnet.bn1.num_batches_tracked:()",
+      "backbone.convnet.bn1.running_mean:(64,)",
+      "backbone.convnet.bn1.running_var:(64,)",
+      "backbone.convnet.bn1.weight:(64,)",
+      "backbone.convnet.conv1.weight:(64, 3, 7, 7)",
+      "backbone.convnet.layer1.bias:(256,)",
+      "backbone.convnet.layer1.weight:(256, 64, 1, 1)",
+      "backbone.convnet.layer2.bias:(512,)",
+      "backbone.convnet.layer2.weight:(512, 256, 1, 1)",
+      "backbone.convnet.layer3.bias:(1024,)",
+      "backbone.convnet.layer3.weight:(1024, 512, 1, 1)",
+      "backbone.convnet.layer4.bias:(2048,)",
+      "backbone.convnet.layer4.weight:(2048, 1024, 1, 1)"
     ]
   }
 }
