@@ -309,6 +309,23 @@
       "backbone.embeddings.bias:(384,)",
       "backbone.embeddings.weight:(384, 3, 14, 14)"
     ],
+    "Mjlab-PushChain3-WoodTableImageGoal-DinoV3ViTS16-AfaFull6-Trossen": [
+      "adapter.0.pool.k_norm.bias:(64,)",
+      "adapter.0.pool.k_norm.weight:(64,)",
+      "adapter.0.pool.kv.bias:(768,)",
+      "adapter.0.pool.kv.weight:(768, 384)",
+      "adapter.0.pool.latent:(1, 1, 384)",
+      "adapter.0.pool.norm.bias:(384,)",
+      "adapter.0.pool.norm.weight:(384,)",
+      "adapter.0.pool.q.bias:(384,)",
+      "adapter.0.pool.q.weight:(384, 384)",
+      "adapter.0.pool.q_norm.bias:(64,)",
+      "adapter.0.pool.q_norm.weight:(64,)",
+      "adapter.1.bias:(384,)",
+      "adapter.1.weight:(384,)",
+      "backbone.patch_embed.bias:(384,)",
+      "backbone.patch_embed.weight:(384, 3, 16, 16)"
+    ],
     "Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen": [
       "adapter.0.bias:(256,)",
       "adapter.0.weight:(256, 128)",

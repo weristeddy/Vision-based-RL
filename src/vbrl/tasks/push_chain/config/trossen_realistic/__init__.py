@@ -45,5 +45,6 @@ _distill("Mjlab-PushChain3-WoodTable-R3MResNet50-Global-Trossen", "R3MResNet50-G
 _distill("Mjlab-PushChain3-WoodTable-NatureCnn-FlattenRelu-Trossen", "NatureCnn-FlattenRelu", "real_texture_wood")
 _distill("Mjlab-PushChain3-WoodTable-CompactVit-Svea-Trossen", "CompactVit-Svea", "real_texture_wood")
 _distill("Mjlab-PushChain3-WoodTableImageGoal-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_texture_wood", image_goal=True)
+_distill("Mjlab-PushChain3-WoodTableImageGoal-DinoV3ViTS16-AfaFull6-Trossen", "DinoV3ViTS16-AfaFull6", "real_texture_wood", image_goal=True)
 _state("Mjlab-PushChain3-State-Trossen", 3)
 _state("Mjlab-PushChain4-State-Trossen", 4)
