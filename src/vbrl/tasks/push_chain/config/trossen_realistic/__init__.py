@@ -13,11 +13,14 @@ from .rl_cfg import (
 )
 
 
-def _distill(task_id: str, architecture: str, scene: str) -> None:
+def _distill(
+  task_id: str, architecture: str, scene: str, image_goal: bool = False
+) -> None:
+  env = {"scene": scene, "image_goal": image_goal}
   register_mjlab_task(
     task_id,
-    trossen_realistic_push_chain_rgb_env_cfg(scene=scene),
-    trossen_realistic_push_chain_rgb_env_cfg(scene=scene, play=True),
+    trossen_realistic_push_chain_rgb_env_cfg(**env),
+    trossen_realistic_push_chain_rgb_env_cfg(**env, play=True),
     trossen_realistic_push_chain_rgb_distillation_runner_cfg(
       task_id, ARCHITECTURES[architecture]
     ),
@@ -41,5 +44,6 @@ _distill("Mjlab-PushChain3-WoodTable-R3MResNet50-AfaFull32-Trossen", "R3MResNet5
 _distill("Mjlab-PushChain3-WoodTable-R3MResNet50-Global-Trossen", "R3MResNet50-Global", "real_texture_wood")
 _distill("Mjlab-PushChain3-WoodTable-NatureCnn-FlattenRelu-Trossen", "NatureCnn-FlattenRelu", "real_texture_wood")
 _distill("Mjlab-PushChain3-WoodTable-CompactVit-Svea-Trossen", "CompactVit-Svea", "real_texture_wood")
+_distill("Mjlab-PushChain3-WoodTableImageGoal-DinoV2ViTS14-AfaFull6-Trossen", "DinoV2ViTS14-AfaFull6", "real_texture_wood", image_goal=True)
 _state("Mjlab-PushChain3-State-Trossen", 3)
 _state("Mjlab-PushChain4-State-Trossen", 4)

@@ -42,6 +42,7 @@ def trossen_realistic_push_chain_rgb_env_cfg(
   scene: str,
   num_links: int = 3,
   distill: bool = True,
+  image_goal: bool = False,
   play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   robot = make_wxai_measured()
@@ -71,6 +72,8 @@ def trossen_realistic_push_chain_rgb_env_cfg(
     object_name=_OBJECT_NAME,
   )
   add_goal_marker(cfg, num_links)
+  if image_goal:
+    cfg.observations["actor"].terms.pop("target_pose")
   if not play:
     cfg.events["camera_fovy"] = EventTermCfg(
       func=dr.cam_fovy,

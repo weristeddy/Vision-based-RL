@@ -348,6 +348,21 @@ def test_students_see_the_state_actor_as_their_teacher() -> None:
   assert set(student.terminations) == set(state.terminations) - {"top_face_contact"}
 
 
+
+def test_the_image_goal_student_sees_the_goal_only_in_the_image() -> None:
+  from mjlab.tasks.registry import load_env_cfg
+
+  import vbrl.tasks  # noqa: F401
+
+  student = load_env_cfg(
+    "Mjlab-PushChain3-WoodTableImageGoal-DinoV2ViTS14-AfaFull6-Trossen"
+  )
+  actor = student.observations["actor"].terms
+  assert "target_pose" not in actor and "obj_pose" not in actor
+  assert "target_pose" in student.observations["teacher"].terms
+  assert "goal_marker_link0" in student.scene.entities
+
+
 @pytest.mark.sim
 @pytest.mark.gpu
 def test_near_object_starts_never_touch_the_chain_or_table() -> None:
