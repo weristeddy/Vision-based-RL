@@ -266,10 +266,10 @@ PURPLE_GOAL = (0.22, 0.04, 0.45)
 # The swap gives each the other's training median.
 SWAP_OBJECT = (0.12, 0.16, 0.05)
 SWAP_GOAL = (0.25, 0.075, 0.015)
-# The colour sweeps test a colour chart: 31 hues of the rainbow, each in 16 shades
-# from dark to light (HSL, full saturation, lightness 0.1 to 0.9), plus 16 greys
-# from black to white. 512 colours, one per evaluation episode.
-COLOUR_SWEEP_HUES = 31
+# The colour sweeps test a 16 x 16 colour chart: 15 hues of the rainbow, each in 16
+# shades from dark to light (HSL, full saturation, lightness 0.1 to 0.9), plus 16
+# greys from black to white. 256 colours, 2 of the 512 evaluation episodes each.
+COLOUR_SWEEP_HUES = 15
 COLOUR_SWEEP_SHADES = 16
 COLOUR_SWEEP_COLOURS = (COLOUR_SWEEP_HUES + 1) * COLOUR_SWEEP_SHADES
 

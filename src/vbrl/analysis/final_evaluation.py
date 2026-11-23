@@ -330,45 +330,57 @@ def plot_colour_sweep(
     return grid[::-1]
 
   colours = as_chart([colour_sweep_rgb(k) for k in range(COLOUR_SWEEP_COLOURS)])
-  training = (
-    REAL_TABLE_GOAL_COLOUR_RANGE
-    if scene == "goal_color_sweep"
-    else (REAL_TABLE_OBJECT_COLOUR_RANGE)
-  )
-  nearest = int(
-    np.argmin(
-      [
-        np.linalg.norm(np.subtract(colour_sweep_rgb(k), np.mean(training, axis=1)))
-        for k in range(COLOUR_SWEEP_COLOURS)
-      ]
+
+  def cell(training) -> tuple[int, int]:
+    nearest = int(
+      np.argmin(
+        [
+          np.linalg.norm(np.subtract(colour_sweep_rgb(k), np.mean(training, axis=1)))
+          for k in range(COLOUR_SWEEP_COLOURS)
+        ]
+      )
     )
+    column, shade = divmod(nearest, COLOUR_SWEEP_SHADES)
+    return column, COLOUR_SWEEP_SHADES - 1 - shade
+
+  # Solid: the training object colour; dashed: the training goal colour.
+  boxes = (
+    (cell(REAL_TABLE_OBJECT_COLOUR_RANGE), "solid"),
+    (cell(REAL_TABLE_GOAL_COLOUR_RANGE), (0, (2, 1.5))),
   )
-  column, shade = divmod(nearest, COLOUR_SWEEP_SHADES)
-  box = (column, COLOUR_SWEEP_SHADES - 1 - shade)
-  ticks = [0, 5, 10, 15, 21, 26, COLOUR_SWEEP_HUES]
+  # Columns sit at hue k / COLOUR_SWEEP_HUES of the circle; label the six primaries.
+  ticks = [COLOUR_SWEEP_HUES * f for f in (0, 1 / 6, 1 / 3, 1 / 2, 2 / 3, 5 / 6)]
+  ticks.append(COLOUR_SWEEP_HUES)
   names = ["red", "yellow", "green", "cyan", "blue", "magenta", "gray"]
 
   def frame(axis, title):
-    axis.set_xticks(ticks, names, fontsize=7)
+    axis.set_xticks(ticks, names, fontsize=7, rotation=45, ha="right")
     axis.set_yticks([0, COLOUR_SWEEP_SHADES - 1], ["light", "dark"], fontsize=7)
     axis.tick_params(length=0)
     axis.set_title(title, fontsize=9)
     for spine in axis.spines.values():
       spine.set_visible(False)
-    axis.add_patch(
-      plt.Rectangle(
-        (box[0] - 0.5, box[1] - 0.5), 1, 1, fill=False, edgecolor=INK, linewidth=1.4
+    for (x, y), style in boxes:
+      axis.add_patch(
+        plt.Rectangle(
+          (x - 0.5, y - 0.5),
+          1,
+          1,
+          fill=False,
+          edgecolor=INK,
+          linewidth=1.4,
+          linestyle=style,
+        )
       )
-    )
 
   columns = min(len(encoders) + 1, 4)
   lines = -(-(len(encoders) + 1) // columns)
   figure, axes = plt.subplots(
-    lines, columns, figsize=(3.4 * columns, 2.7 * lines), squeeze=False
+    lines, columns, figsize=(3.0 * columns, 3.2 * lines), squeeze=False
   )
   axes = axes.ravel()
-  axes[0].imshow(colours, aspect="auto", interpolation="nearest")
-  frame(axes[0], "Test colors (box: training color)")
+  axes[0].imshow(colours, aspect="equal", interpolation="nearest")
+  frame(axes[0], "Test colors (training: T solid, goal dashed)")
   for axis, encoder in zip(axes[1:], encoders, strict=False):
     values = np.mean([r["values"] for r in rows if r["encoder"] == encoder], axis=0)
     image = axis.imshow(
@@ -376,7 +388,7 @@ def plot_colour_sweep(
       cmap="Blues",
       vmin=0,
       vmax=100,
-      aspect="auto",
+      aspect="equal",
       interpolation="nearest",
     )
     frame(axis, ENCODERS[encoder][0])

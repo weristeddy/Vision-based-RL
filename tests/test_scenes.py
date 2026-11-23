@@ -408,10 +408,10 @@ def test_the_colour_sweep_is_a_colour_chart_of_hues_shades_and_greys() -> None:
     sweep_colour,
   )
 
-  assert (COLOUR_SWEEP_HUES, COLOUR_SWEEP_SHADES, COLOUR_SWEEP_COLOURS) == (31, 16, 512)
+  assert (COLOUR_SWEEP_HUES, COLOUR_SWEEP_SHADES, COLOUR_SWEEP_COLOURS) == (15, 16, 256)
   colours = [colour_sweep_rgb(k) for k in range(COLOUR_SWEEP_COLOURS)]
-  assert len(set(colours)) == 512
+  assert len(set(colours)) == 256
   assert colours[0] == pytest.approx((0.2, 0.0, 0.0))
   assert colours[COLOUR_SWEEP_HUES * COLOUR_SWEEP_SHADES] == (0.0, 0.0, 0.0)
   assert colours[-1] == (1.0, 1.0, 1.0)
-  assert [sweep_colour(i, 512) for i in (0, 1, 511)] == [0, 1, 511]
+  assert [sweep_colour(i, 512) for i in (0, 1, 2, 511)] == [0, 0, 1, 255]
