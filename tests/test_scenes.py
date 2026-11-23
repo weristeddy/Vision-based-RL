@@ -16,7 +16,8 @@ from vbrl.scenes.presets import (  # noqa: E402
 ALL_SCENES = (
   "default", "procedural", "real_texture", "real_table", "real_texture_wood",
   "wood049", "marble019", "wood", "plaster", "peacock", "ood_light", "object_blue",
-  "goal_blue", "object_blue_goal_purple", "colour_swap",
+  "goal_blue", "object_blue_goal_purple", "colour_swap", "object_color_sweep",
+  "goal_color_sweep",
 )
 # Every training preset randomizes the sun's colour on top of its pose. The
 # matched-evaluation branch deliberately does not; see `_events` in the builder.
@@ -308,6 +309,8 @@ def test_every_student_is_evaluated_in_its_tasks_scenes() -> None:
     "goal_blue",
     "object_blue_goal_purple",
     "colour_swap",
+    "object_color_sweep",
+    "goal_color_sweep",
   )
   students = [t for t in vbrl_task_ids() if "-WoodTable-" in t]
   assert len(students) == 21
@@ -322,9 +325,14 @@ def test_the_evaluation_scenes_draw_the_same_events() -> None:
   from vbrl.scenes.presets import EVALUATION_SCENES
 
   configs = [_apply(scene) for scene in EVALUATION_SCENES]
-  for cfg in configs[1:]:
-    assert list(cfg.events) == list(configs[0].events)
+  for scene, cfg in zip(EVALUATION_SCENES[1:], configs[1:], strict=True):
+    # A sweep adds one deterministic override after the draws, so it stays paired.
+    sweep = [name for name in cfg.events if name.endswith("_color_sweep")]
+    assert sweep == ([scene] if scene == "object_color_sweep" else []), scene
+    assert [name for name in cfg.events if name not in sweep] == list(configs[0].events)
     for name, term in cfg.events.items():
+      if name in sweep:
+        continue
       reference = configs[0].events[name]
       assert term.func is reference.func, name
       assert term.mode == reference.mode, name
@@ -389,3 +397,21 @@ def test_replace_scene_sets_each_tasks_goal_colour(task_id: str, event: str) -> 
   assert ranges(blue) == tuple((value, value) for value in BLUE_GOAL)
   back = replace_scene(blue, scene="wood049")
   assert ranges(back) == REAL_TABLE_GOAL_COLOUR_RANGE
+
+
+def test_the_colour_sweep_is_a_colour_chart_of_hues_shades_and_greys() -> None:
+  from vbrl.scenes.presets import (
+    COLOUR_SWEEP_COLOURS,
+    COLOUR_SWEEP_HUES,
+    COLOUR_SWEEP_SHADES,
+    colour_sweep_rgb,
+    sweep_colour,
+  )
+
+  assert (COLOUR_SWEEP_HUES, COLOUR_SWEEP_SHADES, COLOUR_SWEEP_COLOURS) == (31, 16, 512)
+  colours = [colour_sweep_rgb(k) for k in range(COLOUR_SWEEP_COLOURS)]
+  assert len(set(colours)) == 512
+  assert colours[0] == pytest.approx((0.2, 0.0, 0.0))
+  assert colours[COLOUR_SWEEP_HUES * COLOUR_SWEEP_SHADES] == (0.0, 0.0, 0.0)
+  assert colours[-1] == (1.0, 1.0, 1.0)
+  assert [sweep_colour(i, 512) for i in (0, 1, 511)] == [0, 1, 511]

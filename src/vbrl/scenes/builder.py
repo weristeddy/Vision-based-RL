@@ -16,6 +16,7 @@ from .materials import add_bank
 from .presets import (
   CAMERA_POSITION_DR_RANGE_M,
   CAMERA_ROTATION_DR_RANGE_RAD,
+  COLOUR_SWEEP_COLOURS,
   FILL_LIGHT_NAME,
   GOAL_COLOUR_EVENT,
   TABLE_CENTER,
@@ -28,6 +29,7 @@ from .presets import (
   EvaluationDr,
   MaterialBank,
   ScenePreset,
+  colour_sweep_rgb,
   get_preset,
 )
 
@@ -44,6 +46,8 @@ LIGHT_COLOUR_EVENTS = ("light_intensity",)
 SCENE_EVENTS = (
   "table_color",
   "object_color",
+  "object_color_sweep",
+  "goal_color_sweep",
   "table_material",
   "object_material",
   "table_material_tint",
@@ -420,6 +424,27 @@ def _camera_events(camera_model: str) -> dict[str, EventTermCfg]:
   }
 
 
+# No random draw: env i always gets colour i * 64 // num_envs of the sweep path.
+@requires_model_fields("mat_rgba")
+def colour_sweep(env, env_ids, entity_names: tuple[str, ...]) -> None:
+  import torch
+
+  if env_ids is None:
+    env_ids = torch.arange(env.num_envs, device=env.device)
+  table = torch.tensor(
+    [colour_sweep_rgb(k) for k in range(COLOUR_SWEEP_COLOURS)], device=env.device
+  )
+  rgb = table[env_ids * COLOUR_SWEEP_COLOURS // env.num_envs]
+  materials = torch.cat([env.scene[name].indexing.mat_ids for name in entity_names])
+  env.sim.model.mat_rgba[env_ids[:, None], materials, :3] = rgb[:, None]
+
+
+def _colour_sweep_event(entity_names: tuple[str, ...]) -> EventTermCfg:
+  return EventTermCfg(
+    func=colour_sweep, mode="reset", params={"entity_names": tuple(entity_names)}
+  )
+
+
 def _bank_events(
   key: str, entity: str, bank: MaterialBank, geoms
 ) -> dict[str, EventTermCfg]:
@@ -461,6 +486,8 @@ def _events(
         materials=object_materials,
         shared_random=True,
       )
+      if preset.object_colour_sweep:
+        events["object_color_sweep"] = _colour_sweep_event((object_name,))
     if object_dressed:
       assert preset.obj is not None
       events.update(_bank_events("object", object_name, preset.obj, None))
@@ -533,6 +560,8 @@ def _apply(
   goal = cfg.events.get(GOAL_COLOUR_EVENT)
   if goal is not None and preset.goal_colour_range is not None:
     goal.params["ranges"] = preset.goal_colour_range
+  if goal is not None and preset.goal_colour_sweep:
+    cfg.events["goal_color_sweep"] = _colour_sweep_event(goal.params["entity_names"])
   return cfg
 
 

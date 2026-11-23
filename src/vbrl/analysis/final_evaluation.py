@@ -24,14 +24,19 @@ SCENES = {
   "wood049": "In distribution",
   "real_table": "Rig table",
   "marble019": "Marble table",
-  "ood_light": "Light colour",
+  "ood_light": "Light color",
   "object_blue": "Object blue",
   "goal_blue": "Goal blue",
   "object_blue_goal_purple": "Object blue,\ngoal purple",
-  "colour_swap": "Colour swap",
+  "colour_swap": "Color swap",
+  "object_color_sweep": "Object color sweep",
+  "goal_color_sweep": "Goal color sweep",
 }
 # Lift-Cube's goal is never in view, so its "swap" only turns the cube green.
 SCENE_OVERRIDES = {("LiftCube", "colour_swap"): "Object green"}
+# Lift-Cube as the real robot scores it: holding the cube within 5 cm of the goal
+# at the episode's end, not the cube passing the goal once.
+SUCCESS = {"LiftCube": "held_at_goal"}
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 RAMP = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b")
 
@@ -40,17 +45,42 @@ def scene_label(task: str, scene: str) -> str:
   return SCENE_OVERRIDES.get((task, scene), SCENES[scene])
 
 
-def fetch(project: str = ENTITY_PROJECT) -> list[dict]:
+def _students(project: str):
   import wandb
 
-  rows = []
   for run in wandb.Api(timeout=120).runs(project, per_page=500):
     match = re.match(GROUPS, run.group or "")
     if not match or run.state != "finished":
       continue
     task, _, rest = match["task"].partition("-WoodTable-")
     encoder = rest.removesuffix("-Trossen")
-    seed = run.config.get("train_cfg", {}).get("seed")
+    yield run, task, encoder, run.config.get("train_cfg", {}).get("seed")
+
+
+def fetch_colour_sweeps(project: str = ENTITY_PROJECT) -> list[dict]:
+  rows = []
+  for run, task, encoder, seed in _students(project):
+    for key, values in run.summary.items():
+      parts = key.split("/")
+      if len(parts) != 4 or parts[0] != "final" or parts[2] != "by_colour":
+        continue
+      rows.append(
+        {
+          "task": task,
+          "encoder": encoder,
+          "run": run.id,
+          "seed": seed,
+          "scene": parts[1],
+          "metric": parts[3],
+          "values": list(values),
+        }
+      )
+  return rows
+
+
+def fetch(project: str = ENTITY_PROJECT) -> list[dict]:
+  rows = []
+  for run, task, encoder, seed in _students(project):
     for key, value in run.summary.items():
       parts = key.split("/")
       if len(parts) != 3 or parts[0] != "final" or parts[1] not in SCENES:
@@ -155,8 +185,10 @@ def plot_overview(
     figsize=(0.95 * len(scenes) + 1.9, 0.42 * len(encoders) + 1.2)
   )
   values = [
-    [(_cell(summary, task, e, s, metric) or {}).get("mean", float("nan")) * 100
-     for s in scenes]
+    [
+      (_cell(summary, task, e, s, metric) or {}).get("mean", float("nan")) * 100
+      for s in scenes
+    ]
     for e in encoders
   ]
   axis.imshow(values, cmap=cmap, vmin=0, vmax=100, aspect="auto")
@@ -212,7 +244,7 @@ def plot_scenes(rows: list[dict], summary: list[dict], task: str, path: Path) ->
     name, colour = ENCODERS[encoder]
     offset = (k - (len(encoders) - 1) / 2) * width
     for j, scene in enumerate(scenes):
-      cell = _cell(summary, task, encoder, scene)
+      cell = _cell(summary, task, encoder, scene, SUCCESS.get(task, "success"))
       if cell is None:
         continue
       x = j + offset
@@ -223,7 +255,7 @@ def plot_scenes(rows: list[dict], summary: list[dict], task: str, path: Path) ->
         r["value"] * 100
         for r in rows
         if (r["task"], r["encoder"], r["scene"], r["metric"])
-        == (task, encoder, scene, "success")
+        == (task, encoder, scene, SUCCESS.get(task, "success"))
       ]
       axis.scatter([x] * len(seeds), seeds, s=6, color=colour, alpha=0.45, linewidths=0)
       axis.scatter(
@@ -263,6 +295,161 @@ def plot_scenes(rows: list[dict], summary: list[dict], task: str, path: Path) ->
   plt.close(figure)
 
 
+_METRIC_LABELS = {
+  "success": "Success rate (%)",
+  "held_at_goal": "Success rate (%)",
+  "overlap": "Final overlap (%)",
+}
+
+
+def plot_colour_sweep(
+  sweeps: list[dict], task: str, scene: str, metric: str, path: Path
+) -> None:
+  import numpy as np
+
+  from vbrl.scenes.presets import (
+    COLOUR_SWEEP_COLOURS,
+    COLOUR_SWEEP_HUES,
+    COLOUR_SWEEP_SHADES,
+    REAL_TABLE_GOAL_COLOUR_RANGE,
+    REAL_TABLE_OBJECT_COLOUR_RANGE,
+    colour_sweep_rgb,
+  )
+
+  plt = _setup()
+  rows = [
+    r for r in sweeps if (r["task"], r["scene"], r["metric"]) == (task, scene, metric)
+  ]
+  encoders = [e for e in ENCODERS if any(r["encoder"] == e for r in rows)]
+
+  # Columns: the hues, then the greys; rows: shades, light at the top.
+  def as_chart(values):
+    values = np.asarray(values)
+    grid = values.reshape(COLOUR_SWEEP_HUES + 1, COLOUR_SWEEP_SHADES, *values.shape[1:])
+    grid = grid.swapaxes(0, 1)
+    return grid[::-1]
+
+  colours = as_chart([colour_sweep_rgb(k) for k in range(COLOUR_SWEEP_COLOURS)])
+  training = (
+    REAL_TABLE_GOAL_COLOUR_RANGE
+    if scene == "goal_color_sweep"
+    else (REAL_TABLE_OBJECT_COLOUR_RANGE)
+  )
+  nearest = int(
+    np.argmin(
+      [
+        np.linalg.norm(np.subtract(colour_sweep_rgb(k), np.mean(training, axis=1)))
+        for k in range(COLOUR_SWEEP_COLOURS)
+      ]
+    )
+  )
+  column, shade = divmod(nearest, COLOUR_SWEEP_SHADES)
+  box = (column, COLOUR_SWEEP_SHADES - 1 - shade)
+  ticks = [0, 5, 10, 15, 21, 26, COLOUR_SWEEP_HUES]
+  names = ["red", "yellow", "green", "cyan", "blue", "magenta", "gray"]
+
+  def frame(axis, title):
+    axis.set_xticks(ticks, names, fontsize=7)
+    axis.set_yticks([0, COLOUR_SWEEP_SHADES - 1], ["light", "dark"], fontsize=7)
+    axis.tick_params(length=0)
+    axis.set_title(title, fontsize=9)
+    for spine in axis.spines.values():
+      spine.set_visible(False)
+    axis.add_patch(
+      plt.Rectangle(
+        (box[0] - 0.5, box[1] - 0.5), 1, 1, fill=False, edgecolor=INK, linewidth=1.4
+      )
+    )
+
+  columns = min(len(encoders) + 1, 4)
+  lines = -(-(len(encoders) + 1) // columns)
+  figure, axes = plt.subplots(
+    lines, columns, figsize=(3.4 * columns, 2.7 * lines), squeeze=False
+  )
+  axes = axes.ravel()
+  axes[0].imshow(colours, aspect="auto", interpolation="nearest")
+  frame(axes[0], "Test colors (box: training color)")
+  for axis, encoder in zip(axes[1:], encoders, strict=False):
+    values = np.mean([r["values"] for r in rows if r["encoder"] == encoder], axis=0)
+    image = axis.imshow(
+      as_chart(values) * 100,
+      cmap="Blues",
+      vmin=0,
+      vmax=100,
+      aspect="auto",
+      interpolation="nearest",
+    )
+    frame(axis, ENCODERS[encoder][0])
+  for axis in axes[len(encoders) + 1 :]:
+    axis.set_visible(False)
+  bar = figure.colorbar(image, ax=axes.tolist(), fraction=0.015, pad=0.01)
+  bar.set_label(_METRIC_LABELS.get(metric, metric), fontsize=8)
+  bar.ax.tick_params(labelsize=7)
+  for suffix in ("pdf", "png"):
+    figure.savefig(path.with_suffix(f".{suffix}"), dpi=300, bbox_inches="tight")
+  plt.close(figure)
+
+  figure, (by_hue, by_shade) = plt.subplots(
+    1, 2, figsize=(6.3, 2.8), gridspec_kw={"width_ratios": (2, 1)}
+  )
+  hue_x = np.arange(COLOUR_SWEEP_HUES + 1)
+  shade_x = np.arange(COLOUR_SWEEP_SHADES)
+  for encoder in encoders:
+    name, color = ENCODERS[encoder]
+    grid = (
+      np.mean([r["values"] for r in rows if r["encoder"] == encoder], axis=0).reshape(
+        COLOUR_SWEEP_HUES + 1, COLOUR_SWEEP_SHADES
+      )
+      * 100
+    )
+    by_hue.plot(
+      hue_x, grid.mean(1), color=color, linewidth=1.3, marker="o", ms=2.5, label=name
+    )
+    by_shade.plot(
+      shade_x,
+      grid[:COLOUR_SWEEP_HUES].mean(0),
+      color=color,
+      linewidth=1.3,
+      marker="o",
+      ms=2.5,
+    )
+  rainbow = [
+    colour_sweep_rgb(k * COLOUR_SWEEP_SHADES + COLOUR_SWEEP_SHADES // 2) for k in hue_x
+  ]
+  ramp = [
+    colour_sweep_rgb(COLOUR_SWEEP_HUES * COLOUR_SWEEP_SHADES + k) for k in shade_x
+  ]
+  for axis, strip, x, labels in (
+    (by_hue, rainbow, hue_x, (ticks, names)),
+    (by_shade, ramp, shade_x, ([0, COLOUR_SWEEP_SHADES - 1], ["dark", "light"])),
+  ):
+    axis.set_ylim(-12, 100)
+    axis.imshow(
+      [strip], extent=(x[0] - 0.5, x[-1] + 0.5, -11, -4), aspect="auto", zorder=0
+    )
+    axis.set_xlim(x[0] - 0.5, x[-1] + 0.5)
+    axis.set_xticks(*labels, fontsize=7)
+    axis.set_yticks(range(0, 101, 20))
+    axis.grid(axis="y", color=GRID, linewidth=0.6)
+    axis.tick_params(colors=MUTED, labelcolor=INK, width=0.6, length=0)
+    for side in ("top", "right", "bottom"):
+      axis.spines[side].set_visible(False)
+    axis.spines["left"].set_color(MUTED)
+    axis.spines["left"].set_bounds(0, 100)
+  by_hue.set_ylabel(_METRIC_LABELS.get(metric, metric), color=INK)
+  by_hue.set_title("Per color (over its shades)", fontsize=8, loc="left")
+  by_shade.set_title("Per shade (over the colors)", fontsize=8, loc="left")
+  figure.legend(
+    loc="outside lower center", ncol=min(len(encoders), 4), frameon=False, fontsize=7
+  )
+  figure.set_layout_engine("constrained")
+  for suffix in ("pdf", "png"):
+    figure.savefig(
+      path.with_name(path.name + "_lines").with_suffix(f".{suffix}"), dpi=300
+    )
+  plt.close(figure)
+
+
 def main(argv: list[str] | None = None) -> None:
   parser = argparse.ArgumentParser(
     description="Final evaluation of every student across its scenes."
@@ -282,12 +469,24 @@ def main(argv: list[str] | None = None) -> None:
   )
   _write_csv(args.output / "final_evaluation_summary.csv", summary)
   for task in sorted({r["task"] for r in summary}):
-    plot_overview(summary, task, args.output / f"{task.lower()}_overview")
+    plot_overview(
+      summary,
+      task,
+      args.output / f"{task.lower()}_overview",
+      SUCCESS.get(task, "success"),
+    )
     if any(r["task"] == task and r["metric"] == "overlap" for r in summary):
       plot_overview(
         summary, task, args.output / f"{task.lower()}_overview_overlap", "overlap"
       )
     plot_scenes(rows, summary, task, args.output / f"{task.lower()}_scenes")
+  sweeps = fetch_colour_sweeps(args.project)
+  for task, scene, metric in sorted(
+    {(r["task"], r["scene"], r["metric"]) for r in sweeps}
+  ):
+    if metric in (SUCCESS.get(task, "success"), "overlap"):
+      name = f"{task.lower()}_{scene}" + ("" if metric != "overlap" else "_overlap")
+      plot_colour_sweep(sweeps, task, scene, metric, args.output / name)
   print(
     f"{len(rows)} values from {len({r['run'] for r in rows})} runs -> {args.output}"
   )
@@ -296,8 +495,11 @@ def main(argv: list[str] | None = None) -> None:
 __all__ = [
   "ENCODERS",
   "SCENES",
+  "SUCCESS",
   "fetch",
+  "fetch_colour_sweeps",
   "main",
+  "plot_colour_sweep",
   "plot_overview",
   "plot_scenes",
   "summarise",

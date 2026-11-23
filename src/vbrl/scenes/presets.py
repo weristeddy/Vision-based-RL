@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import colorsys
 import random
 import re
 from dataclasses import dataclass, replace
@@ -176,6 +177,10 @@ class ScenePreset:
   goal_colour_range: tuple | None = None
   # A fixed diffuse colour for the table light in place of the training draw.
   light_colour: tuple[float, float, float] | None = None
+  # Evaluation only: every env gets its own colour of the sweep path (see
+  # sweep_colour), set after the usual colour draw so the episodes stay paired.
+  object_colour_sweep: bool = False
+  goal_colour_sweep: bool = False
   ood: bool = False
 
 
@@ -261,6 +266,27 @@ PURPLE_GOAL = (0.22, 0.04, 0.45)
 # The swap gives each the other's training median.
 SWAP_OBJECT = (0.12, 0.16, 0.05)
 SWAP_GOAL = (0.25, 0.075, 0.015)
+# The colour sweeps test a colour chart: 31 hues of the rainbow, each in 16 shades
+# from dark to light (HSL, full saturation, lightness 0.1 to 0.9), plus 16 greys
+# from black to white. 512 colours, one per evaluation episode.
+COLOUR_SWEEP_HUES = 31
+COLOUR_SWEEP_SHADES = 16
+COLOUR_SWEEP_COLOURS = (COLOUR_SWEEP_HUES + 1) * COLOUR_SWEEP_SHADES
+
+
+def colour_sweep_rgb(index: int) -> tuple[float, float, float]:
+  column, shade = divmod(index, COLOUR_SWEEP_SHADES)
+  if column == COLOUR_SWEEP_HUES:
+    grey = shade / (COLOUR_SWEEP_SHADES - 1)
+    return (grey, grey, grey)
+  lightness = 0.1 + 0.8 * shade / (COLOUR_SWEEP_SHADES - 1)
+  return colorsys.hls_to_rgb(column / COLOUR_SWEEP_HUES, lightness, 1.0)
+
+
+def sweep_colour(env_index: int, num_envs: int) -> int:
+  return env_index * COLOUR_SWEEP_COLOURS // num_envs
+
+
 # Colosseum's Light_Color draws each channel from [0, 0.5]; this one is a hue the
 # training tint (warm to cold only) never produces.
 OOD_LIGHT_COLOUR = (0.08, 0.40, 0.45)
@@ -344,6 +370,8 @@ for _name, _change in {
     "object_colour_range": _fixed(SWAP_OBJECT),
     "goal_colour_range": _fixed(SWAP_GOAL),
   },
+  "object_color_sweep": {"object_colour_sweep": True},
+  "goal_color_sweep": {"goal_colour_sweep": True},
 }.items():
   _PRESETS[_name] = replace(_PRESETS["wood049"], name=_name, **_change)
 
@@ -359,8 +387,11 @@ EVALUATION_SCENES = (
   "goal_blue",
   "object_blue_goal_purple",
   "colour_swap",
+  "object_color_sweep",
+  "goal_color_sweep",
 )
-GOAL_COLOUR_SCENES = ("goal_blue", "object_blue_goal_purple")
+GOAL_COLOUR_SCENES = ("goal_blue", "object_blue_goal_purple", "goal_color_sweep")
+COLOUR_SWEEP_SCENES = ("object_color_sweep", "goal_color_sweep")
 
 
 def evaluation_scenes(*, goal_visible: bool) -> tuple[str, ...]:
@@ -452,6 +483,10 @@ def ambientcg_texture_names(families: tuple[str, ...] = ()) -> tuple[str, ...]:
 __all__ = [
   "BLUE_GOAL",
   "BLUE_OBJECT",
+  "COLOUR_SWEEP_COLOURS",
+  "COLOUR_SWEEP_HUES",
+  "COLOUR_SWEEP_SHADES",
+  "COLOUR_SWEEP_SCENES",
   "EVALUATION_SCENES",
   "GOAL_COLOUR_EVENT",
   "GOAL_COLOUR_SCENES",
@@ -489,7 +524,9 @@ __all__ = [
   "ambientcg_texture_names",
   "ambientcg_texture_paths",
   "evaluation_scenes",
+  "colour_sweep_rgb",
   "get_preset",
+  "sweep_colour",
   "list_scenes",
   "ood_scenes",
   "procedural_material_names",

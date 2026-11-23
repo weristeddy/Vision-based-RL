@@ -75,7 +75,7 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
 
 def _evaluate(
   task_id: str, args: TrainConfig, log_dir: Path
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], dict[str, dict]]:
   import torch
 
   from vbrl.evaluation.checkpoints import evaluate_checkpoints, saved_checkpoints
@@ -83,17 +83,27 @@ def _evaluate(
   device = "cuda:0" if torch.cuda.is_available() else "cpu"
   saved = saved_checkpoints(log_dir)
   curve = evaluate_checkpoints(task_id, saved, device=device)
-  final = [
-    {"scene": scene, **row}
-    for scene in getattr(args.agent, "evaluation_scenes", ())
-    for row in evaluate_checkpoints(task_id, saved[-1:], device=device, scene=scene)
-  ]
+  final, sweeps = [], {}
+  for scene in getattr(args.agent, "evaluation_scenes", ()):
+    for row in evaluate_checkpoints(task_id, saved[-1:], device=device, scene=scene):
+      if "by_colour" in row:
+        sweeps[scene] = row.pop("by_colour")
+      final.append({"scene": scene, **row})
   _write_csv(log_dir / "evaluation.csv", curve)
   if final:
     _write_csv(log_dir / "final_evaluation.csv", final)
+  if sweeps:
+    _write_csv(
+      log_dir / "final_colour_sweeps.csv",
+      [
+        {"scene": scene, "colour": k, **{key: values[k] for key, values in by.items()}}
+        for scene, by in sweeps.items()
+        for k in range(len(next(iter(by.values()))))
+      ],
+    )
   for _, path in saved[:-1]:
     path.unlink()
-  return curve, final
+  return curve, final, sweeps
 
 
 def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
@@ -101,7 +111,9 @@ def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
 
   from vbrl.evaluation.checkpoints import saved_checkpoints
 
-  curve, final = _evaluate(task_id, args, log_dir) if args.evaluate else ([], [])
+  curve, final, sweeps = (
+    _evaluate(task_id, args, log_dir) if args.evaluate else ([], [], {})
+  )
   if args.agent.logger != "wandb":
     return
   run = wandb.init(
@@ -123,6 +135,8 @@ def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
   for row in final:
     scene = row.pop("scene")
     run.summary.update({f"final/{scene}/{key}": value for key, value in row.items()})
+  for scene, by in sweeps.items():
+    run.summary.update({f"final/{scene}/by_colour/{k}": v for k, v in by.items()})
   if args.agent.upload_model:
     _, checkpoint = saved_checkpoints(log_dir)[-1]
     for path in (checkpoint, log_dir / f"{log_dir.name}.onnx"):
