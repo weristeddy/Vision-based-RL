@@ -15,6 +15,7 @@ ENCODERS = {
   "DinoV2ViTS14-Global": ("DINOv2 global", "#eb6834"),
   "R3MResNet50-AfaFull32": ("R3M + AFA", "#1baf7a"),
   "R3MResNet50-Global": ("R3M global", "#eda100"),
+  "R3MResNet50L3-AfaFull16": ("R3M layer 3 + AFA", "#8c564b"),
   "NatureCnn-FlattenRelu": ("Nature CNN", "#e87ba4"),
   "CompactVit-Svea": ("CompactViT", "#008300"),
   "DinoV3ViTS16-AfaFull6": ("DINOv3 + AFA", "#6250d6"),
@@ -29,8 +30,8 @@ SCENES = {
   "goal_blue": "Goal blue",
   "object_blue_goal_purple": "Object blue,\ngoal purple",
   "colour_swap": "Color swap",
-  "object_color_sweep": "Object color sweep",
-  "goal_color_sweep": "Goal color sweep",
+  "object_color_sweep": "Object color\nsweep",
+  "goal_color_sweep": "Goal color\nsweep",
 }
 # Lift-Cube's goal is never in view, so its "swap" only turns the cube green.
 SCENE_OVERRIDES = {("LiftCube", "colour_swap"): "Object green"}
@@ -58,23 +59,31 @@ def _students(project: str):
 
 
 def fetch_colour_sweeps(project: str = ENTITY_PROJECT) -> list[dict]:
+  # The 256 per-colour values live in each run's logged table; W&B keeps lists
+  # that long out of the run summary.
   rows = []
   for run, task, encoder, seed in _students(project):
-    for key, values in run.summary.items():
-      parts = key.split("/")
-      if len(parts) != 4 or parts[0] != "final" or parts[2] != "by_colour":
+    for artifact in run.logged_artifacts():
+      match = re.search(r"final(\w+_color_sweep)per_colour", artifact.name)
+      if artifact.type != "run_table" or not match:
         continue
-      rows.append(
-        {
-          "task": task,
-          "encoder": encoder,
-          "run": run.id,
-          "seed": seed,
-          "scene": parts[1],
-          "metric": parts[3],
-          "values": list(values),
-        }
-      )
+      scene = match[1]
+      table = artifact.get(f"final/{scene}/per_colour")
+      data = sorted(table.data, key=lambda row: row[0])
+      for column, metric in enumerate(table.columns):
+        if metric in ("colour", "r", "g", "b"):
+          continue
+        rows.append(
+          {
+            "task": task,
+            "encoder": encoder,
+            "run": run.id,
+            "seed": seed,
+            "scene": scene,
+            "metric": metric,
+            "values": [float(row[column]) for row in data],
+          }
+        )
   return rows
 
 
@@ -87,7 +96,7 @@ def fetch(project: str = ENTITY_PROJECT) -> list[dict]:
         continue
       if parts[2] == "iteration":
         continue
-      if value is None or isinstance(value, dict):
+      if not isinstance(value, (int, float)):
         continue
       rows.append(
         {

@@ -110,6 +110,7 @@ def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
   import wandb
 
   from vbrl.evaluation.checkpoints import saved_checkpoints
+  from vbrl.scenes.presets import colour_sweep_rgb
 
   curve, final, sweeps = (
     _evaluate(task_id, args, log_dir) if args.evaluate else ([], [], {})
@@ -136,7 +137,11 @@ def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
     scene = row.pop("scene")
     run.summary.update({f"final/{scene}/{key}": value for key, value in row.items()})
   for scene, by in sweeps.items():
-    run.summary.update({f"final/{scene}/by_colour/{k}": v for k, v in by.items()})
+    metrics = list(by)
+    table = wandb.Table(columns=["colour", "r", "g", "b", *metrics])
+    for k in range(len(by[metrics[0]])):
+      table.add_data(k, *colour_sweep_rgb(k), *(by[m][k] for m in metrics))
+    run.log({f"final/{scene}/per_colour": table})
   if args.agent.upload_model:
     _, checkpoint = saved_checkpoints(log_dir)[-1]
     for path in (checkpoint, log_dir / f"{log_dir.name}.onnx"):
