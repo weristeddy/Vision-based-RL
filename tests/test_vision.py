@@ -91,7 +91,7 @@ NATIVE_GRIDS = {
   "nature_cnn": 24,
   "compact_vit": 14,
   "dinov2_vits14": 16,
-  "dinov3_vits16": 14,
+  "dinov3_vits16": 16,
   "r3m_resnet50": 7,
   "r3m_resnet50_layer3": 14,
 }

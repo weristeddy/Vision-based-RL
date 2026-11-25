@@ -32,7 +32,7 @@ def load(*, allow_download: bool = False) -> nn.Module:
     cache_dir=huggingface_cache(model_root()),
     local_files_only=not allow_download,
   )
-  model = timm.create_model(DINOV3_MODEL, pretrained=False, img_size=224)
+  model = timm.create_model(DINOV3_MODEL, pretrained=False, img_size=256)
   model.load_state_dict(load_file(path), strict=True)
   return model
 

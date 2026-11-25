@@ -23,7 +23,12 @@ from .config import (
   Weights,
 )
 from .encoder import Extract, Preprocess, VisualEncoder
-from .preprocessing import preprocess_dinov2, preprocess_r3m, to_unit_interval
+from .preprocessing import (
+  preprocess_dinov2,
+  preprocess_dinov3,
+  preprocess_r3m,
+  to_unit_interval,
+)
 
 BackboneBuilder = Callable[[tuple[int, int]], nn.Module]
 ExtractorFactory = Callable[[FeatureRequest, int], Extract]
@@ -211,10 +216,9 @@ ENCODERS: dict[EncoderName, EncoderSpec] = {
     "dinov2_vits14", 384, "pretrained", False, _SPATIAL_FEATURES, 128,
     dinov2.build, preprocess_dinov2, dinov2.make_extractor,
   ),
-  # The LVD-1689M weights take the same ImageNet statistics at 224 px: 14 x 14 patches.
   "dinov3_vits16": EncoderSpec(
     "dinov3_vits16", 384, "pretrained", False, _SPATIAL_FEATURES, 128,
-    dinov3.build, preprocess_dinov2, dinov3.make_extractor,
+    dinov3.build, preprocess_dinov3, dinov3.make_extractor,
   ),
   "r3m_resnet50": EncoderSpec(
     "r3m_resnet50", 2048, "pretrained", False, _SPATIAL_FEATURES, 256,

@@ -56,6 +56,14 @@ def preprocess_dinov2(images: torch.Tensor) -> torch.Tensor:
   return imagenet_normalize(resize_images(images, (224, 224)))
 
 
+# DINOv3 trained at 256 px: 16 x 16 patches of 16 px, the grid DINOv2 gets at 224 px.
+def preprocess_dinov3(images: torch.Tensor) -> torch.Tensor:
+  images = F.interpolate(
+    to_unit_interval(images), size=(256, 256), mode="bicubic", align_corners=False
+  )
+  return imagenet_normalize(images)
+
+
 def preprocess_r3m(images: torch.Tensor) -> torch.Tensor:
   # R3M applies its own /255 and normalization inside the published model.
   return resize_images(images, (224, 224)).mul(255.0)
