@@ -14,6 +14,7 @@ COUNT_SET="0"
 USE_FALLBACK="0"
 DEPENDENCY=""
 EXCLUDE=""
+RESERVATION=""
 SEEDS="1"
 
 usage() {
@@ -23,6 +24,7 @@ Usage:
   bash cluster/submit.sh --profile a100 --sweep-agent entity/project/sweep-id [--count N]
   bash cluster/submit.sh --profile a100 --dependency afterany:<job-id> -- TASK_ID
   bash cluster/submit.sh --profile b200 --exclude node-a,node-b -- TASK_ID
+  bash cluster/submit.sh --profile b200 --reservation NAME -- TASK_ID
   bash cluster/submit.sh --profile b200 --seeds 3 -- TASK_ID --label NAME
   bash cluster/submit.sh --profile a100 --seeds 3 -- TASK_A,TASK_B --label NAME
 
@@ -77,6 +79,11 @@ while [[ $# -gt 0 ]]; do
     --exclude)
       [[ $# -ge 2 ]] || { echo "--exclude requires a node list" >&2; exit 2; }
       EXCLUDE="$2"
+      shift 2
+      ;;
+    --reservation)
+      [[ $# -ge 2 ]] || { echo "--reservation requires a reservation name" >&2; exit 2; }
+      RESERVATION="$2"
       shift 2
       ;;
     --seeds)
@@ -187,6 +194,7 @@ SBATCH_ARGS=(
 [[ -z "${SELECTED_ACCOUNT}" ]] || SBATCH_ARGS+=(--account="${SELECTED_ACCOUNT}")
 [[ -z "${DEPENDENCY}" ]] || SBATCH_ARGS+=(--dependency="${DEPENDENCY}")
 [[ -z "${EXCLUDE}" ]] || SBATCH_ARGS+=(--exclude="${EXCLUDE}")
+[[ -z "${RESERVATION}" ]] || SBATCH_ARGS+=(--reservation="${RESERVATION}")
 
 if [[ "${MODE}" == "sweep" ]]; then
   exec sbatch "${SBATCH_ARGS[@]}" "${SCRIPT_DIR}/train.slurm" "${PROFILE}" \
