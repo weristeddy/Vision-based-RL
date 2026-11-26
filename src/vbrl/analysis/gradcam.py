@@ -59,8 +59,7 @@ def gradcam(model: Any, obs: Any, config: Any) -> Any:
           actions[:, dimension].sum(), activation, retain_graph=True
         )
         grid, gradient = _as_grid(activation), _as_grid(gradient)
-        sign = actions[:, dimension].detach().sign()[:, None, None, None]
-        maps = maps + F.relu(sign * (gradient * grid).sum(1, keepdim=True))
+        maps = maps + (gradient * grid).sum(1, keepdim=True).abs()
   finally:
     handle.remove()
     encoder.freeze_backbone = frozen
