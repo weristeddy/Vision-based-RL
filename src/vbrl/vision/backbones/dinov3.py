@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from functools import partial
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from vbrl.paths import model_root
 
@@ -45,14 +42,6 @@ def spatial_features(backbone: nn.Module, images: torch.Tensor) -> torch.Tensor:
   return patches.transpose(1, 2).reshape(batch, channels, height, width)
 
 
-def local_grid_features(
-  backbone: nn.Module, images: torch.Tensor, *, target_grid_size: int
-) -> torch.Tensor:
-  return F.adaptive_avg_pool2d(
-    spatial_features(backbone, images), (target_grid_size, target_grid_size)
-  )
-
-
 # The normalised CLS token, as Meta's x_norm_clstoken; timm's own pooling averages the
 # patches instead.
 def global_features(backbone: nn.Module, images: torch.Tensor) -> torch.Tensor:
@@ -67,7 +56,6 @@ def make_extractor(request: FeatureRequest, target_grid_size: int):
   return {
     "global": global_features,
     "spatial": spatial_features,
-    "local_grid": partial(local_grid_features, target_grid_size=target_grid_size),
   }[request]
 
 
@@ -76,7 +64,6 @@ __all__ = [
   "build",
   "global_features",
   "load",
-  "local_grid_features",
   "make_extractor",
   "spatial_features",
 ]

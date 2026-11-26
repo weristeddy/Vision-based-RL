@@ -72,21 +72,6 @@ def _under_checkout(
   return (root / candidate).resolve(), root
 
 
-def repository_path(path: str | Path) -> Path:
-  return _under_checkout(path)[0]
-
-
-def analysis_manifest_path(path: str | Path) -> Path:
-  candidate = Path(path).expanduser()
-  resolved, root = _under_checkout(candidate)
-  if candidate.is_absolute():
-    return resolved
-  assert root is not None
-  if resolved.is_file() or candidate.parts[:2] == ("configs", "analysis"):
-    return resolved
-  return (root / "configs" / "analysis" / candidate).resolve()
-
-
 def _confined_output(path: str | Path, directory: str, description: str) -> Path:
   resolved, root = _under_checkout(path, required=False)
   if root is None:

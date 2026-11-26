@@ -32,83 +32,6 @@ class FlattenReluAdapter(nn.Module):
     return self.activation(self.proj(self.flatten(features)))
 
 
-class LocalGridAdapter(nn.Module):
-  def __init__(
-    self,
-    input_channels: int,
-    output_dim: int = 256,
-    projected_channels: int = 64,
-    target_grid_size: int = 7,
-  ) -> None:
-    super().__init__()
-    if min(input_channels, output_dim, projected_channels, target_grid_size) <= 0:
-      raise ValueError("All LocalGridAdapter dimensions must be positive.")
-    self.input_channels = input_channels
-    self.output_dim = output_dim
-    self.target_grid_size = target_grid_size
-    self.proj = nn.Conv2d(input_channels, projected_channels, 1)
-    self.norm = nn.LayerNorm(projected_channels)
-    self.activation = nn.ReLU()
-    self.flatten_proj = nn.Linear(projected_channels * target_grid_size**2, output_dim)
-    self.output_norm = nn.LayerNorm(output_dim)
-
-  def forward(self, features: torch.Tensor) -> torch.Tensor:
-    if features.ndim != 4 or features.shape[1] != self.input_channels:
-      raise ValueError(
-        f"Expected [B,{self.input_channels},H,W], got {tuple(features.shape)}."
-      )
-    if features.shape[-2:] != (self.target_grid_size, self.target_grid_size):
-      features = F.adaptive_avg_pool2d(features, self.target_grid_size)
-    features = self.proj(features).permute(0, 2, 3, 1)
-    features = self.activation(self.norm(features)).permute(0, 3, 1, 2)
-    return self.output_norm(self.flatten_proj(features.flatten(1)))
-
-
-class SpatialSoftmaxAdapter(nn.Module):
-  def __init__(self, input_channels: int, output_channels: int = 128) -> None:
-    super().__init__()
-    if input_channels <= 0 or output_channels <= 0:
-      raise ValueError("SpatialSoftmaxAdapter channel counts must be positive.")
-    self.input_channels = input_channels
-    self.output_dim = 2 * output_channels
-    self.proj = nn.Conv2d(input_channels, output_channels, 1)
-    self.output_norm = nn.LayerNorm(self.output_dim)
-    self._pos_x: torch.Tensor
-    self._pos_y: torch.Tensor
-    self.register_buffer("_pos_x", torch.empty(0), persistent=False)
-    self.register_buffer("_pos_y", torch.empty(0), persistent=False)
-
-  def _coordinate_grid(
-    self, height: int, width: int, reference: torch.Tensor
-  ) -> tuple[torch.Tensor, torch.Tensor]:
-    shape = (1, 1, height * width)
-    if (
-      tuple(self._pos_x.shape) != shape
-      or self._pos_x.device != reference.device
-      or self._pos_x.dtype != reference.dtype
-    ):
-      with torch.inference_mode(False), torch.no_grad():
-        y = torch.linspace(-1, 1, height, device=reference.device, dtype=reference.dtype)
-        x = torch.linspace(-1, 1, width, device=reference.device, dtype=reference.dtype)
-        pos_y, pos_x = torch.meshgrid(y, x, indexing="ij")
-        self._pos_x, self._pos_y = pos_x.reshape(shape), pos_y.reshape(shape)
-    return self._pos_x, self._pos_y
-
-  def forward(self, features: torch.Tensor) -> torch.Tensor:
-    if features.ndim != 4 or features.shape[1] != self.input_channels:
-      raise ValueError(
-        f"Expected [B,{self.input_channels},H,W], got {tuple(features.shape)}."
-      )
-    logits = self.proj(features)
-    batch, channels, height, width = logits.shape
-    probabilities = logits.reshape(batch, channels, -1).softmax(dim=-1)
-    pos_x, pos_y = self._coordinate_grid(height, width, logits)
-    coordinates = torch.stack(
-      ((probabilities * pos_x).sum(-1), (probabilities * pos_y).sum(-1)), dim=-1
-    )
-    return self.output_norm(coordinates.reshape(batch, self.output_dim))
-
-
 class AttentionPoolLatent(nn.Module):
   def __init__(self, features: int, num_heads: int) -> None:
     super().__init__()
@@ -146,25 +69,15 @@ class L2Normalize(nn.Module):
 
 
 class AFAAdapter(nn.Module):
-  def __init__(
-    self,
-    input_channels: int,
-    output_dim: int = 0,
-    num_heads: int = 8,
-  ) -> None:
+  def __init__(self, input_channels: int, num_heads: int = 8) -> None:
     super().__init__()
     self.input_channels = input_channels
-    self.output_dim = output_dim or input_channels
+    self.output_dim = input_channels
     self.pool = AttentionPoolLatent(input_channels, num_heads)
-    self.proj = (
-      nn.Linear(input_channels, self.output_dim)
-      if self.output_dim != input_channels
-      else nn.Identity()
-    )
 
   def forward(self, features: torch.Tensor) -> torch.Tensor:
     if features.ndim != 4 or features.shape[1] != self.input_channels:
       raise ValueError(
         f"Expected [B,{self.input_channels},H,W], got {tuple(features.shape)}."
       )
-    return self.proj(self.pool(features.flatten(2).transpose(1, 2)))
+    return self.pool(features.flatten(2).transpose(1, 2))

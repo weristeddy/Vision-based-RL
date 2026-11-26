@@ -74,7 +74,6 @@ def make_extractor(request: FeatureRequest, target_grid_size: int):
   return {
     "global": global_features,
     "spatial": spatial_features,
-    "local_grid": spatial_features,
   }[request]
 
 
@@ -83,7 +82,6 @@ def make_layer3_extractor(request: FeatureRequest, target_grid_size: int):
   return {
     "global": layer3_global_features,
     "spatial": layer3_features,
-    "local_grid": layer3_features,
   }[request]
 
 

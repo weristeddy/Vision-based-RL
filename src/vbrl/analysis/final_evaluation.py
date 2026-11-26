@@ -26,9 +26,6 @@ SCENES = {
   "real_table": "Rig table",
   "marble019": "Marble table",
   "ood_light": "Light color",
-  "object_blue": "Object blue",
-  "goal_blue": "Goal blue",
-  "object_blue_goal_purple": "Object blue,\ngoal purple",
   "colour_swap": "Color swap",
   "object_color_sweep": "Object color\nsweep",
   "goal_color_sweep": "Goal color\nsweep",
@@ -38,6 +35,10 @@ SCENE_OVERRIDES = {("LiftCube", "colour_swap"): "Object green"}
 # Lift-Cube as the real robot scores it: holding the cube within 5 cm of the goal
 # at the episode's end, not the cube passing the goal once.
 SUCCESS = {"LiftCube": "held_at_goal"}
+# The colour sweep charts box the object and goal marker defaults: chart cells as
+# (hue column, shade counted from the darkest).
+DEFAULT_OBJECT_CELL = (0, 2)
+DEFAULT_GOAL_CELL = (5, 1)
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 RAMP = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b")
 
@@ -320,8 +321,6 @@ def plot_colour_sweep(
     COLOUR_SWEEP_COLOURS,
     COLOUR_SWEEP_HUES,
     COLOUR_SWEEP_SHADES,
-    REAL_TABLE_GOAL_COLOUR_RANGE,
-    REAL_TABLE_OBJECT_COLOUR_RANGE,
     colour_sweep_rgb,
   )
 
@@ -340,22 +339,14 @@ def plot_colour_sweep(
 
   colours = as_chart([colour_sweep_rgb(k) for k in range(COLOUR_SWEEP_COLOURS)])
 
-  def cell(training) -> tuple[int, int]:
-    nearest = int(
-      np.argmin(
-        [
-          np.linalg.norm(np.subtract(colour_sweep_rgb(k), np.mean(training, axis=1)))
-          for k in range(COLOUR_SWEEP_COLOURS)
-        ]
-      )
+  # Solid: the object's default colour; dashed: the goal marker's. Chart cells as
+  # (hue column, shade from the darkest): dark red #690000 and dark green #004E00.
+  boxes = tuple(
+    ((column, COLOUR_SWEEP_SHADES - 1 - shade), style)
+    for (column, shade), style in (
+      (DEFAULT_OBJECT_CELL, "solid"),
+      (DEFAULT_GOAL_CELL, (0, (2, 1.5))),
     )
-    column, shade = divmod(nearest, COLOUR_SWEEP_SHADES)
-    return column, COLOUR_SWEEP_SHADES - 1 - shade
-
-  # Solid: the training object colour; dashed: the training goal colour.
-  boxes = (
-    (cell(REAL_TABLE_OBJECT_COLOUR_RANGE), "solid"),
-    (cell(REAL_TABLE_GOAL_COLOUR_RANGE), (0, (2, 1.5))),
   )
   # Columns sit at hue k / COLOUR_SWEEP_HUES of the circle; label the six primaries.
   ticks = [COLOUR_SWEEP_HUES * f for f in (0, 1 / 6, 1 / 3, 1 / 2, 2 / 3, 5 / 6)]
@@ -389,7 +380,7 @@ def plot_colour_sweep(
   )
   axes = axes.ravel()
   axes[0].imshow(colours, aspect="equal", interpolation="nearest")
-  frame(axes[0], "Test colors (training: T solid, goal dashed)")
+  frame(axes[0], "Test colors (default: object solid, goal dashed)")
   for axis, encoder in zip(axes[1:], encoders, strict=False):
     values = np.mean([r["values"] for r in rows if r["encoder"] == encoder], axis=0)
     image = axis.imshow(

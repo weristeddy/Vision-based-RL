@@ -48,25 +48,21 @@ MUJOCO_LOG.TXT
 **/third_party/**
 **/.codex
 
-# All generated experiment and analysis products live here. Promote selected
-# figures to reports/.
-# artifacts/**
-# !artifacts/.gitkeep
-
-# ...except the two the analysis pipeline writes at hundreds of MB each. A
-# capture is 1024 raw 224x224 frames and a feature dump is every activation for
-# them -- one four-run probe came to 962 MB, and GitHub hard-rejects any blob
-# over 100 MB, which blocks the whole push and needs a history rewrite to undo.
-# Both regenerate from the manifest in configs/analysis/, so they are outputs,
-# not inputs. Existing tracked copies are unaffected; ignore rules do not
-# untrack.
-artifacts/analysis/**/capture.npz
-artifacts/analysis/**/features.npz
+# Generated outputs live here; selected figures are promoted to reports/. Only the
+# camera calibration is tracked: the real-robot data and the feature-analysis
+# images run to gigabytes, and GitHub rejects any file over 100 MB.
+artifacts/**
+!artifacts/.gitkeep
+!artifacts/deployment/
+!artifacts/deployment/intrinsics/
+!artifacts/deployment/intrinsics/**
+!artifacts/deployment/extrinsics/
+!artifacts/deployment/extrinsics/**
 
 # Trained policies may be copied here locally or fetched from W&B on demand.
 # Exported ONNX graphs are the same weights in the deployable format, so they
 # live beside their .pt and are ignored on the same grounds -- 90 MB each, and
-# reproducible from the checkpoint with vbrl-export-onnx.
+# downloadable from the run on W&B (fetch_policies).
 ckpts/**/*.pt
 ckpts/**/*.onnx
 

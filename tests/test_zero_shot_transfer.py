@@ -84,16 +84,16 @@ def _registered_architectures() -> tuple[tuple[str, dict], ...]:
   for encoder, spec in ENCODERS.items():
     if encoder == "none":
       continue
-    key = (encoder, "global", None)
+    key = (encoder, "global_normalized", None)
     found.setdefault(
       key,
       (
-        f"{encoder}-global",
+        f"{encoder}-global_normalized",
         {
           "encoder": encoder,
           "weights": spec.weights,
           "train_encoder": spec.trainable,
-          "adapter": "global",
+          "adapter": "global_normalized",
         },
       ),
     )

@@ -11,15 +11,19 @@ def _gain(text: str) -> float | tuple[float, ...]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-  from vbrl.deployment.config import load_config
   from vbrl.deployment.loop import home, park, run
+  from vbrl.deployment.session import load_session
 
   parser = argparse.ArgumentParser(
     prog="vbrl-deploy",
     description="Run one trained policy on the real arm.",
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  parser.add_argument("manifest", help="deployment YAML (see configs/deployment/)")
+  parser.add_argument("task", help="configs/deployment/<task>.yaml")
+  parser.add_argument("--policy", help="one of the task's policies; default the first")
+  parser.add_argument(
+    "--goal", help="goal number (the task's list or its measured goal.json), a goal.json, or x,y,z|yaw"
+  )
   parser.add_argument(
     "--dry-run",
     action="store_true",
@@ -43,9 +47,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     "camera frame.",
   )
   parser.add_argument(
-    "--record-camera",
-    help="another manifest whose camera (serial, exposure, gain, white balance) "
-    "is recorded alongside into the --log trace as record_frames",
+    "--record-other",
+    action="store_true",
+    help="record the rig's other camera alongside into the --log trace",
   )
   parser.add_argument(
     "--home",
@@ -69,7 +73,12 @@ def main(argv: Sequence[str] | None = None) -> int:
   )
   arguments = parser.parse_args(argv)
 
-  config = load_config(arguments.manifest)
+  session = load_session(arguments.task)
+  moves = not (arguments.home or arguments.park)
+  if moves and arguments.goal is None and session.task == "push_t":
+    parser.error("Push-T needs --goal: the goal block's number or x,y,yaw")
+  goal = None if arguments.goal is None else session.goal(arguments.goal)
+  config = session.config(arguments.policy, goal)
   overrides = {
     name: value
     for name, value in (
@@ -93,9 +102,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     max_steps=arguments.max_steps,
     keyboard_goal=arguments.keyboard_goal,
     log=arguments.log,
-    record_camera=None
-    if arguments.record_camera is None
-    else load_config(arguments.record_camera),
+    record_camera=session.config(arguments.policy, goal, session.other_camera)
+    if arguments.record_other
+    else None,
   )
 
 

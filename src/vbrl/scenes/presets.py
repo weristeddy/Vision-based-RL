@@ -4,7 +4,7 @@ import colorsys
 import random
 import re
 from dataclasses import dataclass, replace
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -258,11 +258,6 @@ def _fixed(rgb: tuple[float, float, float]) -> tuple:
   return tuple((value, value) for value in rgb)
 
 
-# Fixed out-of-distribution values, each at the luminance of the training colour it
-# replaces (object ~0.12, goal ~0.14), so a drop measures hue, not brightness.
-BLUE_OBJECT = (0.035, 0.07, 0.60)
-BLUE_GOAL = (0.035, 0.09, 0.70)
-PURPLE_GOAL = (0.22, 0.04, 0.45)
 # The swap gives each the other's training median.
 SWAP_OBJECT = (0.12, 0.16, 0.05)
 SWAP_GOAL = (0.25, 0.075, 0.015)
@@ -360,12 +355,6 @@ _PRESETS: dict[str, ScenePreset] = {
 # as in training, so a seed gives the same episodes as wood049.
 for _name, _change in {
   "ood_light": {"light_colour": OOD_LIGHT_COLOUR},
-  "object_blue": {"object_colour_range": _fixed(BLUE_OBJECT)},
-  "goal_blue": {"goal_colour_range": _fixed(BLUE_GOAL)},
-  "object_blue_goal_purple": {
-    "object_colour_range": _fixed(BLUE_OBJECT),
-    "goal_colour_range": _fixed(PURPLE_GOAL),
-  },
   "colour_swap": {
     "object_colour_range": _fixed(SWAP_OBJECT),
     "goal_colour_range": _fixed(SWAP_GOAL),
@@ -377,20 +366,18 @@ for _name, _change in {
 
 # Every student trains on real_texture_wood. The tables: in distribution (a
 # training wood), near OOD (the rig's own tabletop), far OOD (an unseen material);
-# then wood049 with the light, object or goal colour out of distribution.
+# then wood049 with the light colour out of distribution, object and goal colours
+# swapped, and the object or goal colour swept over a colour chart.
 EVALUATION_SCENES = (
   "wood049",
   "real_table",
   "marble019",
   "ood_light",
-  "object_blue",
-  "goal_blue",
-  "object_blue_goal_purple",
   "colour_swap",
   "object_color_sweep",
   "goal_color_sweep",
 )
-GOAL_COLOUR_SCENES = ("goal_blue", "object_blue_goal_purple", "goal_color_sweep")
+GOAL_COLOUR_SCENES = ("goal_color_sweep",)
 COLOUR_SWEEP_SCENES = ("object_color_sweep", "goal_color_sweep")
 
 
@@ -457,7 +444,7 @@ def ambientcg_family(path: Path) -> str:
   return match.group() if match else ""
 
 
-@lru_cache(maxsize=None)
+@cache
 def ambientcg_pool_paths(families: tuple[str, ...] = ()) -> tuple[Path, ...]:
   paths = ambientcg_texture_paths()
   if families:
@@ -472,7 +459,7 @@ def ambientcg_pool_paths(families: tuple[str, ...] = ()) -> tuple[Path, ...]:
   return tuple(paths[index] for index in indices)
 
 
-@lru_cache(maxsize=None)
+@cache
 def ambientcg_texture_names(families: tuple[str, ...] = ()) -> tuple[str, ...]:
   return tuple(
     f"{AMBIENTCG_PREFIX}texture_{index:04d}"
@@ -481,8 +468,6 @@ def ambientcg_texture_names(families: tuple[str, ...] = ()) -> tuple[str, ...]:
 
 
 __all__ = [
-  "BLUE_GOAL",
-  "BLUE_OBJECT",
   "COLOUR_SWEEP_COLOURS",
   "COLOUR_SWEEP_HUES",
   "COLOUR_SWEEP_SHADES",
@@ -491,7 +476,6 @@ __all__ = [
   "GOAL_COLOUR_EVENT",
   "GOAL_COLOUR_SCENES",
   "OOD_LIGHT_COLOUR",
-  "PURPLE_GOAL",
   "REAL_TABLE_GOAL_COLOUR_RANGE",
   "SWAP_GOAL",
   "SWAP_OBJECT",

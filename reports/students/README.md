@@ -31,10 +31,9 @@ seed, so the 512 episodes are identical across scenes.
 | Rig table (`real_table`) | the rig's own tabletop photo (unseen, wood) |
 | Marble table (`marble019`) | unseen material, brightness matched to training |
 | Light color (`ood_light`) | table light fixed to RGB (0.08, 0.40, 0.45), Colosseum-style |
-| Object blue (`object_blue`) | object fixed to RGB (0.035, 0.07, 0.60) |
-| Goal blue (`goal_blue`, Push-T) | goal fixed to RGB (0.035, 0.09, 0.70) |
-| Object blue, goal purple (Push-T) | object as above, goal (0.22, 0.04, 0.45) |
 | Color swap (`colour_swap`) | Push-T: object green, goal bordeaux (each the other's training median). Lift-Cube: the goal is never in view, so only the cube turns green; labeled "Object green" there |
+| Object color sweep (`object_color_sweep`) | object over a 256-color chart (15 hues x 16 shades + 16 grays), 2 episodes per color |
+| Goal color sweep (`goal_color_sweep`, Push-T) | goal over the same chart |
 
 ## Files
 

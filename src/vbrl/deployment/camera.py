@@ -36,7 +36,7 @@ def _configure(sensor: Any, config: Any, rs: Any) -> None:
 def still(config: Any, width: int, height: int) -> Any:
   import pyrealsense2 as rs
 
-  from vbrl.deployment.intrinsics import open_stream
+  from vbrl.rig.intrinsics import open_stream
 
   pipeline, fps = open_stream(config.camera_serial, width, height)
   device = pipeline.get_active_profile().get_device()

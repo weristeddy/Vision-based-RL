@@ -1,0 +1,16 @@
+version: 1
+
+# The rig every task shares: the arm and both D405 cameras. A task names the camera
+# its policies see; collection records the other one alongside.
+arm_ip: 192.168.1.2
+
+cameras:
+  external:
+    camera_serial: "260322270027"
+    # Measured 2026-10-26 against 256 real_table renders: brightness 128 (sim 127),
+    # R/G 1.38 (1.36).
+    camera_exposure_us: 8000
+    camera_gain: 27
+    camera_white_balance_k: 4400
+  wrist:
+    camera_serial: "412622271761"

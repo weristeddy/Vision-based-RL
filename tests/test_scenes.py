@@ -15,9 +15,8 @@ from vbrl.scenes.presets import (  # noqa: E402
 
 ALL_SCENES = (
   "default", "procedural", "real_texture", "real_table", "real_texture_wood",
-  "wood049", "marble019", "wood", "plaster", "peacock", "ood_light", "object_blue",
-  "goal_blue", "object_blue_goal_purple", "colour_swap", "object_color_sweep",
-  "goal_color_sweep",
+  "wood049", "marble019", "wood", "plaster", "peacock", "ood_light", "colour_swap",
+  "object_color_sweep", "goal_color_sweep",
 )
 # Every training preset randomizes the sun's colour on top of its pose. The
 # matched-evaluation branch deliberately does not; see `_events` in the builder.
@@ -305,9 +304,6 @@ def test_every_student_is_evaluated_in_its_tasks_scenes() -> None:
     "real_table",
     "marble019",
     "ood_light",
-    "object_blue",
-    "goal_blue",
-    "object_blue_goal_purple",
     "colour_swap",
     "object_color_sweep",
     "goal_color_sweep",
@@ -341,10 +337,7 @@ def test_the_evaluation_scenes_draw_the_same_events() -> None:
 
 def test_each_ood_scene_moves_exactly_its_factor() -> None:
   from vbrl.scenes.presets import (
-    BLUE_GOAL,
-    BLUE_OBJECT,
     OOD_LIGHT_COLOUR,
-    PURPLE_GOAL,
     REAL_TABLE_GOAL_COLOUR_RANGE,
     REAL_TABLE_OBJECT_COLOUR_RANGE,
     SWAP_GOAL,
@@ -359,9 +352,6 @@ def test_each_ood_scene_moves_exactly_its_factor() -> None:
     "ood_light": (
       REAL_TABLE_OBJECT_COLOUR_RANGE, REAL_TABLE_GOAL_COLOUR_RANGE, OOD_LIGHT_COLOUR
     ),
-    "object_blue": (fixed(BLUE_OBJECT), REAL_TABLE_GOAL_COLOUR_RANGE, None),
-    "goal_blue": (REAL_TABLE_OBJECT_COLOUR_RANGE, fixed(BLUE_GOAL), None),
-    "object_blue_goal_purple": (fixed(BLUE_OBJECT), fixed(PURPLE_GOAL), None),
     "colour_swap": (fixed(SWAP_OBJECT), fixed(SWAP_GOAL), None),
   }
   for scene, (obj, goal, light) in expected.items():
@@ -387,15 +377,15 @@ def test_replace_scene_sets_each_tasks_goal_colour(task_id: str, event: str) -> 
 
   import vbrl.tasks  # noqa: F401
   from vbrl.scenes.builder import replace_scene
-  from vbrl.scenes.presets import BLUE_GOAL, REAL_TABLE_GOAL_COLOUR_RANGE
+  from vbrl.scenes.presets import REAL_TABLE_GOAL_COLOUR_RANGE, SWAP_GOAL
 
   def ranges(cfg):
     return tuple(cfg.events[event].params["ranges"])
 
   assert ranges(load_env_cfg(task_id)) == REAL_TABLE_GOAL_COLOUR_RANGE
-  blue = replace_scene(load_env_cfg(task_id, play=True), scene="goal_blue")
-  assert ranges(blue) == tuple((value, value) for value in BLUE_GOAL)
-  back = replace_scene(blue, scene="wood049")
+  swap = replace_scene(load_env_cfg(task_id, play=True), scene="colour_swap")
+  assert ranges(swap) == tuple((value, value) for value in SWAP_GOAL)
+  back = replace_scene(swap, scene="wood049")
   assert ranges(back) == REAL_TABLE_GOAL_COLOUR_RANGE
 
 

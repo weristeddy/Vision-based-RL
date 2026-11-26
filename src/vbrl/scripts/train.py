@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import logging
 import os
 import sys
@@ -66,55 +65,24 @@ def _launch(task_id: str, args: TrainConfig) -> Path:
   return log_dir
 
 
-def _write_csv(path: Path, rows: list[dict]) -> None:
-  with path.open("w", newline="") as file:
-    writer = csv.DictWriter(file, fieldnames=list(rows[0]))
-    writer.writeheader()
-    writer.writerows(rows)
-
-
-def _evaluate(
-  task_id: str, args: TrainConfig, log_dir: Path
-) -> tuple[list[dict], list[dict], dict[str, dict]]:
-  import torch
-
-  from vbrl.evaluation.checkpoints import evaluate_checkpoints, saved_checkpoints
-
-  device = "cuda:0" if torch.cuda.is_available() else "cpu"
-  saved = saved_checkpoints(log_dir)
-  curve = evaluate_checkpoints(task_id, saved, device=device)
-  final, sweeps = [], {}
-  for scene in getattr(args.agent, "evaluation_scenes", ()):
-    for row in evaluate_checkpoints(task_id, saved[-1:], device=device, scene=scene):
-      if "by_colour" in row:
-        sweeps[scene] = row.pop("by_colour")
-      final.append({"scene": scene, **row})
-  _write_csv(log_dir / "evaluation.csv", curve)
-  if final:
-    _write_csv(log_dir / "final_evaluation.csv", final)
-  if sweeps:
-    _write_csv(
-      log_dir / "final_colour_sweeps.csv",
-      [
-        {"scene": scene, "colour": k, **{key: values[k] for key, values in by.items()}}
-        for scene, by in sweeps.items()
-        for k in range(len(next(iter(by.values()))))
-      ],
-    )
-  for _, path in saved[:-1]:
-    path.unlink()
-  return curve, final, sweeps
-
-
 def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
+  import torch
   import wandb
 
-  from vbrl.evaluation.checkpoints import saved_checkpoints
-  from vbrl.scenes.presets import colour_sweep_rgb
-
-  curve, final, sweeps = (
-    _evaluate(task_id, args, log_dir) if args.evaluate else ([], [], {})
+  from vbrl.evaluation.checkpoints import (
+    evaluate_run,
+    log_evaluation,
+    saved_checkpoints,
   )
+
+  saved = saved_checkpoints(log_dir)
+  results = ([], [], {})
+  if args.evaluate:
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    scenes = getattr(args.agent, "evaluation_scenes", ())
+    results = evaluate_run(task_id, saved, scenes, log_dir, device=device)
+    for _, path in saved[:-1]:
+      path.unlink()
   if args.agent.logger != "wandb":
     return
   run = wandb.init(
@@ -123,28 +91,9 @@ def _finish(task_id: str, args: TrainConfig, log_dir: Path) -> None:
     id=os.environ["WANDB_RUN_ID"],
     resume="must",
   )
-  run.define_metric("eval/iteration")
-  run.define_metric("eval/*", step_metric="eval/iteration")
-  for row in curve:
-    run.log({f"eval/{key}": value for key, value in row.items()})
-  if final:
-    rows = [list(row.values()) for row in final]
-    table = wandb.Table(columns=list(final[0]), data=rows)
-    run.log({"final/scenes": table})
-    for metric in ("success", "overlap", "yaw_error"):
-      run.log({f"final/{metric}": wandb.plot.bar(table, "scene", metric, title=metric)})
-  for row in final:
-    scene = row.pop("scene")
-    run.summary.update({f"final/{scene}/{key}": value for key, value in row.items()})
-  for scene, by in sweeps.items():
-    metrics = list(by)
-    table = wandb.Table(columns=["colour", "r", "g", "b", *metrics])
-    for k in range(len(by[metrics[0]])):
-      table.add_data(k, *colour_sweep_rgb(k), *(by[m][k] for m in metrics))
-    run.log({f"final/{scene}/per_colour": table})
+  log_evaluation(run, *results)
   if args.agent.upload_model:
-    _, checkpoint = saved_checkpoints(log_dir)[-1]
-    for path in (checkpoint, log_dir / f"{log_dir.name}.onnx"):
+    for path in (saved[-1][1], log_dir / f"{log_dir.name}.onnx"):
       if path.is_file():
         run.save(str(path), base_path=str(log_dir))
   run.finish()

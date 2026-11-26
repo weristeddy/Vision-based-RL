@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 import torch
 import torch.nn as nn
@@ -18,10 +16,7 @@ BACKBONES = (
   "nature_cnn", "compact_vit", "dinov2_vits14", "dinov3_vits16",
   "r3m_resnet50", "r3m_resnet50_layer3",
 )
-ADAPTER_NAMES = (
-  "global", "global_normalized", "linear", "flatten_relu", "svea", "local_grid",
-  "spatial_softmax", "afa", "afa_full",
-)
+ADAPTER_NAMES = ("global_normalized", "flatten_relu", "svea", "afa_full")
 
 
 def _config(encoder: str, adapter: str, **overrides: object) -> VisionConfig:
@@ -77,14 +72,7 @@ def test_declared_backbone_adapter_capability_matrix_is_complete() -> None:
   for name in ADAPTER_NAMES:
     adapter = registry.adapter_spec(name)
     assert adapter.name == name
-    assert adapter.feature_request in {"global", "spatial", "local_grid"}
-
-  assert registry.adapter_spec("spatial_softmax").fixed_output_dim == 256
-  assert all(
-    registry.adapter_spec(name).fixed_output_dim is None
-    for name in ADAPTER_NAMES
-    if name != "spatial_softmax"
-  )
+    assert adapter.feature_request in {"global", "spatial"}
 
 
 NATIVE_GRIDS = {
@@ -99,12 +87,11 @@ NATIVE_GRIDS = {
 
 @pytest.mark.usefixtures("_fake_pretrained_backbones")
 def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -> None:
-  from vbrl.vision.architectures import ARCHITECTURES, CURRENT_ARCHITECTURES
+  from vbrl.vision.architectures import ARCHITECTURES
 
   scratch_seen = set()
-  for token in CURRENT_ARCHITECTURES:
-    config = ARCHITECTURES[token]
-    if config.adapter in ("local_grid", "flatten_relu"):
+  for token, config in ARCHITECTURES.items():
+    if config.adapter == "flatten_relu":
       assert config.target_grid_size == NATIVE_GRIDS[config.encoder], token
 
     if config.weights != "scratch":
@@ -126,25 +113,19 @@ def test_new_work_reads_the_native_grid_with_a_head_lighter_than_its_encoder() -
 
 
 def test_afa_head_count_follows_the_published_64_wide_split() -> None:
-  from vbrl.vision.architectures import (
-    AFA_HEAD_DIM,
-    ARCHITECTURES,
-    CURRENT_ARCHITECTURES,
-  )
+  from vbrl.vision.architectures import AFA_HEAD_DIM, ARCHITECTURES
 
   seen = 0
-  for token in CURRENT_ARCHITECTURES:
-    config = ARCHITECTURES[token]
-    if config.adapter not in ("afa", "afa_full"):
+  for token, config in ARCHITECTURES.items():
+    if config.adapter != "afa_full":
       continue
     seen += 1
     channels = ENCODERS[config.encoder].channels
     assert config.afa_num_heads == channels // AFA_HEAD_DIM, token
     assert channels % config.afa_num_heads == 0, token
-    suffix = "Afa" if config.adapter == "afa" else "AfaFull"
-    assert token.endswith(f"-{suffix}{config.afa_num_heads}"), token
+    assert token.endswith(f"-AfaFull{config.afa_num_heads}"), token
 
-  assert seen == 7
+  assert seen == 4
 
 
 @pytest.mark.usefixtures("_fake_pretrained_backbones")
@@ -177,47 +158,8 @@ def test_paper_heads_keep_the_native_width_and_end_in_a_layer_norm(encoder: str)
   config = _config(encoder, "afa_full", afa_num_heads=channels // 64)
   model = build_encoder(config, input_dim=(224, 224))
   pool, norm = model.adapter
-  assert isinstance(pool, AFAAdapter) and isinstance(pool.proj, nn.Identity)
+  assert isinstance(pool, AFAAdapter)
   assert isinstance(norm, nn.LayerNorm) and model.output_dim == channels
-
-
-def test_linear_encoder_keeps_legacy_single_projection_layout() -> None:
-  model = build_encoder(_config("nature_cnn", "linear"), input_dim=(64, 64))
-
-  assert model.output_dim == 256
-  assert sum(isinstance(m, nn.Linear) for m in model.adapter.modules()) == 1
-  assert not any(
-    isinstance(m, (nn.ELU, nn.GELU, nn.ReLU, nn.SiLU))
-    for m in model.adapter.modules()
-  )
-
-
-@pytest.mark.parametrize(
-  ("adapter", "expected_grid"),
-  (("local_grid", 7), ("spatial_softmax", 16), ("afa", 16)),
-)
-def test_dinov2_selects_the_adapter_feature_boundary(
-  monkeypatch: pytest.MonkeyPatch, adapter: str, expected_grid: int
-) -> None:
-  class FakeDino(nn.Module):
-    config = SimpleNamespace(patch_size=14, num_register_tokens=0)
-
-    def forward(self, images: torch.Tensor):
-      return {
-        "last_hidden_state": torch.zeros(
-          images.shape[0], 257, 384, dtype=images.dtype, device=images.device
-        )
-      }
-
-  from vbrl.vision.backbones import dinov2
-
-  monkeypatch.setattr(dinov2, "load", FakeDino)
-  encoder = build_encoder(
-    _config("dinov2_vits14", adapter, target_grid_size=7), input_dim=(224, 224)
-  )
-
-  features = encoder.encode_features(torch.zeros(2, 3, 224, 224))
-  assert features.shape == (2, 384, expected_grid, expected_grid)
 
 
 def test_r3m_spatial_encoder_retains_checkpoint_alias(
@@ -232,7 +174,7 @@ def test_r3m_spatial_encoder_retains_checkpoint_alias(
 
   monkeypatch.setattr(r3m, "load", FakeR3M)
   encoder = build_encoder(
-    _config("r3m_resnet50", "local_grid"), input_dim=(224, 224)
+    _config("r3m_resnet50", "afa_full", afa_num_heads=32), input_dim=(224, 224)
   )
 
   assert encoder.resnet is encoder.backbone.convnet
@@ -256,7 +198,7 @@ def test_invalid_vision_options_raise_on_validate(
   overrides: dict, message: str
 ) -> None:
   with pytest.raises(ValueError, match=message):
-    _config("nature_cnn", "local_grid", **overrides).validate()
+    _config("nature_cnn", "flatten_relu", **overrides).validate()
 
 
 @pytest.mark.parametrize(
@@ -271,15 +213,7 @@ def test_afa_head_count_must_be_positive_and_divide_channels(
   num_heads: int, message: str
 ) -> None:
   with pytest.raises(ValueError, match=message):
-    _config("nature_cnn", "afa", afa_num_heads=num_heads).validate()
-
-
-def test_spatial_softmax_rejects_noncanonical_output_dim() -> None:
-  with pytest.raises(ValueError, match="fixed 256"):
-    build_encoder(
-      _config("nature_cnn", "spatial_softmax", output_dim=128),
-      input_dim=(224, 224),
-    )
+    _config("nature_cnn", "afa_full", afa_num_heads=num_heads).validate()
 
 
 def test_retired_fields_from_historical_runs_are_ignored_not_rejected() -> None:
@@ -289,10 +223,10 @@ def test_retired_fields_from_historical_runs_are_ignored_not_rejected() -> None:
     "encoder": "dinov2_vits14",
     "weights": "pretrained",
     "train_encoder": False,
-    "adapter": "local_grid",
+    "adapter": "afa_full",
     "output_dim": 256,
     "projected_channels": 64,
-    "target_grid_size": 7,
+    "afa_num_heads": 6,
     **dict.fromkeys(RETIRED_FIELDS, None),
   }
   config = VisionConfig.from_mapping(historical)
@@ -302,10 +236,9 @@ def test_retired_fields_from_historical_runs_are_ignored_not_rejected() -> None:
     encoder="dinov2_vits14",
     weights="pretrained",
     train_encoder=False,
-    adapter="local_grid",
+    adapter="afa_full",
     output_dim=256,
-    projected_channels=64,
-    target_grid_size=7,
+    afa_num_heads=6,
   )
   assert not RETIRED_FIELDS & set(config.asdict())
 
@@ -337,7 +270,7 @@ def test_vision_model_joins_proprioception_and_images_with_gradients() -> None:
     "actor",
     2,
     hidden_dims=(16,),
-    cnn_cfg={"vision": _config("nature_cnn", "spatial_softmax").asdict()},
+    cnn_cfg={"vision": _config("nature_cnn", "flatten_relu", target_grid_size=4).asdict()},
   )
 
   output = model(observations)
@@ -362,10 +295,10 @@ cnn_cfg:
     encoder: nature_cnn
     weights: scratch
     train_encoder: true
-    adapter: local_grid
+    adapter: flatten_relu
     output_dim: 256
     projected_channels: 64
-    target_grid_size: 7
+    target_grid_size: 4
     afa_num_heads: 8
     encoder_autocast: true
     encoder_autocast_dtype: bfloat16

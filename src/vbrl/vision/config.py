@@ -15,21 +15,16 @@ EncoderName: TypeAlias = Literal[
 ]
 AdapterName: TypeAlias = Literal[
   "none",
-  "global",
   "global_normalized",
-  "linear",
   "flatten_relu",
   "svea",
-  "local_grid",
-  "spatial_softmax",
-  "afa",
   "afa_full",
 ]
 Weights: TypeAlias = Literal["scratch", "pretrained"]
 FloatDType: TypeAlias = Literal["bfloat16", "float16", "float32"]
 
 
-FeatureRequest: TypeAlias = Literal["global", "spatial", "local_grid"]
+FeatureRequest: TypeAlias = Literal["global", "spatial"]
 
 ENCODER_NAMES: tuple[str, ...] = get_args(EncoderName)
 ADAPTER_NAMES: tuple[str, ...] = get_args(AdapterName)
@@ -43,6 +38,7 @@ RETIRED_FIELDS: frozenset[str] = frozenset(
     "normalize_features",
     "afa_positional_encoding",
     "memory_format",
+    "projected_channels",
   }
 )
 
@@ -54,7 +50,6 @@ class VisionConfig:
   train_encoder: bool = False
   adapter: AdapterName = "none"
   output_dim: int = 256
-  projected_channels: int = 64
   target_grid_size: int = 7
   afa_num_heads: int = 8
   encoder_autocast: bool = True

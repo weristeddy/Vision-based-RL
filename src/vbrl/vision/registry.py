@@ -5,13 +5,7 @@ from dataclasses import dataclass
 
 import torch.nn as nn
 
-from .adapters import (
-  AFAAdapter,
-  FlattenReluAdapter,
-  L2Normalize,
-  LocalGridAdapter,
-  SpatialSoftmaxAdapter,
-)
+from .adapters import AFAAdapter, FlattenReluAdapter, L2Normalize
 from .backbones import dinov2, dinov3, r3m, scratch
 from .config import (
   ADAPTER_NAMES,
@@ -59,29 +53,10 @@ class AdapterSpec:
   name: AdapterName
   feature_request: FeatureRequest
   build: AdapterBuilder
-  fixed_output_dim: int | None = None
 
 
-_ALL_FEATURES: frozenset[FeatureRequest] = frozenset(
-  {"global", "spatial", "local_grid"}
-)
-_SPATIAL_FEATURES: frozenset[FeatureRequest] = frozenset({"spatial", "local_grid"})
-
-
-
-
-def _global_adapter(
-  config: VisionConfig,
-  _: AdapterSpec,
-  channels: int,
-  spatial: bool,
-) -> tuple[nn.Module, int]:
-  layers: list[nn.Module] = []
-  if spatial:
-    layers.extend((nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)))
-  layers.append(nn.LayerNorm(channels))
-  return nn.Sequential(*layers), channels
-
+_ALL_FEATURES: frozenset[FeatureRequest] = frozenset({"global", "spatial"})
+_SPATIAL_FEATURES: frozenset[FeatureRequest] = frozenset({"spatial"})
 
 def _global_normalized_adapter(
   config: VisionConfig,
@@ -91,25 +66,6 @@ def _global_normalized_adapter(
 ) -> tuple[nn.Module, int]:
   pool = (nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)) if spatial else ()
   return nn.Sequential(*pool, L2Normalize(), nn.LayerNorm(channels)), channels
-
-
-def _linear_adapter(
-  config: VisionConfig,
-  _: AdapterSpec,
-  channels: int,
-  spatial: bool,
-) -> tuple[nn.Module, int]:
-  layers: list[nn.Module] = []
-  if spatial:
-    layers.extend((nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1)))
-  layers.extend(
-    (
-      nn.LayerNorm(channels),
-      nn.Linear(channels, config.output_dim),
-      nn.LayerNorm(config.output_dim),
-    )
-  )
-  return nn.Sequential(*layers), config.output_dim
 
 
 def _svea_adapter(
@@ -139,54 +95,6 @@ def _flatten_relu_adapter(
     channels,
     grid_size=config.target_grid_size,
     output_dim=config.output_dim,
-  )
-  return adapter, adapter.output_dim
-
-
-def _local_grid_adapter(
-  config: VisionConfig,
-  _: AdapterSpec,
-  channels: int,
-  spatial: bool,
-) -> tuple[nn.Module, int]:
-  if not spatial:  # pragma: no cover - guarded by capability declarations.
-    raise ValueError("LocalGrid requires spatial features.")
-  adapter = LocalGridAdapter(
-    channels,
-    output_dim=config.output_dim,
-    projected_channels=config.projected_channels,
-    target_grid_size=config.target_grid_size,
-  )
-  return adapter, adapter.output_dim
-
-
-def _spatial_softmax_adapter(
-  _: VisionConfig,
-  spec: AdapterSpec,
-  channels: int,
-  spatial: bool,
-) -> tuple[nn.Module, int]:
-  if not spatial:  # pragma: no cover - guarded by capability declarations.
-    raise ValueError("SpatialSoftmax requires spatial features.")
-  output_dim = spec.fixed_output_dim
-  if output_dim is None or output_dim % 2:  # pragma: no cover - invalid declaration.
-    raise ValueError("SpatialSoftmax requires an even fixed output dimension.")
-  adapter = SpatialSoftmaxAdapter(channels, output_channels=output_dim // 2)
-  return adapter, adapter.output_dim
-
-
-def _afa_adapter(
-  config: VisionConfig,
-  _: AdapterSpec,
-  channels: int,
-  spatial: bool,
-) -> tuple[nn.Module, int]:
-  if not spatial:  # pragma: no cover - guarded by capability declarations.
-    raise ValueError("AFA requires spatial features.")
-  adapter = AFAAdapter(
-    channels,
-    output_dim=config.output_dim,
-    num_heads=config.afa_num_heads,
   )
   return adapter, adapter.output_dim
 
@@ -233,21 +141,13 @@ ENCODERS: dict[EncoderName, EncoderSpec] = {
 }
 
 ADAPTERS: dict[AdapterName, AdapterSpec] = {
-  "global": AdapterSpec("global", "global", _global_adapter),
   "global_normalized": AdapterSpec(
     "global_normalized", "global", _global_normalized_adapter
   ),
-  "linear": AdapterSpec("linear", "global", _linear_adapter),
-  # ManiSkill3's head on the native map, not `local_grid`, precisely because it must
-  # not be resampled.
+  # ManiSkill3's head on the native map.
   "flatten_relu": AdapterSpec("flatten_relu", "spatial", _flatten_relu_adapter),
   # SVEA's RLProjection on the global feature; for CompactViT, its CLS token.
   "svea": AdapterSpec("svea", "global", _svea_adapter),
-  "local_grid": AdapterSpec("local_grid", "local_grid", _local_grid_adapter),
-  "spatial_softmax": AdapterSpec(
-    "spatial_softmax", "spatial", _spatial_softmax_adapter, 256
-  ),
-  "afa": AdapterSpec("afa", "spatial", _afa_adapter),
   "afa_full": AdapterSpec("afa_full", "spatial", _afa_full_adapter),
 }
 
@@ -280,7 +180,7 @@ def adapter_spec(name: str) -> AdapterSpec:
 
 def check_composition(config: VisionConfig) -> None:
   spec = encoder_spec(config.encoder)
-  adapter = adapter_spec(config.adapter)
+  adapter_spec(config.adapter)
   if config.weights != spec.weights:
     raise ValueError(
       f"{config.encoder!r} currently supports weights={spec.weights!r}, "
@@ -291,14 +191,7 @@ def check_composition(config: VisionConfig) -> None:
     raise ValueError(f"{config.encoder!r} is supported as a {mode} encoder.")
   if config.output_dim <= 0:
     raise ValueError(f"output_dim must be positive, got {config.output_dim}.")
-  if (
-    adapter.fixed_output_dim is not None
-    and config.output_dim != adapter.fixed_output_dim
-  ):
-    raise ValueError(
-      f"SpatialSoftmax uses a fixed {adapter.fixed_output_dim}-dimensional output."
-    )
-  if config.adapter in ("afa", "afa_full"):
+  if config.adapter == "afa_full":
     if (
       isinstance(config.afa_num_heads, bool)
       or not isinstance(config.afa_num_heads, int)

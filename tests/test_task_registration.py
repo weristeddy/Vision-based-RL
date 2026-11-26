@@ -148,9 +148,9 @@ def test_installed_entry_points_include_tasks_and_console_commands() -> None:
     "vbrl-list": "vbrl.scripts.list_registries:main",
     "vbrl-train": "vbrl.scripts.train:main",
     "vbrl-evaluate": "vbrl.scripts.evaluate:main",
-    "vbrl-analyze": "vbrl.scripts.analyze:main",
     "vbrl-play": "vbrl.scripts.play:main",
     "vbrl-fetch-backbones": "vbrl.scripts.fetch_backbones:main",
+    "vbrl-measure": "vbrl.rig.measure:main",
   }.items():
     assert f'{command} = "{target}"' in pyproject
 

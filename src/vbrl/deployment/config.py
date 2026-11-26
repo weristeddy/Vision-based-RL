@@ -69,8 +69,8 @@ class DeploymentConfig:
   def validate(self) -> None:
     if not Path(self.onnx_file).expanduser().is_file():
       raise FileNotFoundError(
-        f"onnx_file does not exist: {self.onnx_file}. Export one with "
-        "vbrl-export-onnx."
+        f"onnx_file does not exist: {self.onnx_file}. Download it with "
+        "python -m vbrl.deployment.fetch_policies."
       )
     ranges = GOAL_SPACES.get(self.goal_space)
     if ranges is None:
@@ -108,41 +108,10 @@ class DeploymentConfig:
     self.motion.validate()
 
 
-def load_config(path: str | Path) -> DeploymentConfig:
-  import yaml
-
-  source = Path(path).expanduser()
-  document = yaml.safe_load(source.read_text())
-  if document.pop("version", None) != 1:
-    raise ValueError(f"{source}: expected 'version: 1'.")
-
-  motion_fields = document.pop("motion", None) or {}
-  for name, fields, known in (
-    ("motion", motion_fields, set(Motion.__dataclass_fields__)),
-    ("", document, set(DeploymentConfig.__dataclass_fields__) - {"motion"}),
-  ):
-    unknown = set(fields) - known
-    if unknown:
-      where = f"{name} " if name else ""
-      raise ValueError(
-        f"{source}: unknown {where}fields {sorted(unknown)}; "
-        f"valid are {sorted(known)}."
-      )
-
-  if isinstance(motion_fields.get("action_gain"), list):
-    motion_fields["action_gain"] = tuple(motion_fields["action_gain"])
-  if "goal" in document:
-    document["goal"] = tuple(float(value) for value in document["goal"])
-  config = DeploymentConfig(**document, motion=Motion(**motion_fields))
-  config.validate()
-  return config
-
-
 __all__ = [
   "GOAL_RANGE",
   "GOAL_SPACES",
   "PUSH_T_GOAL_RANGE",
   "DeploymentConfig",
   "Motion",
-  "load_config",
 ]

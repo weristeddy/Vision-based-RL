@@ -6,8 +6,8 @@ import pytest
 pytest.importorskip("mjlab")
 cv2 = pytest.importorskip("cv2")
 
-from vbrl.deployment import charuco  # noqa: E402
-from vbrl.deployment.calibration import (  # noqa: E402
+from vbrl.rig import charuco  # noqa: E402
+from vbrl.rig.calibration import (  # noqa: E402
   CV_TO_MUJOCO,
   look_direction,
   mjcf_camera,
@@ -146,32 +146,10 @@ def test_the_wrist_camera_sits_where_the_arm_puts_it() -> None:
   np.testing.assert_allclose(np.linalg.det(pose[:3, :3]), 1.0, atol=1e-9)
 
 
-def test_goal_pose_offset_places_the_origin_not_the_tag_midpoint() -> None:
-  from vbrl.deployment.push_t.apriltag_goal import (
-    CROSSBAR_INNER_EDGE_M,
-    DEFAULT_MARGIN_M,
-    TAG_BLACK_M,
-  )
-
-  midpoint_y = CROSSBAR_INNER_EDGE_M + DEFAULT_MARGIN_M + TAG_BLACK_M / 2.0
-  assert midpoint_y == pytest.approx(0.0118)
-
-  offset_y = -(CROSSBAR_INNER_EDGE_M + DEFAULT_MARGIN_M + TAG_BLACK_M / 2.0)
-  assert offset_y == pytest.approx(-0.0118)
-  assert midpoint_y + offset_y == pytest.approx(0.0, abs=1e-12)
-
-  # -(4.8 mm + m): the printed size never enters, only the margin on the side
-  # butted against the crossbar, so a reprint changes exactly this one number.
-  for margin in (0.00443, 0.005, 0.006, 0.007, 0.008):
-    expected = -(0.0048 + margin)
-    actual = -(CROSSBAR_INNER_EDGE_M + margin + TAG_BLACK_M / 2.0)
-    assert actual == pytest.approx(expected, abs=1e-9)
-
-
 def test_the_external_view_reads_the_calibrated_camera_from_the_mjcf() -> None:
   import numpy as np
 
-  from vbrl.deployment.push_t.view import ExternalView
+  from vbrl.rig.view import ExternalView
 
   pose = ExternalView.load(1280, 720).pose
   assert pose.shape == (4, 4)
@@ -186,8 +164,8 @@ def test_the_hand_eye_fit_recovers_the_wrist_mount_and_both_boards() -> None:
   from scipy.spatial.transform import Rotation
 
   from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
-  from vbrl.deployment.capture_board import DELTAS
-  from vbrl.deployment.recalibrate import hand_eye, parent_pose
+  from vbrl.rig.capture_board import DELTAS
+  from vbrl.rig.recalibrate import hand_eye, parent_pose
 
   matrix = np.array([[650.0, 0.0, 640.0], [0.0, 650.0, 360.0], [0.0, 0.0, 1.0]])
   joints = make_wxai_measured().home_joint_pos
@@ -237,9 +215,9 @@ def test_the_eye_to_hand_fit_recovers_the_external_camera_and_the_marker() -> No
   from scipy.spatial.transform import Rotation
 
   from vbrl.asset_zoo.robots.trossen_wxai import make_wxai_measured
-  from vbrl.deployment.capture_marker import DELTAS, MARKER_M
-  from vbrl.deployment.push_t.view import ExternalView
-  from vbrl.deployment.recalibrate import eye_to_hand, parent_pose
+  from vbrl.rig.capture_marker import DELTAS, MARKER_M
+  from vbrl.rig.recalibrate import eye_to_hand, parent_pose
+  from vbrl.rig.view import ExternalView
 
   view = ExternalView.load(1280, 720)
   joints = make_wxai_measured().home_joint_pos

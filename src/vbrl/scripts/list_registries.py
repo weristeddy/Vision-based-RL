@@ -11,12 +11,10 @@ def _tasks() -> tuple[str, ...]:
 
 
 def _architectures() -> tuple[str, ...]:
-  from vbrl.vision.architectures import ARCHITECTURES, CURRENT_ARCHITECTURES
+  from vbrl.vision.architectures import ARCHITECTURES
 
   return tuple(
-    f"{token:<28} {cfg.encoder} + {cfg.adapter}"
-    + ("" if token in CURRENT_ARCHITECTURES else "   [legacy: reproduction only]")
-    for token, cfg in ARCHITECTURES.items()
+    f"{token:<28} {cfg.encoder} + {cfg.adapter}" for token, cfg in ARCHITECTURES.items()
   )
 
 
@@ -53,11 +51,6 @@ def _robots() -> tuple[str, ...]:
   return list_robots()
 
 
-def _analysis_steps() -> tuple[str, ...]:
-  from vbrl.scripts.analyze import STEPS
-
-  return tuple(sorted(STEPS))
-
 
 SECTIONS: dict[str, tuple[str, Callable[[], Sequence[str]]]] = {
   "tasks": ("tasks/<task>/config/<robot>/__init__.py", _tasks),
@@ -66,7 +59,6 @@ SECTIONS: dict[str, tuple[str, Callable[[], Sequence[str]]]] = {
   "adapters": ("vision/registry.py: ADAPTERS", _adapters),
   "scenes": ("scenes/presets.py: _PRESETS", _scenes),
   "robots": ("asset_zoo/robots/__init__.py: ROBOTS", _robots),
-  "analysis": ("scripts/analyze.py: STEPS", _analysis_steps),
 }
 
 

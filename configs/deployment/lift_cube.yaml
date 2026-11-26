@@ -1,29 +1,35 @@
 version: 1
 
-# The exported policy. Its metadata carries the joint order, the default pose,
-# the observation term order and the action scale, so no task ID is needed here.
-#
-# Under ckpts/ beside the .pt it came from, not artifacts/: it is the deployable
-# form of a checkpoint rather than an analysis output. Re-export any iteration
-# with vbrl-export-onnx; this one is the last of W&B run ntl27zt9.
-onnx_file: ckpts/lift_cube/dinov2_vits14_spatial_softmax_sim2real_5998.onnx
+# vbrl-deploy configs/deployment/lift_cube.yaml --policy <name> --goal <n>
+# python -m vbrl.deployment.collect configs/deployment/lift_cube.yaml --goal <n>
+task: lift_cube
+camera: wrist
+steps: 400      # the training episode, 20 s at 20 Hz
+runs: 5
 
-arm_ip: 192.168.1.2
+# Lift targets in the base frame, never measured. Valid: x (0.3, 0.5), y (-0.2, 0.2),
+# z (0.2, 0.4); z stays above the gripper's height at home (0.205).
+goals:
+  - [0.35, 0.00, 0.30]
+  - [0.45, 0.12, 0.25]
+  - [0.40, -0.12, 0.35]
 
-camera_serial: "412622271761"   # wrist D405, the view the Sim2Real task trains on
+# Run order inside each run; the best seed of each, from
+# python -m vbrl.deployment.fetch_policies configs/deployment/lift_cube.yaml.
+policies:
+  DinoV2ViTS14-AfaFull6: ckpts/deployment/lift_cube/DinoV2ViTS14-AfaFull6.onnx
+  DinoV2ViTS14-Global: ckpts/deployment/lift_cube/DinoV2ViTS14-Global.onnx
+  R3MResNet50-AfaFull32: ckpts/deployment/lift_cube/R3MResNet50-AfaFull32.onnx
+  R3MResNet50-Global: ckpts/deployment/lift_cube/R3MResNet50-Global.onnx
+  NatureCnn-FlattenRelu: ckpts/deployment/lift_cube/NatureCnn-FlattenRelu.onnx
+  CompactVit-Svea: ckpts/deployment/lift_cube/CompactVit-Svea.onnx
 
-# Where to lift the cube to, in the robot's base frame. Put x, y above where the
-# cube sits and keep z clear of the gripper's height at home (z = 0.205), or the
-# policy reads "already there" and never lifts. Valid: x (0.3, 0.5),
-# y (-0.2, 0.2), z (0.2, 0.4). The cube's own position is never configured --
-# the policy sees it only through the camera.
-goal: [0.35, 0.0, 0.35]
-
-control_hz: 50.0        # the training decimation: 0.005 s x 4
-
+goal_space: lift_xyz
+control_hz: 20.0
+command_goal_time_s: 0.05
 motion:
-  action_smoothing: 0.25   # lower = smoother and slower; 1.0 = raw policy output
-  max_joint_step: 0.035    # x control_hz = 1.75 rad/s speed limit
-  max_gripper_step: 0.005
-  max_arm_action: 6.0            # the 6 arm channels; the gripper legitimately saturates
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 6.0
   home_seconds: 3.0

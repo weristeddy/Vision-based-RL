@@ -86,8 +86,10 @@ def build_env_cfg(
     )
   }
   cfg.commands = {
-    _COMMAND: mdp.LiftingCommandCfg(
+    _COMMAND: mdp.TcpLiftingCommandCfg(
       entity_name=object_name,
+      ee_site=robot.ee_site,
+      gripper_joint=gripper,
       resampling_time_range=(1.0e9, 1.0e9) if play else (8.0, 12.0),
       debug_vis=True,
       difficulty="dynamic",

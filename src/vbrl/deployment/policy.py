@@ -58,7 +58,7 @@ class PolicyMetadata:
     if missing:
       raise ValueError(
         f"The ONNX carries no {sorted(missing)} metadata, so its observation "
-        "contract is unknown. Re-export it with vbrl-export-onnx."
+        "contract is unknown. Use the ONNX a training run uploaded to W&B."
       )
 
     joint_names = tuple(meta["joint_names"].split(","))
@@ -254,12 +254,12 @@ def check_control(metadata: PolicyMetadata, config: Any) -> None:
       "ramp_s",
       metadata.ramp_s,
       config.command_goal_time_s,
-      "command_goal_time_s, or re-export with vbrl-export-onnx --ramp-s",
+      "command_goal_time_s to the trained ramp_s",
     ),
   ):
     if trained is not None and abs(trained - deployed) > 1e-6:
       raise ValueError(
-        f"{config.onnx_file} was trained with {name}={trained:g} but the manifest "
+        f"{config.onnx_file} was trained with {name}={trained:g} but the task file "
         f"runs it at {deployed:g}. Fix {fix}."
       )
 

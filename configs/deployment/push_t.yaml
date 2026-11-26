@@ -1,0 +1,32 @@
+version: 1
+
+# vbrl-deploy configs/deployment/push_t.yaml --policy <name> --goal <n>
+# python -m vbrl.deployment.collect configs/deployment/push_t.yaml --goal <n>
+# Goal n is the taped outline, measured into artifacts/real_eval/push_t/goal<n>/goal.json
+# at the block's start; start poses are marked on the table.
+task: push_t
+camera: external
+steps: 400      # 20 s at 20 Hz; training episodes are 10 s
+runs: 5
+
+# Run order inside each run; the best seed of each, from
+# python -m vbrl.deployment.fetch_policies configs/deployment/push_t.yaml.
+# DINOv3 waits for its retraining at 256 px.
+policies:
+  DinoV2ViTS14-AfaFull6: ckpts/deployment/push_t/DinoV2ViTS14-AfaFull6.onnx
+  DinoV2ViTS14-Global: ckpts/deployment/push_t/DinoV2ViTS14-Global.onnx
+  R3MResNet50-AfaFull32: ckpts/deployment/push_t/R3MResNet50-AfaFull32.onnx
+  R3MResNet50-Global: ckpts/deployment/push_t/R3MResNet50-Global.onnx
+  R3MResNet50L3-AfaFull16: ckpts/deployment/push_t/R3MResNet50L3-AfaFull16.onnx
+  NatureCnn-FlattenRelu: ckpts/deployment/push_t/NatureCnn-FlattenRelu.onnx
+  CompactVit-Svea: ckpts/deployment/push_t/CompactVit-Svea.onnx
+
+goal_space: push_t_xy_yaw
+control_hz: 20.0
+command_goal_time_s: 0.05
+motion:
+  action_smoothing: 1.0
+  max_joint_step: null
+  max_gripper_step: 0.01
+  max_arm_action: 6.0
+  home_seconds: 3.0

@@ -1,244 +1,174 @@
 # Vision-Based RL
 
-Visual RL for robot manipulation, built on [MJLab](https://github.com/mujocolab/mjlab).
-Two tasks (Lift-Cube, Push-T), a Trossen WidowX AI arm, and a visual-encoder stack
-that trains either a frozen pretrained backbone or a CNN from scratch.
+Visual encoders for sim-to-real manipulation on a Trossen WidowX AI arm, built on
+[MJLab](https://github.com/mujocolab/mjlab). Three tasks of increasing visual demand
+(Lift-Cube, Push-T, Push-Chain). Students trained from scratch (Nature CNN, compact
+ViT) or on frozen DINOv2, DINOv3 and R3M, with a global readout or AFA, are
+distilled from one state teacher per task.
 
-**The task ID is the contract.** An ID such as
-`Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` fixes the task, robot,
-scene, camera, encoder, adapter, network and, for Push-T, the whole training
-recipe. Seed, env count and iteration count remain flags.
+**The task ID is the contract.** `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen`
+fixes task, robot, scene, camera, encoder, adapter, network and training recipe.
+Seed, env count, iterations, video and logging are flags.
 
 ## Install
 
 ```bash
-uv sync                       # creates .venv from uv.lock
-uv run vbrl-fetch-backbones   # once: DINOv2 + R3M into .models/
-uv run pytest -m "not sim" -q # ~1 min, no simulator needed
+uv sync                       # .venv from uv.lock
+uv run vbrl-fetch-backbones   # once: DINOv2, DINOv3, R3M into .models/
+uv run pytest -m "not sim" -q # ~1 min, no simulator
 ```
 
-Prefix every command with `uv run`, or `source .venv/bin/activate` once.
+Run every command with `uv run`, or `source .venv/bin/activate` once.
 
-## Try it locally
+## Tasks
 
-```bash
-vbrl-list                     # every task ID, architecture, scene, robot
-vbrl-list architectures       # one section
-```
+| task | teacher | students | camera |
+| --- | --- | --- | --- |
+| Lift-Cube | `Mjlab-LiftCube-State-Trossen`, 1,500 it. | `Mjlab-LiftCube-WoodTable-<Arch>-Trossen`, 3,000 it. | wrist |
+| Push-T | `Mjlab-PushT-State-Trossen`, 8,000 it. | `Mjlab-PushT-WoodTable-<Arch>-Trossen`, 8,000 it. | external |
+| Push-Chain | `Mjlab-PushChain3-State-Trossen`, 20,000 it. | `Mjlab-PushChain3-WoodTable-<Arch>-Trossen`, 15,000 it. | external |
 
-Watch an untrained policy in the browser — no checkpoint needed, opens Viser:
+`<Arch>` is one of `NatureCnn-FlattenRelu`, `CompactVit-Svea`,
+`DinoV2ViTS14-{Global,AfaFull6}`, `R3MResNet50-{Global,AfaFull32}`; Push-T adds
+`DinoV3ViTS16-{Global,AfaFull6}` and `R3MResNet50L3-AfaFull16`. `vbrl-list` prints
+every registered ID.
 
-```bash
-vbrl-play Mjlab-PushT-State-Trossen --agent random
-```
-
-Train the state-based Push-T task (fast, no camera):
-
-```bash
-vbrl-train Mjlab-PushT-State-Trossen --agent.max-iterations 50
-```
-
-Train the Lift-Cube teacher, and record a video while it runs:
+## Local
 
 ```bash
-vbrl-train Mjlab-LiftCube-State-Trossen \
-  --env.scene.num-envs 512 --agent.max-iterations 100 --video True
-```
+vbrl-list                                            # task IDs, architectures, scenes
+vbrl-play Mjlab-PushT-State-Trossen --agent random   # Viser viewer, no checkpoint
 
-Watch a trained policy, or record it to a file:
-
-```bash
-vbrl-play <TASK_ID> --agent trained --checkpoint-file ckpts/<run>/model.pt
-vbrl-play <TASK_ID> --agent trained --checkpoint-file ... --record artifacts/run.mp4
-```
-
-`vbrl-play`, `vbrl-evaluate`, `vbrl-analyze` and `vbrl-export-onnx` load weights
-from a local file **or** a W&B run, never both:
-
-```bash
---checkpoint-file ckpts/lift_cube/dinov2.pt
---wandb-run-path entity/project/run_id [--wandb-checkpoint-name model_5998.pt]
-```
-
-Every run writes a deployable ONNX beside its checkpoint automatically.
-
-## The commands
-
-| | |
-|---|---|
-| `vbrl-list` | every registry, read live from its table |
-| `vbrl-train` | train a task ID; `vbrl-train <ID> --help` lists all flags |
-| `vbrl-play` | Viser viewer, or `--record out.mp4` / `.gif` |
-| `vbrl-evaluate` | success rates over a model × scene × seed grid, from YAML |
-| `vbrl-analyze` | probe/PCA/occlusion on what an encoder sees, from YAML |
-| `vbrl-deploy` | run a policy on the real arm, from YAML |
-| `vbrl-export-onnx` | re-export a checkpoint that predates automatic export |
-| `vbrl-fetch-backbones` | download the pretrained backbones |
-
-`vbrl-evaluate`, `vbrl-analyze` and `vbrl-deploy` are driven by YAML under
-[`configs/`](configs/) — copy one and edit it.
-
-```bash
-vbrl-evaluate <evaluation>.yaml
-vbrl-analyze  <analysis>.yaml
-vbrl-deploy   configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml --dry-run
-```
-
-## Lift-Cube
-
-Seven task IDs on Push-T's arm and control: the measured arm at 20 Hz, a
-target-relative arm action (0.025, wrist roll 0.02) and an absolute gripper
-(ManiSkill's WidowX AI controller) with the SDK's 50 ms ramp, `action_rate_l2` -0.01 and `joint_vel_l2` -0.05. Rewards, the 20 s
-episode and the goal resampled every 8-12 s, which puts the cube back on the table,
-are MJLab's. A state teacher trains with PPO; the students are DAgger students of it
-with the wrist camera on AmbientCG wood tabletops.
-
-| task ID | |
-| --- | --- |
-| `Mjlab-LiftCube-State-Trossen` | PPO teacher, 8,000 iterations |
-| `Mjlab-LiftCube-WoodTable-<Arch>-Trossen` | students: DINOv2 and R3M with AFA or Global, Nature CNN, CompactViT |
-
-## Push-T
-
-Seven task IDs, one recipe. A state policy trains with PPO on privileged object
-poses; the visual policies are DAgger students of that one teacher (student acts,
-teacher labels, MSE on the mean), trained on AmbientCG wood tabletops.
-
-| task ID | |
-| --- | --- |
-| `Mjlab-PushT-State-Trossen` | PPO teacher, 8,000 iterations |
-| `Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen` | student, DINOv2 + AFA |
-| `Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen` | student, DINOv2 global |
-| `Mjlab-PushT-WoodTable-R3MResNet50-AfaFull32-Trossen` | student, R3M + AFA |
-| `Mjlab-PushT-WoodTable-R3MResNet50-Global-Trossen` | student, R3M global |
-| `Mjlab-PushT-WoodTable-NatureCnn-FlattenRelu-Trossen` | student, Nature CNN from scratch |
-| `Mjlab-PushT-WoodTable-CompactVit-Svea-Trossen` | student, compact ViT from scratch |
-
-The recipe lives in code, not flags: 20 Hz, action scale 0.025 (wrist roll 0.02)
-onto the previous target, the Trossen SDK's 50 ms goal ramp modelled in sim,
-10 s episodes. The teacher additionally starts part of its episodes with the pads
-beside the T and ends an episode when the gripper presses on the T's top face. It reproduces the
-deployed policies: teacher `auxcyfuo`, wood students `rzf11em2` (DINOv2 + AFA)
-and `z5b9xznd` (Nature CNN).
-
-```bash
-# The teacher: four ranks x 8,192 envs.
-bash cluster/submit.sh --profile a100 -- \
-  Mjlab-PushT-State-Trossen --env.scene.num-envs 8192
-
-# A student: four ranks x 1,024 envs, 8,000 iterations, teacher from its W&B run.
-bash cluster/submit.sh --profile a100 -- \
-  Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen \
+# A short teacher run, then a student distilled from it.
+vbrl-train Mjlab-PushT-State-Trossen --env.scene.num-envs 512 --agent.max-iterations 50
+vbrl-train Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen --env.scene.num-envs 64 \
   --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run>
+
+# Watch or record a trained policy.
+vbrl-play <TASK_ID> --agent trained --wandb-run-path <entity>/mjlab/<run>
+vbrl-play <TASK_ID> --agent trained --checkpoint-file <model.pt> --record artifacts/run.mp4
 ```
 
-## Real robot
-
-The hardware drivers are an extra, so a cluster or development sync never pulls
-them:
+After training, `vbrl-train` evaluates every saved checkpoint (training curve,
+`eval/*`), evaluates the final one in all evaluation scenes (`final/*`, color sweeps
+as tables), deletes the intermediate checkpoints and uploads the final checkpoint
+and its ONNX to W&B. `--evaluate False` skips this. The same evaluation by hand:
 
 ```bash
-uv sync --extra deploy
+vbrl-evaluate <TASK_ID> --wandb-run-path <entity>/mjlab/<run> --log   # final scenes into the run
+vbrl-evaluate <TASK_ID> --run-dir logs/rsl_rl/<experiment>/<run>      # curve and final scenes
+vbrl-evaluate <TASK_ID> --checkpoint <model.pt> --scenes wood049 marble019
 ```
-
-On the Jetson AGX Thor there is one more step `uv` cannot express — its sm_110
-wheels bundle no CUDA, so the libraries need preloading and ONNX Runtime comes
-from a separate index:
-
-```bash
-bash jetson/setup.sh          # preload + ONNX Runtime, then verify GPU kernels run
-```
-
-Run a policy from a manifest under [`configs/deployment/`](configs/deployment/).
-Every run homes the arm first and parks it afterwards:
-
-```bash
-vbrl-deploy configs/deployment/push_t_wood_table_dinov2_afafull6_auxcyfuo.yaml
-vbrl-deploy configs/deployment/lift_cube.yaml --dry-run       # no motion, sanity check
-vbrl-deploy configs/deployment/lift_cube.yaml --max-steps 250
-vbrl-deploy configs/deployment/lift_cube.yaml --log run.npz   # per-step trace
-vbrl-deploy configs/deployment/lift_cube.yaml --home          # hold home and stop
-vbrl-deploy configs/deployment/lift_cube.yaml --park          # rest and release torque
-```
-
-Arrow keys move the goal while it runs (`--no-keyboard-goal` disables). A manifest
-names the ONNX graph, the arm IP, the goal and the motion limits; the policy's
-observation and action contract travel inside the ONNX metadata, so deployment
-never reads the task registry.
-
-### Goal and overlap measurement
-
-Only needed when the printed goal marker is repositioned:
-
-```bash
-python -m vbrl.deployment.push_t.measure_goal <manifest.yaml>
-```
-
-`push_t.measure_goal` fits the T footprint into the hole of the green goal outline
-in one 1280x720 frame, with the T off the table, and prints the `goal:` numbers a
-manifest needs;
-`push_t.measure_overlap` fits the T after an episode and prints its overlap with
-that goal.
-`python -m vbrl.deployment.push_t.apriltag_goal frame.png` solves the goal from the two
-AprilTags instead, as a cross-check; take the tags off afterwards, because the
-policy must never see them.
 
 ## Cluster (Slurm)
 
-Training runs inside a pinned Apptainer image, because the cluster has no Python
-on the host. Build it once:
+Everything runs inside the pinned Apptainer image; the cluster has no Python on the
+host. Build it once, and again after a dependency change:
 
 ```bash
 apptainer build --force rl.sif rl.def
 ```
 
-Each launcher takes `--profile {a100,b200,testing,a100-single,b200-single}` and
-passes everything after `--` through unchanged:
+`cluster/submit.sh --profile {a100,b200,testing,a100-single,b200-single}` passes
+everything after `--` to `vbrl-train`. Four-GPU profiles run 1,024 envs per rank
+unless `--env.scene.num-envs` says otherwise.
 
 ```bash
-# Four GPUs; --env.scene.num-envs and --gpu-ids are set by the profile.
-bash cluster/submit.sh --profile a100 -- Mjlab-LiftCube-State-Trossen
+# Teacher, three seeds one after another in one job.
+bash cluster/submit.sh --profile b200 --seeds 3 -- \
+  Mjlab-PushT-State-Trossen --env.scene.num-envs 8192 --label pusht-teacher
 
-# One GPU; you own --env.scene.num-envs. ~1.6x the wall clock, a quarter of the GPUs.
-bash cluster/submit.sh --profile a100-single -- \
-  Mjlab-PushT-State-Trossen --env.scene.num-envs 4096
+# Students of several architectures, three seeds each, from the best teacher seed.
+bash cluster/submit.sh --profile b200 --seeds 3 -- \
+  Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen,Mjlab-PushT-WoodTable-DinoV2ViTS14-Global-Trossen \
+  --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run> --label distill-<teacher run>
 
-# One job per architecture in a variant; --arch narrows it to one task.
-bash cluster/submit_sweep.sh --variant WoodTable --arch LiftCube --dry-run \
+# Push-Chain with its own iteration count.
+bash cluster/submit.sh --profile b200 --seeds 3 -- \
+  Mjlab-PushChain3-State-Trossen --env.scene.num-envs 8192 \
+  --agent.max-iterations 20000 --label pushchain3-teacher
+
+# One job per architecture of a variant.
+bash cluster/submit_sweep.sh --variant WoodTable --arch PushT --dry-run \
   -- --agent.resume True --wandb-run-path <entity>/mjlab/<teacher run>
 
-# Viewing and evaluation.
-bash cluster/view.sh     --profile testing -- Mjlab-PushT-State-Trossen --agent random
-bash cluster/evaluate.sh --profile testing -- <evaluation>.yaml
-```
-
-Run any command inside the image directly with:
-
-```bash
+# A viewer, or any command inside the image.
+bash cluster/view.sh --profile testing -- Mjlab-PushT-State-Trossen --agent random
 apptainer exec --nv --env "PYTHONPATH=$PWD/src" rl.sif <command>
 ```
 
-Profiles live in [`cluster/profiles/`](cluster/profiles/) — review one before
-launching on another cluster.
+Pull new code on the cluster only while none of your jobs runs: a job reads the
+checkout, and its evaluation imports modules after training.
+
+## Real robot
+
+```bash
+uv sync --extra deploy        # hardware drivers
+bash jetson/setup.sh          # Jetson AGX Thor only: CUDA preload, ONNX Runtime, GPU check
+```
+
+One file per task in [`configs/deployment/`](configs/deployment/) (README there has the details)
+lists its camera, its policies (the best seed of each) and its goals; `rig.yaml`
+holds the arm and both cameras. Every tool reads the task file:
+
+```bash
+python -m vbrl.deployment.fetch_policies configs/deployment/push_t.yaml       # ckpts/deployment/push_t/
+vbrl-deploy configs/deployment/push_t.yaml --policy R3MResNet50L3-AfaFull16 --goal 2
+vbrl-deploy configs/deployment/lift_cube.yaml --policy NatureCnn-FlattenRelu --goal 1 --dry-run
+vbrl-deploy configs/deployment/lift_cube.yaml --home                           # hold home and stop
+python -m vbrl.deployment.collect configs/deployment/push_t.yaml --goal 2     # evaluation block
+```
+
+Object and goal poses from an external-camera frame, the same fit for every task.
+The goal is measured once from a frame without the object:
+
+```bash
+vbrl-measure push_t goal_frame.png --save goal.json
+vbrl-measure push_t end_frame.png --goal goal.json        # pose and overlap
+vbrl-measure push_chain frame.png --links 3 --goal goal.json
+vbrl-measure lift_cube frame.png
+```
+
+## Figures
+
+```bash
+uv run python -m vbrl.analysis.final_evaluation --output reports/students
+uv run python -m vbrl.analysis.real_robot           # reports/real
+uv run python reports/eval_scenes/render_eval_scenes.py reports/eval_scenes/figures/scenes
+```
+
+Learning curves: see [`reports/students/README.md`](reports/students/README.md).
+
+## Feature analysis
+
+```bash
+# A real frame's state (joints at the frame's exposure, measured object and goal) in sim scenes.
+uv run python -m vbrl.analysis.pairs artifacts/real_eval/push_t/goal1/DinoV2ViTS14-AfaFull6/run4 \
+  --step 16 --task-id Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen
+# Images once per task, then probes, Grad-CAM and feature distance per deployed student.
+uv run python -m vbrl.analysis.dataset Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen --run <its W&B run>
+uv run python -m vbrl.analysis.feature_analysis push_t    # artifacts/features/push_t/measures.csv
+```
 
 ## Layout
 
 ```
 src/vbrl/
 ├── scripts/      the CLIs
-├── tasks/        lift_cube/, push_t/ — env cfg, mdp/, config/<robot>/
-├── vision/       one registry table: 5 encoders x 7 adapters
+├── tasks/        lift_cube/, push_t/, push_chain/: env cfg, mdp/, config/<robot>/
+├── vision/       encoders x adapters in one table; architectures.py names them
 ├── scenes/       presets.py (data) → materials.py → builder.py
-├── training/     VisualPPO + the runner that exports ONNX on save
-├── evaluation/   rollout, report, video recording
-├── analysis/     capture → features → probe/pca/occlusion/comparison
-├── deployment/   the real-robot loop, camera, calibration
+├── training/     VisualPPO, distillation, the runner that exports ONNX on save
+├── evaluation/   rollout, checkpoint evaluation, video recording
+├── analysis/     thesis figures
+├── deployment/   real-robot loop, policy, camera, data collection
+├── rig/          camera calibration, external view, object and goal measurement
 └── asset_zoo/    robot XML, objects, textures
 ```
 
-Adding a task ID is one `register_mjlab_task()` line in
-`tasks/<task>/config/<robot>/__init__.py`. Adding an encoder or adapter is one
-row in [`vision/registry.py`](src/vbrl/vision/registry.py) plus one in
+A task ID is one `register_mjlab_task()` line in
+`tasks/<task>/config/<robot>/__init__.py`; an encoder or adapter is one row in
+[`vision/registry.py`](src/vbrl/vision/registry.py) plus one in
 [`vision/architectures.py`](src/vbrl/vision/architectures.py).
 
 ## Tests

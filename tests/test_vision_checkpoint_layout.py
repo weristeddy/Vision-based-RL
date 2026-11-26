@@ -120,7 +120,7 @@ def test_module_tree_is_unchanged(task_id: str, _fake_backbones: None) -> None:
   assert observed == list(_FROZEN_LAYOUT[task_id])
 
 
-@pytest.mark.parametrize("adapter", ("global", "linear"))
+@pytest.mark.parametrize("adapter", ("global_normalized",))
 @pytest.mark.parametrize("encoder", ("dinov2_vits14", "r3m_resnet50"))
 def test_pooling_prefix_tracks_the_spatial_request(
   encoder: str, adapter: str, _fake_backbones: None

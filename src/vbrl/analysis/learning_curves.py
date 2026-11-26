@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+from vbrl.analysis.final_evaluation import ENCODERS
+
 METRICS = {
   "success": ("Success rate (%)", 100.0, (0.0, 100.0)),
   "final_success": ("Final success rate (%)", 100.0, (0.0, 100.0)),
@@ -16,6 +18,8 @@ METRICS = {
 }
 COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6")
 REFERENCE_COLOR = "#52514e"
+# The same color per encoder as every other figure, whatever the --curve order.
+ENCODER_COLORS = dict(ENCODERS.values())
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
 
@@ -33,13 +37,17 @@ def parse_curve(text: str) -> Curve:
   return Curve(name.strip(), ids)
 
 
-def fetch(project: str, run: str, metrics: tuple[str, ...]) -> dict[int, dict[str, float]]:
+def fetch(
+  project: str, run: str, metrics: tuple[str, ...]
+) -> dict[int, dict[str, float]]:
   import wandb
 
   keys = ["eval/iteration", *(f"eval/{metric}" for metric in metrics)]
   rows = wandb.Api().run(f"{project}/{run}").scan_history(keys=keys)
   history = {
-    int(row["eval/iteration"]): {metric: float(row[f"eval/{metric}"]) for metric in metrics}
+    int(row["eval/iteration"]): {
+      metric: float(row[f"eval/{metric}"]) for metric in metrics
+    }
     for row in rows
   }
   if not history:
@@ -52,7 +60,12 @@ def aggregate(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
   iterations = sorted(set.intersection(*(set(history) for history in histories)))
   values = np.array([[history[i][metric] for i in iterations] for history in histories])
-  return np.array(iterations), values.mean(axis=0), values.min(axis=0), values.max(axis=0)
+  return (
+    np.array(iterations),
+    values.mean(axis=0),
+    values.min(axis=0),
+    values.max(axis=0),
+  )
 
 
 def _style(axis, label: str, limits) -> None:
@@ -108,36 +121,50 @@ def plot(
         linewidth=1.2,
         label=f"{reference.name} (final)",
       )
-    for curve, color in zip(curves, COLORS, strict=False):
+    for k, curve in enumerate(curves):
+      color = ENCODER_COLORS.get(curve.name, COLORS[k % len(COLORS)])
       histories = [data[curve.name][run] for run in curve.runs]
       iterations, mean, low, high = aggregate(histories, metric)
       if seeds:
         for history in histories:
           axis.plot(
-            iterations, [history[i][metric] * scale for i in iterations],
-            color=color, alpha=0.35, linewidth=0.8,
+            iterations,
+            [history[i][metric] * scale for i in iterations],
+            color=color,
+            alpha=0.35,
+            linewidth=0.8,
           )
       else:
         axis.fill_between(
-          iterations, low * scale, high * scale,
-          color=color, alpha=0.18, linewidth=0,
+          iterations,
+          low * scale,
+          high * scale,
+          color=color,
+          alpha=0.18,
+          linewidth=0,
         )
       axis.plot(iterations, mean * scale, color=color, linewidth=1.5, label=curve.name)
       final = np.array([history[max(history)][metric] for history in histories])
-      summary.append({
-        "curve": curve.name,
-        "metric": metric,
-        "seeds": len(curve.runs),
-        "mean": final.mean() * scale,
-        "std": final.std(ddof=1) * scale if len(final) > 1 else 0.0,
-        "runs": " ".join(curve.runs),
-      })
+      summary.append(
+        {
+          "curve": curve.name,
+          "metric": metric,
+          "seeds": len(curve.runs),
+          "mean": final.mean() * scale,
+          "std": final.std(ddof=1) * scale if len(final) > 1 else 0.0,
+          "runs": " ".join(curve.runs),
+        }
+      )
     _style(axis, label, (ylims or {}).get(metric, limits))
   if len(curves) > 1 or reference is not None:
     handles, labels = axes[0][0].get_legend_handles_labels()
     figure.legend(
-      handles, labels, loc="lower center", ncol=min(len(labels), 4),
-      frameon=False, bbox_to_anchor=(0.5, 0.0),
+      handles,
+      labels,
+      loc="lower center",
+      ncol=min(len(labels), 4),
+      frameon=False,
+      bbox_to_anchor=(0.5, 0.0),
     )
     figure.tight_layout(rect=(0, 0.1, 1, 1))
   else:
@@ -178,7 +205,10 @@ def main(argv: list[str] | None = None) -> None:
     "--seeds", action="store_true", help="thin line per seed instead of the band"
   )
   parser.add_argument(
-    "--ylim", action="append", default=[], type=_parse_ylim,
+    "--ylim",
+    action="append",
+    default=[],
+    type=_parse_ylim,
     help="metric=low,high in plotted units, e.g. position_error=0,40",
   )
   args = parser.parse_args(argv)
@@ -190,7 +220,13 @@ def main(argv: list[str] | None = None) -> None:
     for group in groups
   }
   summary = plot(
-    args.curve, args.reference, metrics, data, args.output, args.name, args.seeds,
+    args.curve,
+    args.reference,
+    metrics,
+    data,
+    args.output,
+    args.name,
+    args.seeds,
     dict(args.ylim),
   )
   _write_csv(

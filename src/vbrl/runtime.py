@@ -90,8 +90,6 @@ class CheckpointRef:
       if CHECKPOINT_NAME.fullmatch(name) is None:
         raise ValueError(f"{prefix}wandb_checkpoint_name must be model_N.pt.")
 
-  def as_metadata(self) -> dict[str, str | None]:
-    return asdict(self)
 
 
 class ConstantPolicy:

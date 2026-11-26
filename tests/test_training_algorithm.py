@@ -325,7 +325,8 @@ def test_trainable_storage_recomputes_visual_features_with_gradients() -> None:
     encoder="nature_cnn",
     weights="scratch",
     train_encoder=True,
-    adapter="spatial_softmax",
+    adapter="flatten_relu",
+    target_grid_size=4,
   )
   observations = TensorDict(
     {

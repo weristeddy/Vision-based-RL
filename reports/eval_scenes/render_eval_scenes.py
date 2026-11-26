@@ -1,63 +1,68 @@
-"""One image per evaluation scene, the same episode in each, for the report.
+"""The evaluation scenes and the real rig, all showing the same moment.
 
-Run: uv run python reports/eval_scenes/render_eval_scenes.py reports/eval_scenes/eval_scenes.png
+Run: uv run python reports/eval_scenes/render_eval_scenes.py figures/scenes
 
-The evaluation randomizes every factor not under test as in training. For the
-figure those sit at one nominal value, the same in both tasks, so each column
-differs from wood049 only in its own factor.
+One real Push-T frame (the policy's 224 px camera input) is rebuilt in simulation:
+the arm at its recorded joint angles, the T at its pose fitted in that frame, the
+goal at its measured pose. Each scene is rendered from the policy camera at 224 px,
+so every image differs from the reference only in its own factor. The colour sweeps
+have their own chart figures.
 """
 
+import json
 import sys
+from pathlib import Path
 
+import numpy as np
 import torch
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 import vbrl.tasks  # noqa: F401
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import load_env_cfg
+from mjlab.utils.lab_api.math import quat_from_euler_xyz
+from vbrl.rig.measure import measure_object
+from vbrl.rig.view import ExternalView
 from vbrl.scenes.builder import replace_scene
-from vbrl.scenes.presets import (
-  EVALUATION_SCENES,
-  GOAL_COLOUR_EVENT,
-  REAL_TABLE_GOAL_COLOUR_RANGE,
-  REAL_TABLE_OBJECT_COLOUR_RANGE,
-  get_preset,
-)
+from vbrl.scenes.presets import GOAL_COLOUR_EVENT
+from vbrl.tasks.push_t.goal_marker import GOAL_MARKER_Z
 
-CAPTIONS = {
-  "wood049": "in distribution",
-  "real_table": "table: rig photo",
-  "marble019": "table: marble",
-  "ood_light": "light colour\n(Colosseum-style)",
-  "object_blue": "object colour",
-  "goal_blue": "goal colour",
-  "object_blue_goal_purple": "object and\ngoal colour",
-  "colour_swap": "object green,\ngoal bordeaux",
+TASK = "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"
+GOAL = Path("artifacts/real_eval/push_t/goal1")
+RUN, STEP = GOAL / "DinoV2ViTS14-AfaFull6" / "run4", 16
+SCENES = {
+  "wood049": "reference",
+  "real_table": "real_table",
+  "marble019": "marble",
+  "ood_light": "light",
 }
-TASKS = [
-  ("Push-T\nexternal camera", "Mjlab-PushT-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"),
-  ("Lift-Cube\nwrist camera", "Mjlab-LiftCube-WoodTable-DinoV2ViTS14-AfaFull6-Trossen"),
-]
 NOMINAL_OBJECT = (0.20, 0.068, 0.011)
 NOMINAL_GOAL = (0.12, 0.16, 0.05)
-ENV = 1
 
 
 def fixed(rgb):
   return tuple((value, value) for value in rgb)
 
 
-def render(task: str, scene: str):
-  preset = get_preset(scene)
-  cfg = replace_scene(load_env_cfg(task, play=True), scene=scene)
-  cfg.scene.num_envs, cfg.seed = 3, 0
-  if preset.object_colour_range == REAL_TABLE_OBJECT_COLOUR_RANGE:
-    cfg.events["object_color"].params["ranges"] = dict(enumerate(fixed(NOMINAL_OBJECT)))
-  if GOAL_COLOUR_EVENT in cfg.events and preset.goal_colour_range in (
-    None,
-    REAL_TABLE_GOAL_COLOUR_RANGE,
-  ):
-    cfg.events[GOAL_COLOUR_EVENT].params["ranges"] = fixed(NOMINAL_GOAL)
+def real_state():
+  trace = np.load(RUN / "trace.npz")
+  frame = trace["external_frames"][STEP]
+  fit = measure_object(ExternalView.load(424, 240).cropped(224), frame, "push_t")
+  if not fit.reliable:
+    raise SystemExit(f"The T fit at step {STEP} is unreliable (IoU {fit.iou:.2f}).")
+  goal = json.loads((GOAL / "goal.json").read_text())["goal"]
+  # The joints are read just after the frame arrives; move them back to the moment the
+  # frame was exposed: its age on arrival plus half the 8 ms exposure.
+  lag = (trace["camera_age_ms"][STEP] + 4.0) / 1000.0
+  joints = trace["joint_pos"][STEP][:6] - trace["joint_vel"][STEP][:6] * lag
+  return frame, joints, fit.pose, goal
+
+
+def render(scene: str, joints, t_pose, goal) -> Image.Image:
+  cfg = replace_scene(load_env_cfg(TASK, play=True), scene=scene)
+  cfg.scene.num_envs, cfg.seed = 1, 0
+  cfg.events["object_color"].params["ranges"] = dict(enumerate(fixed(NOMINAL_OBJECT)))
+  cfg.events[GOAL_COLOUR_EVENT].params["ranges"] = fixed(NOMINAL_GOAL)
   for name in ("camera_position", "camera_orientation", "camera_fovy"):
     cfg.events.pop(name, None)
   cfg.events["light_direction"].params["ranges"] = dict(enumerate(fixed((0.18, 0.28, -1.0))))
@@ -72,37 +77,54 @@ def render(task: str, scene: str):
   try:
     env.seed(0)
     env.reset()
-    actions = torch.zeros(3, env.action_manager.total_action_dim, device=env.device)
-    image = env.step(actions)[0]["camera"].float()
-    image = image * (255.0 if image.max() <= 1.0 else 1.0)
-    if image.shape[1] == 3:
-      image = image.permute(0, 2, 3, 1)
-    return Image.fromarray(image[ENV].clamp(0, 255).byte().cpu().numpy())
+    device = env.device
+    robot, obj = env.scene["robot"], env.scene["object"]
+    base = robot.data.root_link_pos_w[0]
+
+    joint_pos = robot.data.joint_pos.clone()
+    joint_pos[0, :6] = torch.tensor(joints, device=device)
+    robot.write_joint_state_to_sim(joint_pos, torch.zeros_like(joint_pos))
+
+    def pose(x, y, z, yaw):
+      zero = torch.zeros(1, device=device)
+      position = torch.tensor([[base[0] + x, base[1] + y, z]], device=device)
+      yaw = torch.tensor([yaw], device=device, dtype=torch.float32)
+      return torch.cat((position, quat_from_euler_xyz(zero, zero, yaw)), dim=-1)
+
+    z = float(obj.data.root_link_pos_w[0, 2])
+    obj.write_root_link_pose_to_sim(pose(t_pose[0], t_pose[1], z, t_pose[2]))
+    obj.write_root_link_velocity_to_sim(torch.zeros(1, 6, device=device))
+    command = env.command_manager.get_term("push_t_goal")
+    command.target_pos[0, :2] = base[:2] + torch.tensor(goal[:2], device=device)
+    command.target_yaw[0] = goal[2]
+    marker_z = float(env.scene.env_origins[0, 2]) + GOAL_MARKER_Z
+    command._goal_marker.write_mocap_pose_to_sim(pose(goal[0], goal[1], marker_z, goal[2]))
+
+    # No physics step: the controller's command delay would pull the arm off its
+    # recorded pose (4 degrees in a single step). Render the set state directly.
+    env.scene.write_data_to_sim()
+    env.sim.forward()
+    env.sim.sense()
+    joint_error = (robot.data.joint_pos[0, :6] - joint_pos[0, :6]).abs().max()
+    assert joint_error < 1e-6, f"arm off its recorded pose by {joint_error} rad"
+    image = env.observation_manager.compute(update_history=True)["camera"][0].float()
   finally:
     env.close()
+  image = image * (255.0 if image.max() <= 1.0 else 1.0)
+  if image.shape[0] == 3:
+    image = image.permute(1, 2, 0)
+  return Image.fromarray(image.clamp(0, 255).byte().cpu().numpy())
 
 
-def main(path: str) -> None:
+def main(folder: str) -> None:
   torch.set_grad_enabled(False)
-  size, left, top, gap = 224, 130, 58, 8
-  font = ImageFont.load_default(size=15)
-  small = ImageFont.load_default(size=12)
-  sheet = Image.new(
-    "RGB",
-    (left + len(EVALUATION_SCENES) * (size + gap), top + len(TASKS) * (size + gap)),
-    "white",
-  )
-  draw = ImageDraw.Draw(sheet)
-  for column, scene in enumerate(EVALUATION_SCENES):
-    x = left + column * (size + gap)
-    draw.text((x + 2, 4), scene, font=font, fill=(11, 11, 11))
-    draw.multiline_text((x + 2, 24), CAPTIONS[scene], font=small, fill=(82, 81, 78))
-  for row, (label, task) in enumerate(TASKS):
-    y = top + row * (size + gap)
-    draw.multiline_text((6, y + size // 2 - 16), label, font=font, fill=(11, 11, 11))
-    for column, scene in enumerate(EVALUATION_SCENES):
-      sheet.paste(render(task, scene), (left + column * (size + gap), y))
-  sheet.save(path)
+  out = Path(folder)
+  out.mkdir(parents=True, exist_ok=True)
+  frame, joints, t_pose, goal = real_state()
+  Image.fromarray(frame).save(out / "real_robot.png")
+  for scene, name in SCENES.items():
+    render(scene, joints, t_pose, goal).save(out / f"{name}.png")
+  print(f"{RUN.name} step {STEP}: T {np.round(t_pose, 3)}, goal {np.round(goal, 3)} -> {out}")
 
 
 if __name__ == "__main__":
