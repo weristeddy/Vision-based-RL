@@ -7,10 +7,10 @@ arm_ip: 192.168.1.2
 cameras:
   external:
     camera_serial: "260322270027"
-    # Measured 2026-10-26 against 256 real_table renders: brightness 128 (sim 127),
-    # R/G 1.38 (1.36).
-    camera_exposure_us: 8000
+    # Measured 2026-11-27 under the fixed room light in the 224 x 224 crop: median 127
+    # (rig-table render 125), R/G 1.40 (1.39).
+    camera_exposure_us: 6500
     camera_gain: 27
-    camera_white_balance_k: 4400
+    camera_white_balance_k: 5000
   wrist:
     camera_serial: "412622271761"

@@ -70,13 +70,22 @@ action before smoothing and before it is added to the target;
 `--action-smoothing` is the weight of the new action in the moving average, so
 1.0 is no smoothing. Both override the task file's `motion:` block.
 
-Brightness is matched with gain at a fixed exposure: 8,000 us, gain 27 and
-4,400 K bring the 224 x 224 crop to median 128 and R/G 1.38 against the
-simulated 127 and 1.36 (measured 2026-10-26). Re-probe after any lighting
-change:
+Brightness and color are matched in the 224 x 224 crop the policy sees, with the room
+light fixed: 6,500 us, gain 27 and 5,000 K give median 127 and R/G 1.40 against the
+rig-table render's 125 and 1.39 (measured 2026-11-27; `rig.yaml`). Re-measure after any
+lighting change; the whole-frame probe `python -m vbrl.deployment.camera` includes the
+background and ignores the white balance, so measure the crop:
 
 ```bash
-uv run --no-sync python -m vbrl.deployment.camera --serial 260322270027 --gain 27 --exposures 8000
+uv run --no-sync python - <<'PY'
+import time, numpy as np
+from vbrl.deployment.camera import RealSenseCamera
+from vbrl.deployment.session import load_session
+camera = RealSenseCamera(load_session("configs/deployment/push_t.yaml").config())
+time.sleep(2.0); frames = [camera.frame() for _ in range(10)]; camera.close()
+image = np.mean(frames, 0)
+print("median", round(float(np.median(image)), 1), "R/G", round(float(np.median(image[..., 0]) / np.median(image[..., 1])), 3))
+PY
 ```
 
 ## Viewing a policy in the browser
