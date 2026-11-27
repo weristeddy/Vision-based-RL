@@ -161,17 +161,15 @@ def plot(
     figure.legend(
       handles,
       labels,
-      loc="lower center",
+      loc="upper center",
       ncol=min(len(labels), 4),
       frameon=False,
       bbox_to_anchor=(0.5, 0.0),
     )
-    figure.tight_layout(rect=(0, 0.1, 1, 1))
-  else:
-    figure.tight_layout()
+  figure.tight_layout()
   output.mkdir(parents=True, exist_ok=True)
   for suffix in ("pdf", "png"):
-    figure.savefig(output / f"{name}.{suffix}", dpi=300)
+    figure.savefig(output / f"{name}.{suffix}", dpi=300, bbox_inches="tight")
   plt.close(figure)
   return summary
 

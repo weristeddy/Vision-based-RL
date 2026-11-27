@@ -1,18 +1,22 @@
 # Students: final evaluation and learning curves (first view)
 
-Push-T and Lift-Cube, six encoders, three seeds each; Push-T also DINOv3 (two more).
-Push-Chain follows.
+Push-T and Lift-Cube, six encoders, three seeds each; Push-T also R3M layer 3 + AFA
+and DINOv3 + AFA. Push-Chain follows.
 
 | encoder | Push-T runs (seeds 1000, 2000, 3000) | Lift-Cube runs |
 | --- | --- | --- |
 | DINOv2 + AFA | `ohkztpwp`, `q34wcoo7`, `omkgrm7i` | `oaq4s80l`, `qm999vka`, `buljwnnl` |
+| DINOv3 + AFA | `3as2xhht`, `m2pto71o`, seed 3000 training | not trained |
 | DINOv2 global | `1fmoiz87`, `2e07q98c`, `686bg8dm` | `lxecudf0`, `v3zwmalb`, `q274r4ra` |
 | R3M + AFA | `d4upzxez`, `a3tkw1b4`, `8hrb42a7` | `94dlia0s`, `zyiyjmnb`, `vqm70h53` |
 | R3M global | `r7zhk0cc`, `1sn561i7`, `uvygjxty` | `csfdx04e`, `4md02xdm`, `himcw4vq` |
+| R3M layer 3 + AFA | `rloss30v`, `8hmnpvna`, `3m0j2d3x` | not trained |
 | Nature CNN | `lvvsamd6`, `pg149st9`, `jxmgv168` | `vwr1mvaf`, `5o1prtxa`, `rumte7b7` |
 | CompactViT | `9ndoybcd`, `ka06fn9o`, `859y417j` | `xzshwd6v`, `qhqnoijf`, `swff3q1s` |
-| DINOv3 + AFA | `5t6nx3qk`, `gbq6yqkg`, `fs8ruz1w` | not trained |
-| DINOv3 global | `gbl6ao1n`, `ilt0hk04`, `ueg86l0f` | not trained |
+
+DINOv3 runs before commit `75f2baa` (`5t6nx3qk`, `gbq6yqkg`, `fs8ruz1w`; global:
+`gbl6ao1n`, `ilt0hk04`, `ueg86l0f`) saw 224 px instead of DINOv3's native 256 px and are
+left out of every figure; DINOv3 global was not retrained.
 
 Teachers: Push-T `auxcyfuo`, Lift-Cube `u6bm8899`. Students: DAgger distillation,
 8,000 (Push-T) and 3,000 (Lift-Cube) iterations, 1,024 envs × 4 ranks, all trained on
@@ -95,10 +99,11 @@ The figures carry no titles; these go into `\caption{}`.
 uv run python -m vbrl.analysis.final_evaluation --output reports/students
 
 uv run python -m vbrl.analysis.learning_curves --project eduard-nicolae-robot-learning/mjlab \
-  --curve "DINOv2 + AFA=ohkztpwp,q34wcoo7,omkgrm7i" --curve "DINOv2 global=1fmoiz87,2e07q98c,686bg8dm" \
+  --curve "DINOv2 + AFA=ohkztpwp,q34wcoo7,omkgrm7i" --curve "DINOv3 + AFA=3as2xhht,m2pto71o" \
+  --curve "DINOv2 global=1fmoiz87,2e07q98c,686bg8dm" \
   --curve "R3M + AFA=d4upzxez,a3tkw1b4,8hrb42a7" --curve "R3M global=r7zhk0cc,1sn561i7,uvygjxty" \
+  --curve "R3M layer 3 + AFA=rloss30v,8hmnpvna,3m0j2d3x" \
   --curve "Nature CNN=lvvsamd6,pg149st9,jxmgv168" --curve "CompactViT=9ndoybcd,ka06fn9o,859y417j" \
-  --curve "DINOv3 + AFA=5t6nx3qk,gbq6yqkg,fs8ruz1w" --curve "DINOv3 global=gbl6ao1n,ilt0hk04,ueg86l0f" \
   --reference "Teacher=auxcyfuo" --metric success --metric overlap \
   --name pusht_learning_curves --output reports/students
 

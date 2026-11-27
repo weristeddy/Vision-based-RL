@@ -7,19 +7,19 @@ from pathlib import Path
 from statistics import fmean, stdev
 
 ENTITY_PROJECT = "eduard-nicolae-robot-learning/mjlab"
-GROUPS = r"^distill-(u6bm8899|auxcyfuo-seeds)_(?P<task>.+)$"
+GROUPS = r"^distill-(u6bm8899|auxcyfuo-seeds|auxcyfuo-dinov3-256)_(?P<task>.+)$"
 # Fixed order and colour per encoder, the same in every figure (reference palette
 # slots 1-6, validated for adjacent pairs).
 ENCODERS = {
   "DinoV2ViTS14-AfaFull6": ("DINOv2 + AFA", "#2a78d6"),
+  "DinoV3ViTS16-AfaFull6": ("DINOv3 + AFA", "#6250d6"),
   "DinoV2ViTS14-Global": ("DINOv2 global", "#eb6834"),
+  "DinoV3ViTS16-Global": ("DINOv3 global", "#e34948"),
   "R3MResNet50-AfaFull32": ("R3M + AFA", "#1baf7a"),
   "R3MResNet50-Global": ("R3M global", "#eda100"),
   "R3MResNet50L3-AfaFull16": ("R3M layer 3 + AFA", "#8c564b"),
   "NatureCnn-FlattenRelu": ("Nature CNN", "#e87ba4"),
   "CompactVit-Svea": ("CompactViT", "#008300"),
-  "DinoV3ViTS16-AfaFull6": ("DINOv3 + AFA", "#6250d6"),
-  "DinoV3ViTS16-Global": ("DINOv3 global", "#e34948"),
 }
 SCENES = {
   "wood049": "In distribution",
@@ -56,12 +56,18 @@ def _students(project: str):
       continue
     task, _, rest = match["task"].partition("-WoodTable-")
     encoder = rest.removesuffix("-Trossen")
+    # DINOv3 before 75f2baa saw 224 px instead of its native 256 px.
+    if encoder.startswith("DinoV3") and "dinov3-256" not in run.group:
+      continue
     yield run, task, encoder, run.config.get("train_cfg", {}).get("seed")
 
 
 def fetch_colour_sweeps(project: str = ENTITY_PROJECT) -> list[dict]:
   # The 256 per-colour values live in each run's logged table; W&B keeps lists
   # that long out of the run summary.
+  import json
+  import tempfile
+
   rows = []
   for run, task, encoder, seed in _students(project):
     for artifact in run.logged_artifacts():
@@ -69,9 +75,12 @@ def fetch_colour_sweeps(project: str = ENTITY_PROJECT) -> list[dict]:
       if artifact.type != "run_table" or not match:
         continue
       scene = match[1]
-      table = artifact.get(f"final/{scene}/per_colour")
-      data = sorted(table.data, key=lambda row: row[0])
-      for column, metric in enumerate(table.columns):
+      with tempfile.TemporaryDirectory() as folder:
+        artifact.download(root=folder)
+        path = next(Path(folder).rglob("*.table.json"))
+        table = json.loads(path.read_text())
+      data = sorted(table["data"], key=lambda row: row[0])
+      for column, metric in enumerate(table["columns"]):
         if metric in ("colour", "r", "g", "b"):
           continue
         rows.append(
