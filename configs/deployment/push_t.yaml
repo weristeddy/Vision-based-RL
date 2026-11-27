@@ -11,9 +11,10 @@ runs: 5
 
 # Run order inside each run; the best seed of each, from
 # python -m vbrl.deployment.fetch_policies configs/deployment/push_t.yaml.
-# DINOv3 waits for its retraining at 256 px.
+# DINOv3 + AFA: the better of its first two 256 px seeds (the third was still training).
 policies:
   DinoV2ViTS14-AfaFull6: ckpts/deployment/push_t/DinoV2ViTS14-AfaFull6.onnx
+  DinoV3ViTS16-AfaFull6: ckpts/deployment/push_t/DinoV3ViTS16-AfaFull6.onnx
   DinoV2ViTS14-Global: ckpts/deployment/push_t/DinoV2ViTS14-Global.onnx
   R3MResNet50-AfaFull32: ckpts/deployment/push_t/R3MResNet50-AfaFull32.onnx
   R3MResNet50-Global: ckpts/deployment/push_t/R3MResNet50-Global.onnx
